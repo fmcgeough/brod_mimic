@@ -118,6 +118,10 @@ defmodule BrodMimic.Client do
     GenServer.start_link(__MODULE__, args, name: client_id)
   end
 
+  @doc """
+  Stop the GenServer specified (the client) and monitor it
+  to wait for it to exit
+  """
   @spec stop(client()) :: :ok
   def stop(client) do
     mref = Process.monitor(client)
@@ -260,7 +264,8 @@ defmodule BrodMimic.Client do
   """
   @spec get_partitions_count(client(), topic()) :: {:ok, pos_integer()} | {:error, any()}
   def get_partitions_count(client, topic) when is_atom(client) do
-    # ets is the client id
+    # the name of the ets table that stores this data
+    # is the same as the atom client id
     get_partitions_count(client, client, topic)
   end
 
@@ -338,12 +343,12 @@ defmodule BrodMimic.Client do
     tab = :ets.new(client_id, ets_options)
 
     {:ok,
-     %{
+     state(
        client_id: client_id,
        bootstrap_endpoints: bootstrap_endpoints,
        config: config,
        workers_tab: tab
-     }}
+     )}
   end
 
   def handle_info(:init, state0) do
@@ -696,9 +701,7 @@ defmodule BrodMimic.Client do
           {host, port} = conn(conn, :endpoint)
 
           msg =
-            "client #{client_id}: payload connection down #{host}:#{port}\nreason:#{
-              inspect(reason)
-            }"
+            "client #{client_id}: payload connection down #{host}:#{port}\nreason:#{inspect(reason)}"
 
           Logger.info(msg)
           new_conn = conn(conn, pid: mark_dead(reason))
