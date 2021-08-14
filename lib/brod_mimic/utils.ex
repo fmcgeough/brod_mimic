@@ -6,7 +6,13 @@ defmodule BrodMimic.Utils do
   require BrodMimic.Macros
   import Record, only: [defrecord: 2, extract: 2]
 
+  defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
+  defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
+
   alias BrodMimic.{Brod, Macros, KafkaRequest}
+
+  @type kpro_rsp :: kpro_rsp()
+  @type kpro_req :: kpro_req()
 
   @type req_fun() :: (Brod.offset(), :kpro.count() -> :kpro.req())
   @type fetch_fun() ::
@@ -19,8 +25,6 @@ defmodule BrodMimic.Utils do
   @type endpoint() :: Brod.endpoint()
   @type offset_time() :: Brod.offset_time()
   @type group_id() :: Brod.group_id()
-
-  defrecord :kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl")
 
   @doc """
   This is equivalent to the `create_topics(hosts, topic_configs, request_configs, [])`
@@ -103,7 +107,7 @@ defmodule BrodMimic.Utils do
           {:ok, :kpro.struct()} | {:error, any()}
   def get_metadata(hosts, topics, conn_cfg) do
     with_conn(hosts, conn_cfg, fn pid ->
-      request = :brod_kafka_request.metadata(pid, topics)
+      request = KafkaRequest.metadata(pid, topics)
       request_sync(pid, request)
     end)
   end
@@ -143,7 +147,7 @@ defmodule BrodMimic.Utils do
     req = KafkaRequest.list_offsets(pid, topic, partition, time)
 
     case request_sync(pid, req) do
-      {:ok, %{error_code: ec}} when Macros.is_error(ec) ->
+      {:ok, %{error_code: ec}} when ec != :no_error ->
         {:error, ec}
 
       {:ok, %{offset: offset}} ->
@@ -161,11 +165,13 @@ defmodule BrodMimic.Utils do
 
   @spec request_sync(connection(), Brod.req(), :infinity | timeout()) ::
           :ok | {:ok, term()} | {:error, any()}
-  def request_sync(conn, kpro_req(ref: _ref) = req, timeout) when is_pid(conn) do
+  def request_sync(conn, req, timeout) when is_pid(conn) do
     # kpro_connection has a global 'request_timeout' option
     # the connection pid will exit if that one times out
+    # request_sync can return :ok but the brod code wasn't
+    # handling that
     case :kpro.request_sync(conn, req, timeout) do
-      {:ok, %{ref: _ref} = rsp} -> parse_rsp(rsp)
+      {:ok, rsp} -> parse_rsp(rsp)
       {:error, reason} -> {:error, reason}
     end
   end
@@ -184,8 +190,8 @@ defmodule BrodMimic.Utils do
          for some of the complex response bodies, error-codes are retained
          for caller to parse.
   """
-  @spec parse_rsp(map()) :: :ok | {:ok, term()} | {:error, any()}
-  def parse_rsp(%{api: api, vsn: vsn, msg: msg} = _kpro_resp) do
+  @spec parse_rsp(kpro_rsp()) :: :ok | {:ok, term()} | {:error, any()}
+  def parse_rsp(kpro_rsp(api: api, vsn: vsn, msg: msg) = _kpro_resp) do
     case parse(api, vsn, msg) do
       :ok -> :ok
       result -> {:ok, result}
