@@ -10,6 +10,9 @@ defmodule BrodMimic.BrodProducersSup do
 
   alias BrodMimic.Client
 
+  @default_partitions_sup_restart_delay 10
+  @partitions_sup :brod_producers_sup2
+
   @doc """
   Start a root producers supervisor
 
@@ -18,6 +21,25 @@ defmodule BrodMimic.BrodProducersSup do
   @spec start_link() :: {:ok, pid()}
   def start_link do
     :supervisor3.start_link(__MODULE__, @topics_sup)
+  end
+
+  @doc """
+  Dynamically start a per-topic supervisor
+  """
+  @spec start_producer(pid(), pid(), Brod.topic(), Brod.producer_config()) ::
+          {:ok, pid()} | {:error, any()}
+  def start_producer(sup_pid, client_pid, topic_name, config) do
+    spec = producers_sup_spec(client_pid, topic_name, config)
+    :supervisor3.start_child(sup_pid, spec)
+  end
+
+  @doc """
+  Dynamically stop a per-topic supervisor
+  """
+  @spec stop_producer(pid(), Brod.topic()) :: :ok | {}
+  def stop_producer(sup_pid, topic_name) do
+    :supervisor3.terminate_child(sup_pid, topic_name)
+    :supervisor3.delete_child(sup_pid, topic_name)
   end
 
   @impl true
@@ -54,6 +76,20 @@ defmodule BrodMimic.BrodProducersSup do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  def producers_sup_spec(client_pid, topic_name, config0) do
+    {config, delay_secs} =
+      take_delay_secs(
+        config0,
+        :topic_restart_delay_seconds,
+        @default_partitions_sup_restart_delay
+      )
+
+    args = [__MODULE__, {@partitions_sup, client_pid, topic_name, config}]
+
+    {topic_name, {:supervisor3, :start_link, args}, {:permanent, delay_secs}, :infinity,
+     :supervisor, [__MODULE__]}
   end
 
   def producer_spec(client_pid, topic, partition, config0) do

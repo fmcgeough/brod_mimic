@@ -28,12 +28,14 @@ defmodule BrodMimic.Client do
   use GenServer
   require BrodMimic.Macros
   require Logger
-  require Record
+  import Record, only: [defrecord: 2, extract: 2]
 
-  alias BrodMimic.{BrodConsumersSup, BrodProducersSup, Macros}
+  alias BrodMimic.{BrodConsumersSup, BrodProducersSup, KafkaRequest, Macros}
+
+  defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
 
   @default_reconnect_cool_down_seconds 1
-  # @default_get_metadata_timeout_seconds 5
+  @default_get_metadata_timeout_seconds 5
 
   # @unknown_topic_cache_expire_seconds 120
 
@@ -335,8 +337,7 @@ defmodule BrodMimic.Client do
     GenServer.cast(client, {:deregister, key})
   end
 
-  # gen_server callbacks =====================================================
-
+  @impl true
   def init({bootstrap_endpoints, client_id, config}) do
     Process.flag(:trap_exit, true)
     ets_options = [:named_table, :protected, {:read_concurrency, true}]
@@ -351,6 +352,7 @@ defmodule BrodMimic.Client do
      )}
   end
 
+  @impl true
   def handle_info(:init, state0) do
     endpoints = state0.bootstrap_endpoints
     state1 = ensure_metadata_connection(state0)
@@ -368,25 +370,6 @@ defmodule BrodMimic.Client do
   end
 
   ### Internal use
-
-  @doc """
-  Ensure there is at least one metadata connection
-  """
-  def ensure_metadata_connection(state(bootstrap_endpoints: endpoints, meta_conn: :undef) = state) do
-    conn_config = conn_config(state)
-
-    pid =
-      case :kpro.connect_any(endpoints, conn_config) do
-        {:ok, pid_x} -> pid_x
-        {:error, reason} -> :erlang.exit(reason)
-      end
-
-    state(state, meta_conn: pid)
-  end
-
-  def ensure_metadata_connection(state) do
-    state
-  end
 
   @spec get_partition_worker(client(), partition_worker_key()) ::
           {:ok, pid()} | {:error, get_worker_error()}
@@ -475,6 +458,138 @@ defmodule BrodMimic.Client do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  @spec validate_topic_existence(topic(), state(), boolean()) :: {:ok | {:error, any()}, state()}
+  def validate_topic_existence(topic, state(workers_tab: ets) = state, is_retry) do
+    case lookup_partitions_count_cache(ets, topic) do
+      {:ok, _count} ->
+        {:ok, state}
+
+      {:error, reason} ->
+        {{:error, reason}, state}
+
+      false when is_retry ->
+        {{:error, :unknown_topic_or_partition}, state}
+
+      false ->
+        # Try fetch metadata (and populate partition count cache)
+        # Then validate topic existence again.
+        get_metadata_result = get_metadata_safe(topic, state)
+        with_ok_func = fn _, s -> validate_topic_existence(topic, s, true) end
+        with_ok(get_metadata_result, with_ok_func)
+    end
+  end
+
+  # Continue with {{ok, Result}, NewState}
+  # return whatever error immediately.
+  # @spec with_ok(result, fn((_, state()) end) :: result)) :: result when result :: {:ok | {:ok, term()} | {:error, any()}, state()}
+  def with_ok({:ok, state}, continue), do: continue.(:ok, state)
+
+  def with_ok({{:ok, ok}, state}, continue), do: continue.(ok, state)
+
+  def with_ok({{:error, _}, state()} = return, _continue), do: return
+
+  # If allow_topic_auto_creation is set 'false',
+  # do not try to fetch metadata per topic name, fetch all topics instead.
+  # As sending metadata request with topic name will cause an auto creation
+  # of the topic if auto.create.topics.enable is enabled in broker config.
+  @spec get_metadata_safe(topic(), state()) :: {{:ok, :kpro.struct()} | {:error, any()}, state()}
+  defp get_metadata_safe(topic0, state(config: config) = state) do
+    topic =
+      case config(:allow_topic_auto_creation, config, true) do
+        true -> topic0
+        false -> :all
+      end
+
+    do_get_metadata(topic, state)
+  end
+
+  @spec do_get_metadata(:all | topic(), state()) ::
+          {{:ok, :kpro.struct()} | {:error, any()}, state()}
+  defp do_get_metadata(topic, state(client_id: client_id, workers_tab: ets) = state0) do
+    topics =
+      case topic do
+        # in case no topic is given, get all
+        :all -> :all
+        _ -> [topic]
+      end
+
+    state = ensure_metadata_connection(state0)
+    conn = get_metadata_connection(state)
+    request = KafkaRequest.metadata(conn, topics)
+
+    case request_sync(state, request) do
+      {:ok, kpro_rsp(api: metadata, msg: metadata)} ->
+        topic_metadata_array = kf(:topic_metadata, metadata)
+        :ok = update_partitions_count_cache(ets, topic_metadata_array)
+        {{:ok, metadata}, state}
+
+      {:error, reason} ->
+        Logger.error(
+          "#{inspect(client_id)} failed to fetch metadata for topics: #{inspect(topics)}\nreason=#{inspect(reason)}"
+        )
+
+        {{:error, reason}, state}
+    end
+  end
+
+  @doc """
+  Ensure there is at least one metadata connection
+  """
+  def ensure_metadata_connection(state(bootstrap_endpoints: endpoints, meta_conn: :undef) = state) do
+    conn_config = conn_config(state)
+
+    pid =
+      case :kpro.connect_any(endpoints, conn_config) do
+        {:ok, pid_x} -> pid_x
+        {:error, reason} -> :erlang.exit(reason)
+      end
+
+    state(state, meta_conn: pid)
+  end
+
+  def ensure_metadata_connection(state) do
+    state
+  end
+
+  # must be called after ensure_metadata_connection
+  defp get_metadata_connection(state(meta_conn: conn)), do: conn
+
+  defp do_get_leader_connection(state0, topic, partition) do
+    state = ensure_metadata_connection(state0)
+    meta_conn = get_metadata_connection(state)
+    timeout = timeout(state)
+
+    case :kpro.discover_partition_leader(meta_conn, topic, partition, timeout) do
+      {:ok, endpoint} -> maybe_connect(state, endpoint)
+      {:error, reason} -> {{:error, reason}, state}
+    end
+  end
+
+  @spec do_get_group_coordinator(state(), group_id()) ::
+          {{:ok, connection()} | {:error, any()}, state()}
+  def do_get_group_coordinator(state0, group_id) do
+    state = ensure_metadata_connection(state0)
+    meta_conn = get_metadata_connection(state)
+    timeout = timeout(state)
+
+    case :kpro.discover_coordinator(meta_conn, :group, group_id, timeout) do
+      {:ok, endpoint} ->
+        {{:ok, {endpoint, conn_config(state)}}, state}
+
+      {:error, reason} ->
+        {{:error, reason}, state}
+    end
+  end
+
+  defp timeout(state(config: config)) do
+    timeout(config)
+  end
+
+  defp timeout(config) do
+    t = config(:get_metadata_timeout_seconds, config, @default_get_metadata_timeout_seconds)
+    :timer.seconds(t)
   end
 
   @doc """
@@ -593,6 +708,44 @@ defmodule BrodMimic.Client do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  @spec request_sync(state(), :kpro.req()) :: {:ok, :kpro.rsp()} | {:error, any()}
+  def request_sync(state, request) do
+    pid = get_metadata_connection(state)
+    timeout = timeout(state)
+    :kpro.request_sync(pid, request, timeout)
+  end
+
+  def do_start_producer(topic_name, producer_config, state) do
+    sup_pid = state(state, :producers_sup)
+    f = fn -> BrodProducersSup.start_producer(sup_pid, self(), topic_name, producer_config) end
+    ensure_partition_workers(topic_name, state, f)
+  end
+
+  def do_start_consumer(topic_name, consumer_config, state) do
+    sup_pid = state(state, :consumers_sup)
+    f = fn -> BrodConsumersSup.start_consumer(sup_pid, self(), topic_name, consumer_config) end
+    ensure_partition_workers(topic_name, state, f)
+  end
+
+  def ensure_partition_workers(topic_name, state, f) do
+    validate_topic_result = validate_topic_existence(topic_name, state, _is_retry = false)
+
+    with_ok_func = fn :ok, new_state ->
+      case f.() do
+        {:ok, _pid} ->
+          {:ok, new_state}
+
+        {:error, {:already_started, _pid}} ->
+          {:ok, new_state}
+
+        {:error, reason} ->
+          {{:error, reason}, new_state}
+      end
+    end
+
+    with_ok(validate_topic_result, with_ok_func)
   end
 
   def conn_config(state(client_id: client_id, config: config)) do
@@ -746,6 +899,26 @@ defmodule BrodMimic.Client do
     diff >= threshold
   end
 
+  @spec update_partitions_count_cache(:ets.tab(), [:kpro.struct()]) :: :ok
+  defp update_partitions_count_cache(_ets, []), do: :ok
+
+  defp update_partitions_count_cache(ets, [topic_metadata | rest]) do
+    topic = kf(:topic, topic_metadata)
+
+    case do_get_partitions_count(topic_metadata) do
+      {:ok, cnt} ->
+        :ets.insert(ets, {{:topic_metadata, topic}, cnt, :os.timestamp()})
+
+      {:error, :unknown_topic_or_partition} = err ->
+        :ets.insert(ets, {{:topic_metadata, topic}, err, :os.timestamp()})
+
+      {:error, _reason} ->
+        :ok
+    end
+
+    update_partitions_count_cache(ets, rest)
+  end
+
   def config(key, config, default) do
     :proplists.get_value(key, config, default)
   end
@@ -756,6 +929,99 @@ defmodule BrodMimic.Client do
 
   def ensure_binary(client_id) when is_binary(client_id) do
     client_id
+  end
+
+  @impl true
+  def handle_call({:stop_producer, topic}, _from, state) do
+    :ok = BrodProducersSup.stop_producer(state(state, :producers_sup), topic)
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:stop_consumer, topic}, _from, state) do
+    :ok = BrodConsumersSup.stop_consumer(state(state, :consumers_sup), topic)
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:get_leader_connection, topic, partition}, _from, state) do
+    {result, new_state} = do_get_leader_connection(state, topic, partition)
+    {:reply, result, new_state}
+  end
+
+  def handle_call({:get_connection, host, port}, _from, state) do
+    {result, new_state} = maybe_connect(state, {host, port})
+    {:reply, result, new_state}
+  end
+
+  def handle_call({:get_group_coordinator, group_id}, _from, state) do
+    {result, new_state} = do_get_group_coordinator(state, group_id)
+    {:reply, result, new_state}
+  end
+
+  def handle_call({:start_producer, topic_name, producer_config}, _from, state) do
+    {reply, new_state} = do_start_producer(topic_name, producer_config, state)
+    {:reply, reply, new_state}
+  end
+
+  def handle_call({:start_consumer, topic_name, consumer_config}, _from, state) do
+    {reply, new_state} = do_start_consumer(topic_name, consumer_config, state)
+    {:reply, reply, new_state}
+  end
+
+  def handle_call({:auto_start_producer, topic}, _from, state) do
+    config = state(state, :config)
+
+    case config(:auto_start_producers, config, false) do
+      true ->
+        producer_config = config(:default_producer_config, config, [])
+        {reply, new_state} = do_start_producer(topic, producer_config, state)
+        {:reply, reply, new_state}
+
+      false ->
+        {:reply, {:error, :disabled}, state}
+    end
+  end
+
+  def handle_call(:get_workers_table, _from, state) do
+    {:reply, {:ok, state(state, :workers_tab)}, state}
+  end
+
+  def handle_call(:get_producers_sup_pid, _from, state) do
+    {:reply, {:ok, state(state, :producers_sup)}, state}
+  end
+
+  def handle_call(:get_consumers_sup_pid, _from, state) do
+    {:reply, {:ok, state(state, :consumers_sup)}, state}
+  end
+
+  def handle_call({:get_metadata, topic}, _from, state) do
+    {result, new_state} = do_get_metadata(topic, state)
+    {:reply, result, new_state}
+  end
+
+  def handle_call(:stop, _from, state) do
+    {:stop, :normal, :ok, state}
+  end
+
+  def handle_call(call, _from, state) do
+    {:reply, {:error, {:unknown_call, call}}, state}
+  end
+
+  @impl true
+  def handle_cast({:register, key, pid}, state(workers_tab: tab) = state) do
+    :ets.insert(tab, {key, pid})
+    {:noreply, state}
+  end
+
+  def handle_cast({:deregister, key}, state(workers_tab: tab) = state) do
+    :ets.delete(tab, key)
+    {:noreply, state}
+  end
+
+  def handle_cast(cast, state) do
+    client_id = state(state, :client_id)
+    msg = "#{__MODULE__}, #{inspect(self())}, #{client_id} got unexpected cast: #{inspect(cast)})"
+    Logger.warn(msg)
+    {:noreply, state}
   end
 
   defp ets(client_id), do: client_id
