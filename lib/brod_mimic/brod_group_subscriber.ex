@@ -1,6 +1,6 @@
 defmodule BrodMimic.BrodGroupSubscriber do
   @moduledoc """
-    A group subscriber is a gen_server which subscribes to partition consumers
+    A group subscriber is a GenServer which subscribes to partition consumers
     (poller) and calls the user-defined callback functions for message
     processing.
 
@@ -108,26 +108,48 @@ defmodule BrodMimic.BrodGroupSubscriber do
   ```
     @callback assign_partitions([Brod.group_member()],[{Brod.topic(), Brod.partition()}], cb_state()) :: [{Brod.group_member_id(), [Brod.partition_assignment()]}]
   """
+  defrecord :kafka_message, extract(:kafka_message, from_lib: "brod/include/brod.hrl")
 
   defrecord(:consumer,
     topic_partition: {:undefined, :undefined},
     consumer_pid: :undefined,
     consumer_mref: :undefined,
-    acked_offset: :undefined
+    begin_offset: :undefined,
+    acked_offset: :undefined,
+    last_offset: :undefined
   )
 
   @type consumer() ::
           record(
             :consumer,
-            topic_partition :: {Brod.topic(), Brod.partition()},
-            consumer_pid :: :undefined | pid() | {:down, String.t(), any()},
-            consumer_mref :: :undefined | reference(),
-            begin_offset :: :undefined | Brod.offset(),
-            acked_offset :: :undefined | Brod.offset(),
-            last_offset :: :undefined | Brod.offset()
+            topic_partition: {Brod.topic(), Brod.partition()},
+            consumer_pid: :undefined | pid() | {:down, String.t(), any()},
+            consumer_mref: :undefined | reference(),
+            begin_offset: :undefined | Brod.offset(),
+            acked_offset: :undefined | Brod.offset(),
+            last_offset: :undefined | Brod.offset()
           )
 
   @type ack_ref() :: {Brod.topic(), Brod.partition(), Brod.offset()}
+
+  defrecord(:brod_received_assignment, topic: nil, partition: nil, begin_offset: :undefined)
+
+  @type brod_received_assignment() ::
+          record(:brod_received_assignment,
+            topic: Brod.topic(),
+            partition: Brod.partition(),
+            begin_offset: :undefined | Brod.offset()
+          )
+
+  defrecord(:kafka_message_set, topic: nil, partition: nil, high_wm_offset: 0, messages: [])
+
+  @type kafka_message_set() ::
+          record(:kafka_message_set,
+            topic: Brod.topic(),
+            partition: Brod.partition(),
+            high_wm_offset: integer(),
+            messages: [Brod.message()] | :kpro.incomplete_batch()
+          )
 
   defrecord(:state,
     client: nil,
@@ -148,20 +170,22 @@ defmodule BrodMimic.BrodGroupSubscriber do
   @type state() ::
           record(
             :state,
-            client :: Brod.client(),
-            client_mref :: reference(),
-            group_id :: Brod.group_id(),
-            member_id :: :undefined | member_id(),
-            generation_id :: :undefined | Brod.group_generation_id(),
-            coordinator :: pid(),
-            consumers :: [consumer()],
-            consumer_config :: Brod.consumer_config(),
-            is_blocked :: boolean(),
-            subscribe_tref :: :undefined | reference(),
-            cb_module :: module(),
-            cb_state :: cb_state(),
-            message_type :: :message | :message_set
+            client: Brod.client(),
+            client_mref: reference(),
+            group_id: Brod.group_id(),
+            member_id: :undefined | member_id(),
+            generation_id: :undefined | Brod.group_generation_id(),
+            coordinator: pid(),
+            consumers: [consumer()],
+            consumer_config: Brod.consumer_config(),
+            is_blocked: boolean(),
+            subscribe_tref: :undefined | reference(),
+            cb_module: module(),
+            cb_state: cb_state(),
+            message_type: :message | :message_set
           )
+
+  require Logger
 
   # delay 2 seconds retry the failed subscription to partition consumer process
   @resubcribe_delay 2000
@@ -288,7 +312,7 @@ defmodule BrodMimic.BrodGroupSubscriber do
   @doc """
     Commit all acked offsets. NOTE: This is an async call.
   """
-  @spec commit(pid()) :: ok
+  @spec commit(pid()) :: :ok
   def commit(pid) do
     GenServer.cast(pid, :commit_offsets)
   end
@@ -383,22 +407,22 @@ defmodule BrodMimic.BrodGroupSubscriber do
     {:noreply, state}
   end
 
-  def handle_info({:DOWN, mref, process, _pid, _reason}, state(client_mref: mref) = state) do
+  def handle_info({:DOWN, mref, _process, _pid, _reason}, state(client_mref: mref) = state) do
     # restart, my supervisor should restart me
     # brod_client DOWN reason is discarded as it should have logged
     # in its crash log
     {:stop, :client_down, state}
   end
 
-  def handle_info({:DOWN, _mref, _process, _pid, _reason}, state(consumers: consumers) = state) do
+  def handle_info({:DOWN, _mref, _process, pid, reason}, state(consumers: consumers) = state) do
     case get_consumer(pid, consumers) do
       false ->
         {:noreply, state}
 
       consumer ->
-        new_consumer = consumer(consumer_pid: down(Reason), consumer_mref: :undefined)
+        new_consumer = consumer(consumer, consumer_pid: down(reason), consumer_mref: :undefined)
         new_consumers = put_consumer(new_consumer, consumers)
-        new_state = state(consumers: new_consumers)
+        new_state = state(state, consumers: new_consumers)
         {:noreply, new_state}
     end
   end
@@ -415,11 +439,21 @@ defmodule BrodMimic.BrodGroupSubscriber do
       end
 
     tref = start_subscribe_timer(:undefined, @resubscribe_delay)
-    {:noreply, new_state(subscribe_tref: tref)}
+    {:noreply, state(new_state, subscribe_tref: tref)}
   end
 
-  def handle_info(info, state) do
-    log(state, info, "discarded message:~p", [info])
+  def handle_info(
+        info_msg,
+        state(group_id: group_id, member_id: member_id, generation_id: generation_id) = state
+      ) do
+    details = %{
+      group_id: group_id,
+      member_id: member_id,
+      generation_id: generation_id,
+      pid: self()
+    }
+
+    Logger.info("group subscriber (#{inspect(details)}). discarded message: #{inspect(info_msg)}")
     {:noreply, state}
   end
 
@@ -450,7 +484,7 @@ defmodule BrodMimic.BrodGroupSubscriber do
       ## Returning an updated cb_state is optional and clients that implemented
       ## brod prior to version 3.7.1 need this backwards compatibly case clause
       result when is_list(result) ->
-        {reply, result, state}
+        {:reply, result, state}
     end
   end
 
@@ -473,7 +507,7 @@ defmodule BrodMimic.BrodGroupSubscriber do
     {:reply, {:error, {:unknown_call, call}}, state}
   end
 
-  def handle_cast({ack, topic, partition, offset, commit}, state) do
+  def handle_cast({:ack, topic, partition, offset, commit}, state) do
     ack_ref = {topic, partition, offset}
     new_state = handle_ack(ack_ref, state, commit)
     {:noreply, new_state}
@@ -506,20 +540,24 @@ defmodule BrodMimic.BrodGroupSubscriber do
       Enum.map(assignments, fn assignment ->
         case assignment do
           consumer(
-            topic_partition: {topic, partition},
+            topic_partition: {_topic, _partition},
             consumer_pid: :undefined,
-            begin_offset: begin_offset,
+            begin_offset: _begin_offset,
             acked_offset: :undefined
           ) ->
             nil
 
-          brod_received_assignment(topic: topic, partition: partition, begin_offset: begin_offset) ->
+          brod_received_assignment(
+            topic: _topic,
+            partition: _partition,
+            begin_offset: _begin_offset
+          ) ->
             nil
         end
       end)
 
     new_state =
-      state(
+      state(state,
         consumers: consumers,
         is_blocked: false,
         member_id: member_id,
@@ -530,7 +568,7 @@ defmodule BrodMimic.BrodGroupSubscriber do
     {:noreply, new_state}
   end
 
-  def handle_cast(stop, State) do
+  def handle_cast(:stop, state) do
     {:stop, :normal, state}
   end
 
@@ -557,7 +595,7 @@ defmodule BrodMimic.BrodGroupSubscriber do
         consumers = update_last_offset(messages, c, consumers0)
         state = state(state0, consumers: consumers)
 
-        case msg_type do
+        case message_type do
           :message -> handle_messages(topic, partition, messages, state)
           :message_set -> handle_message_set(msg_set, state)
         end
@@ -610,7 +648,7 @@ defmodule BrodMimic.BrodGroupSubscriber do
       true ->
         last_message = :lists.last(messages)
         # kafka_message.offset
-        last_offset = LastMessage
+        last_offset = kafka_message(last_message, :offset)
         ack_ref = {topic, partition, last_offset}
         handle_ack(ack_ref, state1, commit_now)
 
@@ -650,6 +688,8 @@ defmodule BrodMimic.BrodGroupSubscriber do
         true -> handle_ack(ack_ref, state1, commit_now)
         false -> state1
       end
+
+    handle_messages(topic, partition, rest, new_state)
   end
 
   @spec handle_ack(ack_ref(), state(), boolean()) :: state()
@@ -691,14 +731,14 @@ defmodule BrodMimic.BrodGroupSubscriber do
   end
 
   def subscribe_partitions(state(client: client, consumers: consumers0) = state) do
-    consumers = Enum.map(consumers0, fn c -> subscribe_partition(client, C) end)
+    consumers = Enum.map(consumers0, fn c -> subscribe_partition(client, c) end)
     {:ok, state(state, consumers: consumers)}
   end
 
   def subscribe_partition(client, consumer) do
     consumer(
       topic_partition: {topic, partition},
-      consumer_pid: consumer_pid,
+      consumer_pid: pid,
       begin_offset: begin_offset0,
       acked_offset: acked_offset,
       last_offset: last_offset
@@ -740,18 +780,6 @@ defmodule BrodMimic.BrodGroupSubscriber do
             consumer(consumer, consumer_pid: down(reason), consumer_mref: :undefined)
         end
     end
-  end
-
-  def log(
-        state(group_id: group_id, member_id: member_id, generation_id: generation_id),
-        level,
-        fmt,
-        args
-      ) do
-    # ?BROD_LOG(
-    #  Level,
-    #  "group subscriber (groupId=~s,memberId=~s,generation=~p,pid=~p):\n" ++ Fmt,
-    #  [GroupId, MemberId, GenerationId, self() | Args]).
   end
 
   defp get_consumer(pid, consumers) when is_pid(pid) do

@@ -25,3 +25,8 @@ brod_mimic-*.tar
 
 # Temporary files for e.g. tests
 /tmp
+
+*.iml
+.elixir_ls/
+.DS_Store
+*.beam
