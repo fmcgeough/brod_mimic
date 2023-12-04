@@ -525,7 +525,7 @@ defmodule BrodMimic.Client do
   end
 
   @spec validate_topic_existence(topic(), state(), boolean()) :: {:ok | {:error, any()}, state()}
-  def validate_topic_existence(topic, state(workers_tab: ets) = state, is_retry) do
+  def validate_topic_existence(topic, r_state(workers_tab: ets) = state, is_retry) do
     case lookup_partitions_count_cache(ets, topic) do
       {:ok, _count} ->
         {:ok, state}
@@ -565,7 +565,7 @@ defmodule BrodMimic.Client do
   # As sending metadata request with topic name will cause an auto creation
   # of the topic if auto.create.topics.enable is enabled in broker config.
   @spec get_metadata_safe(topic(), state()) :: {{:ok, :kpro.struct()} | {:error, any()}, state()}
-  defp get_metadata_safe(topic0, state(config: config) = state) do
+  defp get_metadata_safe(topic0, r_state(config: config) = state) do
     topic =
       case config(:allow_topic_auto_creation, config, true) do
         true -> topic0
@@ -588,7 +588,7 @@ defmodule BrodMimic.Client do
   defp do_get_metadata(
          fetch_metadata_for,
          topic,
-         r + state(client_id: client_id, workers_tab: ets) = state0
+         r_state(client_id: client_id, workers_tab: ets) = state0
        ) do
     topics =
       case fetch_metadata_for do
@@ -666,7 +666,7 @@ defmodule BrodMimic.Client do
     end
   end
 
-  defp timeout(state(config: config)) do
+  defp timeout(r_state(config: config)) do
     timeout(config)
   end
 
