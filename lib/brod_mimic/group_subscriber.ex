@@ -1,4 +1,4 @@
-defmodule BrodMimic.BrodGroupSubscriber do
+defmodule BrodMimic.GroupSubscriber do
   @moduledoc """
     A group subscriber is a GenServer which subscribes to partition consumers
     (poller) and calls the user-defined callback functions for message
