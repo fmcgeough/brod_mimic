@@ -35,6 +35,8 @@ defmodule BrodMimic.Client do
 
   alias BrodMimic.{BrodConsumersSup, BrodProducersSup, KafkaRequest, Macros}
 
+  defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
+
   Record.defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
     partition: :undefined,

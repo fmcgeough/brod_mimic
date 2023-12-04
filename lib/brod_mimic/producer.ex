@@ -3,6 +3,7 @@ defmodule BrodMimic.Producer do
 
   import Bitwise
   import Kernel, except: [send: 2]
+  import Record, only: [defrecord: 2, extract: 2]
 
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.KafkaApis, as: BrodKafkaApis
@@ -10,6 +11,8 @@ defmodule BrodMimic.Producer do
   alias BrodMimic.Utils, as: BrodUtils
 
   require Record
+
+  defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
 
   Record.defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
@@ -263,11 +266,11 @@ defmodule BrodMimic.Producer do
       )
 
     case send(conn, produceRequest) do
-      :ok when r_kpro_req(produceRequest, :no_ack) ->
+      :ok when kpro_req(produceRequest, :no_ack) ->
         :ok
 
       :ok ->
-        {:ok, r_kpro_req(produceRequest, :ref)}
+        {:ok, kpro_req(produceRequest, :ref)}
 
       {:error, reason} ->
         {:error, reason}
