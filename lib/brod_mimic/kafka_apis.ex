@@ -114,12 +114,13 @@ defmodule BrodMimic.KafkaApis do
   ### _* gen_server callbacks =====================================================
 
   def init([]) do
-    _ = :ets.new(__MODULE__, [:named_table, :public])
-    {:ok, state()}
+    :brod_kafka_apis = :ets.new(:brod_kafka_apis, [:named_table, :public])
+
+    {:ok, r_state()}
   end
 
   def handle_info({:DOWN, _mref, :process, conn, _reason}, state) do
-    _ = :ets.delete(__MODULE__, conn)
+    _ = :ets.delete(:brod_kafka_apis, conn)
     {:noreply, state}
   end
 
@@ -180,15 +181,15 @@ defmodule BrodMimic.KafkaApis do
   """
   @spec lookup_vsn_range(conn(), api()) :: {vsn(), vsn()} | :none
   def lookup_vsn_range(conn, api) do
-    case :ets.lookup(__MODULE__, conn) do
+    case :ets.lookup(:brod_kafka_apis, conn) do
       [] ->
         case :kpro.get_api_versions(conn) do
           {:ok, versions} when is_map(versions) ->
-            :ets.insert(__MODULE__, {conn, versions})
+            :ets.insert(:brod_kafka_apis, {conn, versions})
             :ok = monitor_connection(conn)
             Map.get(api, versions, :none)
 
-          {:error, _Reason} ->
+          {:error, _reason} ->
             # connection died, ignore
             :none
         end

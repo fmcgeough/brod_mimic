@@ -1,8 +1,6 @@
 defmodule BrodMimic.CgCommits do
   use GenServer
 
-  import Bitwise
-
   @behaviour :brod_group_member
 
   require Logger

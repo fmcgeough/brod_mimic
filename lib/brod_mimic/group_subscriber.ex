@@ -438,7 +438,7 @@ defmodule BrodMimic.GroupSubscriber do
           state
       end
 
-    tref = start_subscribe_timer(:undefined, @resubscribe_delay)
+    tref = start_subscribe_timer(:undefined, @resubcribe_delay)
     {:noreply, state(new_state, subscribe_tref: tref)}
   end
 

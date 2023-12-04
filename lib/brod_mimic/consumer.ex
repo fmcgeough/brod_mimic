@@ -11,6 +11,7 @@ defmodule BrodMimic.Consumer do
 
   defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
   defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
+  defrecord(:kafka_message, extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl"))
 
   Record.defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
@@ -376,18 +377,18 @@ defmodule BrodMimic.Consumer do
     :ok
   end
 
-  defp handle_fetch_response(r_kpro_rsp(), r_state(subscriber: :undefined) = state0) do
+  defp handle_fetch_response(kpro_rsp(), r_state(subscriber: :undefined) = state0) do
     state = r_state(state0, last_req_ref: :undefined)
     {:noreply, state}
   end
 
-  defp handle_fetch_response(r_kpro_rsp(ref: ref1), r_state(last_req_ref: ref2) = state)
+  defp handle_fetch_response(kpro_rsp(ref: ref1), r_state(last_req_ref: ref2) = state)
        when ref1 !== ref2 do
     {:noreply, state}
   end
 
   defp handle_fetch_response(
-         r_kpro_rsp(ref: ref) = rsp,
+         kpro_rsp(ref: ref) = rsp,
          r_state(topic: topic, partition: partition, last_req_ref: ref) = state0
        ) do
     state = r_state(state0, last_req_ref: :undefined)
@@ -407,7 +408,7 @@ defmodule BrodMimic.Consumer do
   end
 
   defp add_pending_ack(
-         r_kafka_message(offset: offset, key: key, value: value),
+         kafka_message(offset: offset, key: key, value: value),
          r_pending_acks(queue: queue, count: count, bytes: bytes) = pending_acks
        ) do
     size = :erlang.size(key) + :erlang.size(value)
@@ -459,7 +460,7 @@ defmodule BrodMimic.Consumer do
            avg_bytes: avgBytes,
            size_stat_window: windowSize
          ) = state,
-         [r_kafka_message(key: key, value: value) | rest]
+         [kafka_message(key: key, value: value) | rest]
        ) do
     msgBytes = :erlang.size(key) + :erlang.size(value) + 40
     newAvgBytes = ((windowSize - 1) * avgBytes + msgBytes) / windowSize
