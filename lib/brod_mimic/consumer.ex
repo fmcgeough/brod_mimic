@@ -3,11 +3,14 @@ defmodule BrodMimic.Consumer do
 
   import Bitwise
 
-  require Record
+  import Record, only: [defrecord: 2, extract: 2]
 
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.KafkaRequest, as: BrodKafkaRequest
   alias BrodMimic.Utils, as: BrodUtils
+
+  defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
+  defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
 
   Record.defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
@@ -700,7 +703,7 @@ defmodule BrodMimic.Consumer do
 
     case :kpro.request_async(connection, request) do
       :ok ->
-        r_state(state, last_req_ref: r_kpro_req(request, :ref))
+        r_state(state, last_req_ref: kpro_req(request, :ref))
 
       {:error, {:connection_down, _reason}} ->
         state

@@ -2,8 +2,9 @@ defmodule BrodMimic.GroupCoordinator do
   use GenServer
 
   import Bitwise
+  import Record, only: [defrecord: 2, extract: 2]
 
-  require Record
+  defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
 
   Record.defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
@@ -798,7 +799,7 @@ defmodule BrodMimic.GroupCoordinator do
     reqBody = [{:group_id, group_id}, {:generation_id, generation_id}, {:member_id, member_id}]
     req = :kpro.make_request(:heartbeat, 0, reqBody)
     :ok = :kpro.request_async(connection, req)
-    new_state = r_state(state, hb_ref: {r_kpro_req(req, :ref), :os.timestamp()})
+    new_state = r_state(state, hb_ref: {kpro_req(req, :ref), :os.timestamp()})
     {:ok, new_state}
   end
 
