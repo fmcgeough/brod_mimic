@@ -1,6 +1,7 @@
 defmodule BrodMimic.CgCommits do
-  use Bitwise
   use GenServer
+
+  import Bitwise
 
   @behaviour :brod_group_member
 
@@ -344,7 +345,7 @@ defmodule BrodMimic.CgCommits do
           %{mfa: {__MODULE__, :log, 4}, line: 308, file: '../brod/src/brod_cg_commits.erl'},
           level,
           'Group member (~s,coor=~p):\n' ++ fmt,
-          [groupId, self() | args],
+          [group_id, self() | args],
           %{domain: [:brod]}
         ])
 

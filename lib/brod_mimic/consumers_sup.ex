@@ -1,5 +1,5 @@
-defmodule BrodMimic.BrodConsumersSup do
-  @behaviour :supervisor3
+defmodule BrodMimic.ConsumersSup do
+  @behaviour BrodMimic.Supervisor3
 
   @topics_sup :brod_consumers_sup
   @partitions_sup :brod_consumers_sup2
@@ -10,7 +10,8 @@ defmodule BrodMimic.BrodConsumersSup do
   # By default, restart partition consumer worker process after a 2-seconds delay
   @default_consumer_restart_delay 2
 
-  alias BrodMimic.Client
+  alias BrodMimic.Client, as: BrodClient
+  alias BrodMimic.Supervisor3, as: BrodSupervisor3
 
   # APIs =====================================================================
 
@@ -19,7 +20,7 @@ defmodule BrodMimic.BrodConsumersSup do
   """
   @spec start_link() :: {:ok, pid()}
   def start_link do
-    :supervisor3.start_link(__MODULE__, @topics_sup)
+    BrodSupervisor3.start_link(__MODULE__, __MODULE__)
   end
 
   @doc """
@@ -29,7 +30,7 @@ defmodule BrodMimic.BrodConsumersSup do
           {:ok, pid()} | {:error, any()}
   def start_consumer(sup_pid, client_pid, topic_name, config) do
     spec = consumers_sup_spec(client_pid, topic_name, config)
-    :supervisor3.start_child(sup_pid, spec)
+    BrodSupervisor3.start_child(sup_pid, spec)
   end
 
   @doc """
@@ -37,8 +38,8 @@ defmodule BrodMimic.BrodConsumersSup do
   """
   @spec stop_consumer(pid(), Brod.topic()) :: :ok | {:error, any()}
   def stop_consumer(sup_pid, topic_name) do
-    :supervisor3.terminate_child(sup_pid, topic_name)
-    :supervisor3.delete_child(sup_pid, topic_name)
+    BrodSupervisor3.terminate_child(sup_pid, topic_name)
+    BrodSupervisor3.delete_child(sup_pid, topic_name)
   end
 
   @doc """
@@ -46,7 +47,7 @@ defmodule BrodMimic.BrodConsumersSup do
   """
   @spec find_consumer(pid(), Brod.topic(), Brod.partition()) :: {:ok, pid()} | {:error, any()}
   def find_consumer(sup_pid, topic, partition) do
-    case :supervisor3.find_child(sup_pid, topic) do
+    case BrodSupervisor3.find_child(sup_pid, topic) do
       [] ->
         # no such topic worker started,
         # check sys.config or brod:start_link_client args
@@ -54,7 +55,7 @@ defmodule BrodMimic.BrodConsumersSup do
 
       [partitions_sup_pid] ->
         try do
-          case :supervisor3.find_child(partitions_sup_pid, partition) do
+          case BrodSupervisor3.find_child(partitionssup_pid, partition) do
             [] ->
               # no such partition?
               {:error, {:consumer_not_found, topic, partition}}
@@ -72,7 +73,8 @@ defmodule BrodMimic.BrodConsumersSup do
   @doc """
   supervisor3 callback.
   """
-  def init(@topics_sup) do
+  @impl true
+  def init(__MODULE__) do
     {:ok, {{:one_for_one, 0, 1}, []}}
   end
 
@@ -112,7 +114,10 @@ defmodule BrodMimic.BrodConsumersSup do
   end
 
   def get_all_partitions(client_pid, topic) do
-    case Client.get_partitions_count(client_pid, topic) do
+    case BrodClient.get_partitions_count(
+           client_pid,
+           topic
+         ) do
       {:ok, partitions_cnt} ->
         {:ok, :lists.seq(0, partitions_cnt - 1)}
 
@@ -130,13 +135,14 @@ defmodule BrodMimic.BrodConsumersSup do
       )
 
     config = :proplists.delete(:topic_restart_delay_seconds, config0)
-    args = [__MODULE__, {@partitions_sup, client_pid, topic_name, config}]
+
+    args = [__MODULE__, {:brod_consumers_sup2, client_pid, topic_name, config}]
 
     {
       _id = topic_name,
-      _start = {:supervisor3, :start_link, args},
+      _start = {BrodSupervisor3, :start_link, args},
       _restart = {:permanent, delay_secs},
-      _shutdown = :infinity,
+      _shut_down = :infinity,
       _type = :supervisor,
       _module = [__MODULE__]
     }
@@ -151,16 +157,16 @@ defmodule BrodMimic.BrodConsumersSup do
       )
 
     config = :proplists.delete(:partition_restart_delay_seconds, config0)
+
     args = [client_pid, topic, partition, config]
 
     {
       _id = partition,
       _start = {:brod_consumer, :start_link, args},
-      # restart only when not normal exit
       _restart = {:transient, delay_secs},
-      _shutdown = 5000,
+      _shut_down = 5000,
       _type = :worker,
-      _module = [:brod_consumer]
+      _Module = [__MODULE__]
     }
   end
 end
