@@ -25,8 +25,9 @@ defmodule BrodMimic.Client do
   * `stop_consumer/2`
   ```
   """
-  use Bitwise
   use GenServer
+
+  import Bitwise
 
   require BrodMimic.Macros
   require Logger

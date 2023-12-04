@@ -1,6 +1,7 @@
 defmodule BrodMimic.Consumer do
-  use Bitwise
   use GenServer
+
+  import Bitwise
 
   require Record
 

@@ -1,3 +1,3 @@
 defmodule BrodMimic.CliPipe do
-  use Bitwise
+  @moduledoc false
 end

@@ -31,7 +31,7 @@ defmodule BrodMimic.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:brod, "~> 3.15"},
+      {:brod, "~> 3.17"},
       {:credo, "~> 1.5.3", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
       {:ex_doc, "~> 0.23", only: :dev, runtime: false}

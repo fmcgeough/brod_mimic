@@ -15,6 +15,9 @@ defmodule BrodMimic.KafkaRequest do
             , sync_group/2
             ]).
   """
+  require Record
+
+  import Bitwise
 
   @type api() :: KafkaApis.api()
   @type vsn() :: KafkaApis.vsn()
@@ -26,51 +29,85 @@ defmodule BrodMimic.KafkaRequest do
 
   alias BrodMimic.KafkaApis
 
-  @doc """
-  Make a produce request, If the first arg is a connection pid, call
-  `brod_kafka_apis:pick_version/2' to resolve version.
-  """
-  @spec produce(
-          conn() | vsn(),
-          topic(),
-          partition(),
-          :kpro.batch_input(),
-          integer(),
-          integer(),
-          Brod.compression()
-        ) :: :kpro.req()
-  def produce(maybe_pid, topic, partition, batch_input, required_acks, ack_timeout, compression) do
-    vsn = pick_version(:produce, maybe_pid)
+  Record.defrecord(:r_kafka_message_set, :kafka_message_set,
+    topic: :undefined,
+    partition: :undefined,
+    high_wm_offset: :undefined,
+    messages: :undefined
+  )
 
-    :kpro_req_lib.produce(vsn, topic, partition, batch_input, %{
-      required_acks: required_acks,
-      ack_timeout: ack_timeout,
+  Record.defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
+    topic: :undefined,
+    partition: :undefined,
+    error_code: :undefined,
+    error_desc: ''
+  )
+
+  Record.defrecord(:r_brod_call_ref, :brod_call_ref,
+    caller: :undefined,
+    callee: :undefined,
+    ref: :undefined
+  )
+
+  Record.defrecord(:r_brod_produce_reply, :brod_produce_reply,
+    call_ref: :undefined,
+    base_offset: :undefined,
+    result: :undefined
+  )
+
+  Record.defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
+    version: :undefined,
+    topics: :undefined,
+    user_data: :undefined
+  )
+
+  Record.defrecord(:r_brod_received_assignment, :brod_received_assignment,
+    topic: :undefined,
+    partition: :undefined,
+    begin_offset: :undefined
+  )
+
+  Record.defrecord(:r_brod_cg, :brod_cg,
+    id: :undefined,
+    protocol_type: :undefined
+  )
+
+  Record.defrecord(:r_socket, :socket,
+    pid: :undefined,
+    host: :undefined,
+    port: :undefined,
+    node_id: :undefined
+  )
+
+  Record.defrecord(:r_cbm_init_data, :cbm_init_data,
+    committed_offsets: :undefined,
+    cb_fun: :undefined,
+    cb_data: :undefined
+  )
+
+  def produce(maybePid, topic, partition, batchInput, requiredAcks, ackTimeout, compression) do
+    vsn = pick_version(:produce, maybePid)
+
+    :kpro_req_lib.produce(vsn, topic, partition, batchInput, %{
+      required_acks: requiredAcks,
+      ack_timeout: ackTimeout,
       compression: compression
     })
   end
 
-  @doc """
-  Make a create_topics request.
-  """
-  @spec create_topics(vsn() | conn(), [topic_config()], %{
-          timeout: :kpro.int32(),
-          validate_only: boolean()
-        }) :: :kpro.req()
-  def create_topics(connection, topic_configs, request_configs) when is_pid(connection) do
-    vsn = KafkaApis.pick_version(connection, :create_topics)
-    create_topics(vsn, topic_configs, request_configs)
+  def create_topics(connection, topicConfigs, requestConfigs)
+      when is_pid(connection) do
+    vsn = BrodKafkaApis.pick_version(connection, :create_topics)
+    create_topics(vsn, topicConfigs, requestConfigs)
   end
 
-  def create_topics(vsn, topic_configs, request_configs) do
-    :kpro_req_lib.create_topics(vsn, topic_configs, request_configs)
+  def create_topics(vsn, topicConfigs, requestConfigs) do
+    :kpro_req_lib.create_topics(vsn, topicConfigs, requestConfigs)
   end
 
-  @doc """
-  Make a delete_topics request.
-  """
-  @spec delete_topics(vsn() | conn(), [topic()], pos_integer()) :: :kpro.req()
   def delete_topics(connection, topics, timeout) when is_pid(connection) do
-    vsn = KafkaApis.pick_version(connection, :delete_topics)
+    vsn = BrodKafkaApis.pick_version(connection, :delete_topics)
+
     delete_topics(vsn, topics, timeout)
   end
 
@@ -78,45 +115,26 @@ defmodule BrodMimic.KafkaRequest do
     :kpro_req_lib.delete_topics(vsn, topics, %{timeout: timeout})
   end
 
-  @doc """
-  Make a fetch request, If the first arg is a connection pid, call
-
-  `brod_kafka_apis:pick_version/2' to resolve version.
-  """
-  @spec fetch(conn(), topic(), partition(), offset(), :kpro.wait(), :kpro.count(), :kpro.count()) ::
-          :kpro.req()
-  def fetch(pid, topic, partition, offset, wait_time, min_bytes, max_bytes) do
+  def fetch(pid, topic, partition, offset, waitTime, minBytes, maxBytes, isolationLevel) do
     vsn = pick_version(:fetch, pid)
 
     :kpro_req_lib.fetch(vsn, topic, partition, offset, %{
-      max_wait_time: wait_time,
-      min_bytes: min_bytes,
-      max_bytes: max_bytes
+      max_wait_time: waitTime,
+      min_bytes: minBytes,
+      max_bytes: maxBytes,
+      isolation_level: isolationLevel
     })
   end
 
-  @doc """
-   Make a `list_offsets' request message for offset resolution.
-  In kafka protocol, -2 and -1 are semantic 'time' to request for
-  'earliest' and 'latest' offsets.
-
-  In brod implementation, -2, -1, 'earliest' and 'latest'
-  are semantic 'offset', this is why often a variable named
-  Offset is used as the Time argument.
-  """
-  @spec list_offsets(conn(), topic(), partition(), Brod.offset_time()) :: :kpro.req()
-  def list_offsets(connection, topic, partition, time_or_semantic_offset) do
-    time = ensure_integer_offset_time(time_or_semantic_offset)
+  def list_offsets(connection, topic, partition, timeOrSemanticOffset) do
+    time = ensure_integer_offset_time(timeOrSemanticOffset)
     vsn = pick_version(:list_offsets, connection)
     :kpro_req_lib.list_offsets(vsn, topic, partition, time)
   end
 
-  @doc """
-  Make a metadata request.
-  """
-  @spec metadata(vsn() | conn(), :all | [topic()]) :: :kpro.req()
   def metadata(connection, topics) when is_pid(connection) do
-    vsn = KafkaApis.pick_version(connection, :metadata)
+    vsn = BrodKafkaApis.pick_version(connection, :metadata)
+
     metadata(vsn, topics)
   end
 
@@ -124,84 +142,53 @@ defmodule BrodMimic.KafkaRequest do
     :kpro_req_lib.metadata(vsn, topics)
   end
 
-  @doc """
-  Make a offset fetch request.
-
-  NOTE: empty topics list only works for kafka 0.10.2.0 or later
-  """
-  @spec offset_fetch(conn(), Brod.group_id(), [{topic(), [partition()]}]) :: :kpro.req()
-  def offset_fetch(connection, group_id, topics0) do
-    # FIXME
-    # topics = :lists.map(fn -> {topic, partitions}) ->
-    #       [ {:topic, topic}, {:partitions, [[{:partition, p}] || p <- partitions]}]
-    #   end, topics0)
-    # body = [ {:group_id, group_id}, {:topics, case topics do
-    #                     [] -> ?kpro_null
-    #                     _  -> topics
-    #                 end}
-    #      ]
-    body = [{:group_id, group_id}, {:topics, :undefined}]
-    vsn = pick_version(:offset_fetch, connection)
-    :kpro.make_request(:offset_fetch, vsn, body)
-  end
-
-  @doc """
-  Make a `list_groups' request.
-  """
-  @spec list_groups(conn()) :: :kpro.req()
   def list_groups(connection) do
     vsn = pick_version(:list_groups, connection)
     :kpro.make_request(:list_groups, vsn, [])
   end
 
-  @doc """
-  Make a `join_group' request.
-  """
-  @spec join_group(conn(), :kpro.struct()) :: :kpro.req()
   def join_group(conn, fields) do
     make_req(:join_group, conn, fields)
   end
 
-  @doc """
-  Make a `sync_group' request.
-  """
-  @spec sync_group(conn(), :kpro.struct()) :: :kpro.req()
   def sync_group(conn, fields) do
     make_req(:sync_group, conn, fields)
   end
 
-  @doc """
-  Make a `offset_commit' request.
-  """
-  @spec offset_commit(conn(), :kpro.struct()) :: :kpro.req()
   def offset_commit(conn, fields) do
     make_req(:offset_commit, conn, fields)
   end
 
-  ####### Internal Functions =======================================================
-
-  defp make_req(api, conn, fields) when is_pid(conn) do
-    vsn = pick_version(api, conn)
-    make_req(api, vsn, fields)
+  defp make_req(aPI, conn, fields) when is_pid(conn) do
+    vsn = pick_version(aPI, conn)
+    make_req(aPI, vsn, fields)
   end
 
-  defp make_req(api, vsn, fields) do
-    :kpro.make_request(api, vsn, fields)
+  defp make_req(aPI, vsn, fields) do
+    :kpro.make_request(aPI, vsn, fields)
   end
 
-  @spec pick_version(api(), pid()) :: vsn()
-  defp pick_version(_api, vsn) when is_integer(vsn), do: vsn
-
-  defp pick_version(api, connection) when is_pid(connection) do
-    KafkaApis.pick_version(connection, api)
+  defp pick_version(_API, vsn) when is_integer(vsn) do
+    vsn
   end
 
-  defp pick_version(api, _) do
-    KafkaApis.default_version(api)
+  defp pick_version(aPI, connection) when is_pid(connection) do
+    BrodKafkaApis.pick_version(connection, aPI)
   end
 
-  @spec ensure_integer_offset_time(Brod.offset_time()) :: integer()
-  defp ensure_integer_offset_time(@offset_earliest), do: -2
-  defp ensure_integer_offset_time(@offset_latest), do: -1
-  defp ensure_integer_offset_time(t) when is_integer(t), do: t
+  defp pick_version(aPI, _) do
+    BrodKafkaApis.default_version(aPI)
+  end
+
+  defp ensure_integer_offset_time(:earliest) do
+    -2
+  end
+
+  defp ensure_integer_offset_time(:latest) do
+    -1
+  end
+
+  defp ensure_integer_offset_time(t) when is_integer(t) do
+    t
+  end
 end
