@@ -25,14 +25,86 @@ defmodule BrodMimic.Client do
   * `stop_consumer/2`
   ```
   """
+  use Bitwise
   use GenServer
+
   require BrodMimic.Macros
   require Logger
   import Record, only: [defrecord: 2, extract: 2]
 
   alias BrodMimic.{BrodConsumersSup, BrodProducersSup, KafkaRequest, Macros}
 
-  defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
+  Record.defrecord(:r_kafka_message_set, :kafka_message_set,
+    topic: :undefined,
+    partition: :undefined,
+    high_wm_offset: :undefined,
+    messages: :undefined
+  )
+
+  Record.defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
+    topic: :undefined,
+    partition: :undefined,
+    error_code: :undefined,
+    error_desc: ''
+  )
+
+  Record.defrecord(:r_brod_call_ref, :brod_call_ref,
+    caller: :undefined,
+    callee: :undefined,
+    ref: :undefined
+  )
+
+  Record.defrecord(:r_brod_produce_reply, :brod_produce_reply,
+    call_ref: :undefined,
+    base_offset: :undefined,
+    result: :undefined
+  )
+
+  Record.defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
+    version: :undefined,
+    topics: :undefined,
+    user_data: :undefined
+  )
+
+  Record.defrecord(:r_brod_received_assignment, :brod_received_assignment,
+    topic: :undefined,
+    partition: :undefined,
+    begin_offset: :undefined
+  )
+
+  Record.defrecord(:r_brod_cg, :brod_cg,
+    id: :undefined,
+    protocol_type: :undefined
+  )
+
+  Record.defrecord(:r_socket, :socket,
+    pid: :undefined,
+    host: :undefined,
+    port: :undefined,
+    node_id: :undefined
+  )
+
+  Record.defrecord(:r_cbm_init_data, :cbm_init_data,
+    committed_offsets: :undefined,
+    cb_fun: :undefined,
+    cb_data: :undefined
+  )
+
+  Record.defrecord(:r_conn, :conn,
+    endpoint: :undefined,
+    pid: :undefined
+  )
+
+  Record.defrecord(:r_state, :state,
+    client_id: :undefined,
+    bootstrap_endpoints: :undefined,
+    meta_conn: :undefined,
+    payload_conns: [],
+    producers_sup: :undefined,
+    consumers_sup: :undefined,
+    config: :undefined,
+    workers_tab: :undefined
+  )
 
   @default_reconnect_cool_down_seconds 1
   @default_get_metadata_timeout_seconds 5
@@ -80,19 +152,8 @@ defmodule BrodMimic.Client do
   @type conn :: record(:conn, endpoint: endpoint(), pid: connection() | dead_conn())
 
   @type conn_state() :: conn()
-  Record.defrecord(:state,
-    client_id: nil,
-    bootstrap_endpoints: nil,
-    meta_conn: nil,
-    payload_conns: nil,
-    producers_sup: nil,
-    consumers_sup: nil,
-    config: nil,
-    workers_tab: nil
-  )
-
-  @type state ::
-          record(:state,
+  @type r_state ::
+          record(:r_state,
             client_id: client_id(),
             bootstrap_endpoints: [endpoint()],
             meta_conn: :undef | connection(),
@@ -484,11 +545,17 @@ defmodule BrodMimic.Client do
   # Continue with {{ok, Result}, NewState}
   # return whatever error immediately.
   # @spec with_ok(result, fn((_, state()) end) :: result)) :: result when result :: {:ok | {:ok, term()} | {:error, any()}, state()}
-  def with_ok({:ok, state}, continue), do: continue.(:ok, state)
+  defp with_ok({:ok, state}, continue) do
+    continue.(:ok, state)
+  end
 
-  def with_ok({{:ok, ok}, state}, continue), do: continue.(ok, state)
+  defp with_ok({{:ok, oK}, state}, continue) do
+    continue.(oK, state)
+  end
 
-  def with_ok({{:error, _}, state()} = return, _continue), do: return
+  defp with_ok({{:error, _}, r_state()} = return, _Continue) do
+    return
+  end
 
   # If allow_topic_auto_creation is set 'false',
   # do not try to fetch metadata per topic name, fetch all topics instead.
@@ -499,18 +566,29 @@ defmodule BrodMimic.Client do
     topic =
       case config(:allow_topic_auto_creation, config, true) do
         true -> topic0
-        false -> :all
+        false -> {:all, topic0}
       end
 
     do_get_metadata(topic, state)
   end
 
-  @spec do_get_metadata(:all | topic(), state()) ::
+  @spec do_get_metadata(:all | topic() | {:all, topic()}, state()) ::
           {{:ok, :kpro.struct()} | {:error, any()}, state()}
-  defp do_get_metadata(topic, state(client_id: client_id, workers_tab: ets) = state0) do
+  defp do_get_metadata({:all, topic}, state) do
+    do_get_metadata(:all, topic, state)
+  end
+
+  defp do_get_metadata(topic, state) when not is_tuple(topic) do
+    do_get_metadata(topic, topic, state)
+  end
+
+  defp do_get_metadata(
+         fetch_metadata_for,
+         topic,
+         r + state(client_id: client_id, workers_tab: ets) = state0
+       ) do
     topics =
-      case topic do
-        # in case no topic is given, get all
+      case fetch_metadata_for do
         :all -> :all
         _ -> [topic]
       end
@@ -521,7 +599,7 @@ defmodule BrodMimic.Client do
 
     case request_sync(state, request) do
       {:ok, kpro_rsp(api: metadata, msg: metadata)} ->
-        topic_metadata_array = kf(:topic_metadata, metadata)
+        topic_metadata_array = kf(:topics, metadata)
         :ok = update_partitions_count_cache(ets, topic_metadata_array)
         {{:ok, metadata}, state}
 
@@ -537,7 +615,9 @@ defmodule BrodMimic.Client do
   @doc """
   Ensure there is at least one metadata connection
   """
-  def ensure_metadata_connection(state(bootstrap_endpoints: endpoints, meta_conn: :undef) = state) do
+  def ensure_metadata_connection(
+        r_state(bootstrap_endpoints: endpoints, meta_conn: :undef) = state
+      ) do
     conn_config = conn_config(state)
 
     pid =
@@ -546,7 +626,7 @@ defmodule BrodMimic.Client do
         {:error, reason} -> :erlang.exit(reason)
       end
 
-    state(state, meta_conn: pid)
+    r_state(state, meta_conn: pid)
   end
 
   def ensure_metadata_connection(state) do
@@ -554,7 +634,7 @@ defmodule BrodMimic.Client do
   end
 
   # must be called after ensure_metadata_connection
-  defp get_metadata_connection(state(meta_conn: conn)), do: conn
+  defp get_metadata_connection(r_state(meta_conn: conn)), do: conn
 
   defp do_get_leader_connection(state0, topic, partition) do
     state = ensure_metadata_connection(state0)
@@ -602,6 +682,9 @@ defmodule BrodMimic.Client do
   catch
     :exit, {:noproc, _} ->
       {:error, :client_down}
+
+    :exit, {reason, _} ->
+      {:error, {:client_down, reason}}
   end
 
   @doc """
@@ -718,13 +801,13 @@ defmodule BrodMimic.Client do
   end
 
   def do_start_producer(topic_name, producer_config, state) do
-    sup_pid = state(state, :producers_sup)
+    sup_pid = r_state(state, :producers_sup)
     f = fn -> BrodProducersSup.start_producer(sup_pid, self(), topic_name, producer_config) end
     ensure_partition_workers(topic_name, state, f)
   end
 
   def do_start_consumer(topic_name, consumer_config, state) do
-    sup_pid = state(state, :consumers_sup)
+    sup_pid = r_state(state, :consumers_sup)
     f = fn -> BrodConsumersSup.start_consumer(sup_pid, self(), topic_name, consumer_config) end
     ensure_partition_workers(topic_name, state, f)
   end
@@ -748,7 +831,7 @@ defmodule BrodMimic.Client do
     with_ok(validate_topic_result, with_ok_func)
   end
 
-  def conn_config(state(client_id: client_id, config: config)) do
+  def conn_config(r_state(client_id: client_id, config: config)) do
     cfg = conn_config(config, :kpro_connection.all_cfg_keys(), [])
     :maps.from_list([{:client_id, ensure_binary(client_id)} | cfg])
   end
@@ -770,16 +853,16 @@ defmodule BrodMimic.Client do
     conn_config([{k, true} | rest], conn_cfg_keys, acc)
   end
 
-  @spec maybe_connect(state(), endpoint()) :: {{:ok, pid()} | {:error, any()}, state()}
+  @spec maybe_connect(r_state(), endpoint()) :: {{:ok, pid()} | {:error, any()}, r_state()}
   def maybe_connect(state, endpoint) do
-    case find_conn(endpoint, state(state, :payload_conns)) do
+    case find_conn(endpoint, r_state(state, :payload_conns)) do
       {:ok, pid} -> {{:ok, pid}, state}
       {:error, reason} -> maybe_connect(state, endpoint, reason)
     end
   end
 
-  @spec maybe_connect(state(), endpoint(), :not_found | dead_conn()) ::
-          {{:ok, pid()} | {:error, any()}, state()}
+  @spec maybe_connect(r_state(), endpoint(), :not_found | dead_conn()) ::
+          {{:ok, pid()} | {:error, any()}, r_state()}
   def maybe_connect(state, endpoint, :not_found) do
     # connect for the first time
     connect(state, endpoint)
@@ -787,7 +870,7 @@ defmodule BrodMimic.Client do
 
   # state{client_id = ClientId} = State,
   def maybe_connect(
-        state(client_id: client_id) = state,
+        r_state(client_id: client_id) = state,
         {host, port} = endpoint,
         {:dead_since, ts, reason}
       ) do
@@ -803,8 +886,11 @@ defmodule BrodMimic.Client do
     end
   end
 
-  @spec connect(state(), endpoint()) :: {{:ok, pid()} | {:error, any()}, state()}
-  def connect(state(client_id: client_id, payload_conns: conns) = state, {host, port} = endpoint) do
+  @spec connect(r_state(), endpoint()) :: {{:ok, pid()} | {:error, any()}, r_state()}
+  def connect(
+        r_state(client_id: client_id, payload_conns: conns) = state,
+        {host, port} = endpoint
+      ) do
     conn =
       case do_connect(endpoint, state) do
         {:ok, pid} ->
@@ -841,10 +927,10 @@ defmodule BrodMimic.Client do
   per-partition worker restarts and requests for a connection after
   it is cooled down.
   """
-  @spec handle_connection_down(state(), pid(), any()) :: state()
+  @spec handle_connection_down(r_state(), pid(), any()) :: state()
   def handle_connection_down(state, pid, reason) do
-    if state(state, :meta_conn) == pid do
-      state(state, meta_conn: :undef)
+    if r_state(state, :meta_conn) == pid do
+      r_state(state, meta_conn: :undef)
     else
       conns = state(state, :payload_conns)
       client_id = state(state, :client_id)
@@ -892,7 +978,7 @@ defmodule BrodMimic.Client do
 
   # Check if the connection is down for long enough to retry.
   def is_cooled_down(ts, state) do
-    config = state(state, :config)
+    config = r_state(state, :config)
     threshold = config(:reconnect_cool_down_seconds, config, @default_reconnect_cool_down_seconds)
     now = :os.timestamp()
     diff = div(:timer.now_diff(now, ts), 1_000_000)
@@ -933,12 +1019,12 @@ defmodule BrodMimic.Client do
 
   @impl true
   def handle_call({:stop_producer, topic}, _from, state) do
-    :ok = BrodProducersSup.stop_producer(state(state, :producers_sup), topic)
+    :ok = BrodProducersSup.stop_producer(r_state(state, :producers_sup), topic)
     {:reply, :ok, state}
   end
 
   def handle_call({:stop_consumer, topic}, _from, state) do
-    :ok = BrodConsumersSup.stop_consumer(state(state, :consumers_sup), topic)
+    :ok = BrodConsumersSup.stop_consumer(r_state(state, :consumers_sup), topic)
     {:reply, :ok, state}
   end
 
@@ -968,7 +1054,7 @@ defmodule BrodMimic.Client do
   end
 
   def handle_call({:auto_start_producer, topic}, _from, state) do
-    config = state(state, :config)
+    config = r_state(state, :config)
 
     case config(:auto_start_producers, config, false) do
       true ->
@@ -982,15 +1068,15 @@ defmodule BrodMimic.Client do
   end
 
   def handle_call(:get_workers_table, _from, state) do
-    {:reply, {:ok, state(state, :workers_tab)}, state}
+    {:reply, {:ok, r_state(state, :workers_tab)}, state}
   end
 
   def handle_call(:get_producers_sup_pid, _from, state) do
-    {:reply, {:ok, state(state, :producers_sup)}, state}
+    {:reply, {:ok, r_state(state, :producers_sup)}, state}
   end
 
   def handle_call(:get_consumers_sup_pid, _from, state) do
-    {:reply, {:ok, state(state, :consumers_sup)}, state}
+    {:reply, {:ok, r_state(state, :consumers_sup)}, state}
   end
 
   def handle_call({:get_metadata, topic}, _from, state) do
@@ -1007,18 +1093,18 @@ defmodule BrodMimic.Client do
   end
 
   @impl true
-  def handle_cast({:register, key, pid}, state(workers_tab: tab) = state) do
+  def handle_cast({:register, key, pid}, r_state(workers_tab: tab) = state) do
     :ets.insert(tab, {key, pid})
     {:noreply, state}
   end
 
-  def handle_cast({:deregister, key}, state(workers_tab: tab) = state) do
+  def handle_cast({:deregister, key}, r_state(workers_tab: tab) = state) do
     :ets.delete(tab, key)
     {:noreply, state}
   end
 
   def handle_cast(cast, state) do
-    client_id = state(state, :client_id)
+    client_id = r_state(state, :client_id)
     msg = "#{__MODULE__}, #{inspect(self())}, #{client_id} got unexpected cast: #{inspect(cast)})"
     Logger.warn(msg)
     {:noreply, state}

@@ -15,10 +15,66 @@ defmodule BrodMimic.KafkaApis do
             ])
   """
 
-  require Record
-  Record.defrecord(:state, [])
-
   require Logger
+  require Record
+
+  Record.defrecord(:r_kafka_message_set, :kafka_message_set,
+    topic: :undefined,
+    partition: :undefined,
+    high_wm_offset: :undefined,
+    messages: :undefined
+  )
+
+  Record.defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
+    topic: :undefined,
+    partition: :undefined,
+    error_code: :undefined,
+    error_desc: ''
+  )
+
+  Record.defrecord(:r_brod_call_ref, :brod_call_ref,
+    caller: :undefined,
+    callee: :undefined,
+    ref: :undefined
+  )
+
+  Record.defrecord(:r_brod_produce_reply, :brod_produce_reply,
+    call_ref: :undefined,
+    base_offset: :undefined,
+    result: :undefined
+  )
+
+  Record.defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
+    version: :undefined,
+    topics: :undefined,
+    user_data: :undefined
+  )
+
+  Record.defrecord(:r_brod_received_assignment, :brod_received_assignment,
+    topic: :undefined,
+    partition: :undefined,
+    begin_offset: :undefined
+  )
+
+  Record.defrecord(:r_brod_cg, :brod_cg,
+    id: :undefined,
+    protocol_type: :undefined
+  )
+
+  Record.defrecord(:r_socket, :socket,
+    pid: :undefined,
+    host: :undefined,
+    port: :undefined,
+    node_id: :undefined
+  )
+
+  Record.defrecord(:r_cbm_init_data, :cbm_init_data,
+    committed_offsets: :undefined,
+    cb_fun: :undefined,
+    cb_data: :undefined
+  )
+
+  Record.defrecord(:r_state, :state, [])
 
   @type vsn() :: :kpro.vsn()
   @type range() :: {vsn(), vsn()}
@@ -62,7 +118,7 @@ defmodule BrodMimic.KafkaApis do
     {:ok, state()}
   end
 
-  def handle_info({'DOWN', _mref, _process, conn, _Reason}, state) do
+  def handle_info({:DOWN, _mref, :process, conn, _reason}, state) do
     _ = :ets.delete(__MODULE__, conn)
     {:noreply, state}
   end
@@ -107,7 +163,7 @@ defmodule BrodMimic.KafkaApis do
   def do_pick_version(conn, api, {min, max} = my_range) do
     case lookup_vsn_range(conn, api) do
       :none ->
-        ## no version received from kafka, use min
+        # no version received from kafka, use min
         min
 
       {kpro_min, kpro_max} = range when kpro_min > max or kpro_max < min ->
@@ -119,18 +175,16 @@ defmodule BrodMimic.KafkaApis do
     end
   end
 
-  ### Lookup API from cache, return 'none' if not found.
-  # -dialyzer([{nowarn_function, [lookup_vsn_range/2]}]).
+  @doc """
+  Lookup API from cache, return ':none' if not found
+  """
   @spec lookup_vsn_range(conn(), api()) :: {vsn(), vsn()} | :none
   def lookup_vsn_range(conn, api) do
     case :ets.lookup(__MODULE__, conn) do
       [] ->
         case :kpro.get_api_versions(conn) do
           {:ok, versions} when is_map(versions) ->
-            ## public ets, insert it by caller
             :ets.insert(__MODULE__, {conn, versions})
-            ## tell ?SERVER to monitor the connection
-            ## so to delete it from cache when 'DOWN' is received
             :ok = monitor_connection(conn)
             Map.get(api, versions, :none)
 
