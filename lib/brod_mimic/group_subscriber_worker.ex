@@ -125,17 +125,17 @@ defmodule BrodMimic.GroupSubscriberWorker do
 
     case cb_module.handle_message(msg, cb_state) do
       {:ok, :commit, new_cb_state} ->
-        newState = r_state(state, cb_state: new_cb_state)
+        new_state = r_state(state, cb_state: new_cb_state)
         commit.(get_last_offset(msg))
-        {:ok, :ack, newState}
+        {:ok, :ack, new_state}
 
       {:ok, :ack, new_cb_state} ->
-        newState = r_state(state, cb_state: new_cb_state)
-        {:ok, :ack, newState}
+        new_state = r_state(state, cb_state: new_cb_state)
+        {:ok, :ack, new_state}
 
       {:ok, new_cb_state} ->
-        newState = r_state(state, cb_state: new_cb_state)
-        {:ok, newState}
+        new_state = r_state(state, cb_state: new_cb_state)
+        {:ok, new_state}
     end
   end
 

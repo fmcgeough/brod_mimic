@@ -157,25 +157,25 @@ defmodule BrodMimic.KafkaRequest do
     make_req(:offset_commit, conn, fields)
   end
 
-  defp make_req(aPI, conn, fields) when is_pid(conn) do
-    vsn = pick_version(aPI, conn)
-    make_req(aPI, vsn, fields)
+  defp make_req(api, conn, fields) when is_pid(conn) do
+    vsn = pick_version(api, conn)
+    make_req(api, vsn, fields)
   end
 
-  defp make_req(aPI, vsn, fields) do
-    :kpro.make_request(aPI, vsn, fields)
+  defp make_req(api, vsn, fields) do
+    :kpro.make_request(api, vsn, fields)
   end
 
-  defp pick_version(_API, vsn) when is_integer(vsn) do
+  defp pick_version(_api, vsn) when is_integer(vsn) do
     vsn
   end
 
-  defp pick_version(aPI, connection) when is_pid(connection) do
-    BrodKafkaApis.pick_version(connection, aPI)
+  defp pick_version(api, connection) when is_pid(connection) do
+    BrodKafkaApis.pick_version(connection, api)
   end
 
-  defp pick_version(aPI, _) do
-    BrodKafkaApis.default_version(aPI)
+  defp pick_version(api, _) do
+    BrodKafkaApis.default_version(api)
   end
 
   defp ensure_integer_offset_time(:earliest) do

@@ -245,10 +245,10 @@ defmodule BrodMimic.Consumer do
   end
 
   def handle_info(
-        {:DOWN, _MonitorRef, :process, pid, _reason},
+        {:DOWN, _monitor_ref, :process, pid, _reason},
         r_state(subscriber: pid) = state
       ) do
-    newState =
+    new_state =
       reset_buffer(
         r_state(state,
           subscriber: :undefined,
@@ -256,7 +256,7 @@ defmodule BrodMimic.Consumer do
         )
       )
 
-    {:noreply, newState}
+    {:noreply, new_state}
   end
 
   def handle_info(
@@ -295,11 +295,11 @@ defmodule BrodMimic.Consumer do
     {:noreply, state}
   end
 
-  def handle_call(:get_connection, _From, r_state(connection: c) = state) do
+  def handle_call(:get_connection, _from, r_state(connection: c) = state) do
     {:reply, c, state}
   end
 
-  def handle_call({:subscribe, pid, options}, _From, r_state(subscriber: subscriber) = state0) do
+  def handle_call({:subscribe, pid, options}, _from, r_state(subscriber: subscriber) = state0) do
     case not BrodUtils.is_pid_alive(subscriber) or subscriber === pid do
       true ->
         case maybe_init_connection(state0) do
@@ -317,7 +317,7 @@ defmodule BrodMimic.Consumer do
 
   def handle_call(
         {:unsubscribe, subscriber_pid},
-        _From,
+        _from,
         r_state(
           subscriber: current_subscriber,
           subscriber_mref: mref
@@ -327,24 +327,24 @@ defmodule BrodMimic.Consumer do
       true ->
         is_reference(mref) and :erlang.demonitor(mref, [:flush])
 
-        newState =
+        new_state =
           r_state(state,
             subscriber: :undefined,
             subscriber_mref: :undefined
           )
 
-        {:reply, :ok, reset_buffer(newState)}
+        {:reply, :ok, reset_buffer(new_state)}
 
       false ->
         {:reply, {:error, :ignored}, state}
     end
   end
 
-  def handle_call(:stop, _From, state) do
+  def handle_call(:stop, _from, state) do
     {:stop, :normal, :ok, state}
   end
 
-  def handle_call(call, _From, state) do
+  def handle_call(call, _from, state) do
     {:reply, {:error, {:unknown_call, call}}, state}
   end
 
@@ -567,20 +567,20 @@ defmodule BrodMimic.Consumer do
   defp maybe_shrink_max_bytes(
          r_state(
            size_stat_window: w,
-           max_bytes_orig: maxBytesOrig
+           max_bytes_orig: max_bytes_orig
          ) = state,
          _
        )
        when w < 1 do
-    r_state(state, max_bytes: maxBytesOrig)
+    r_state(state, max_bytes: max_bytes_orig)
   end
 
   defp maybe_shrink_max_bytes(state0, messages) do
     r_state(
-      prefetch_count: prefetchCount,
-      max_bytes_orig: maxBytesOrig,
-      max_bytes: maxBytes,
-      avg_bytes: avgBytes
+      prefetch_count: prefetch_count,
+      max_bytes_orig: max_bytes_orig,
+      max_bytes: max_bytes,
+      avg_bytes: avg_bytes
     ) =
       state =
       update_avg_size(
@@ -588,15 +588,10 @@ defmodule BrodMimic.Consumer do
         messages
       )
 
-    estimatedSetSize = :erlang.round(prefetchCount * avgBytes)
+    estimated_set_size = :erlang.round(prefetch_count * avg_bytes)
+    new_max_bytes = max(estimated_set_size, max_bytes_orig)
 
-    newMaxBytes =
-      :erlang.max(
-        estimatedSetSize,
-        maxBytesOrig
-      )
-
-    r_state(state, max_bytes: :erlang.min(newMaxBytes, maxBytes))
+    r_state(state, max_bytes: :erlang.min(new_max_bytes, max_bytes))
   end
 
   def update_avg_size(r_state() = state, []) do
@@ -605,14 +600,14 @@ defmodule BrodMimic.Consumer do
 
   def update_avg_size(
         r_state(
-          avg_bytes: avgBytes,
-          size_stat_window: windowSize
+          avg_bytes: avg_bytes,
+          size_stat_window: window_size
         ) = state,
         [kafka_message(key: key, value: value) | rest]
       ) do
-    msgBytes = :erlang.size(key) + :erlang.size(value) + 40
-    newAvgBytes = ((windowSize - 1) * avgBytes + msgBytes) / windowSize
-    update_avg_size(r_state(state, avg_bytes: newAvgBytes), rest)
+    msg_bytes = :erlang.size(key) + :erlang.size(value) + 40
+    new_avg_bytes = ((window_size - 1) * avg_bytes + msg_bytes) / window_size
+    update_avg_size(r_state(state, avg_bytes: new_avg_bytes), rest)
   end
 
   def err_op(:request_timed_out), do: :retry
@@ -651,14 +646,14 @@ defmodule BrodMimic.Consumer do
 
         is_reference(mRef) and :erlang.demonitor(mRef)
 
-        newState =
+        new_state =
           r_state(state,
             connection: :undefined,
             connection_mref: :undefined
           )
 
-        :ok = maybe_send_init_connection(newState)
-        {:noreply, newState}
+        :ok = maybe_send_init_connection(new_state)
+        {:noreply, new_state}
 
       :retry ->
         {:noreply, maybe_send_fetch_request(state)}
@@ -740,7 +735,7 @@ defmodule BrodMimic.Consumer do
         :ok
     end
 
-    beginOffset =
+    begin_offset =
       case policy do
         :reset_to_earliest ->
           :earliest
@@ -751,13 +746,13 @@ defmodule BrodMimic.Consumer do
 
     state1 =
       r_state(state,
-        begin_offset: beginOffset,
+        begin_offset: begin_offset,
         pending_acks: r_pending_acks()
       )
 
     {:ok, state2} = resolve_begin_offset(state1)
-    newState = maybe_send_fetch_request(state2)
-    {:noreply, newState}
+    new_state = maybe_send_fetch_request(state2)
+    {:noreply, new_state}
   end
 
   defp handle_ack(
@@ -829,12 +824,12 @@ defmodule BrodMimic.Consumer do
 
   defp send_fetch_request(
          r_state(
-           begin_offset: beginOffset,
+           begin_offset: begin_offset,
            connection: connection
          ) = state
        ) do
-    (is_integer(beginOffset) and beginOffset >= 0) or
-      :erlang.error({:bad_begin_offset, beginOffset})
+    (is_integer(begin_offset) and begin_offset >= 0) or
+      :erlang.error({:bad_begin_offset, begin_offset})
 
     request =
       BrodKafkaRequest.fetch(
@@ -938,7 +933,7 @@ defmodule BrodMimic.Consumer do
           )
       )
 
-    newState =
+    new_state =
       case newBeginOffset !== oldBeginOffset do
         true ->
           r_state(state1, pending_acks: r_pending_acks())
@@ -947,20 +942,20 @@ defmodule BrodMimic.Consumer do
           state1
       end
 
-    resolve_begin_offset(newState)
+    resolve_begin_offset(new_state)
   end
 
   defp resolve_begin_offset(
          r_state(
-           begin_offset: beginOffset,
+           begin_offset: begin_offset,
            connection: connection,
            topic: topic,
            partition: partition
          ) = state
        )
-       when beginOffset === :earliest or beginOffset === :latest or beginOffset === -2 or
-              beginOffset === -1 do
-    case resolve_offset(connection, topic, partition, beginOffset) do
+       when begin_offset === :earliest or begin_offset === :latest or begin_offset === -2 or
+              begin_offset === -1 do
+    case resolve_offset(connection, topic, partition, begin_offset) do
       {:ok, newBeginOffset} ->
         {:ok, r_state(state, begin_offset: newBeginOffset)}
 
@@ -973,9 +968,9 @@ defmodule BrodMimic.Consumer do
     {:ok, state}
   end
 
-  defp resolve_offset(connection, topic, partition, beginOffset) do
+  defp resolve_offset(connection, topic, partition, begin_offset) do
     try do
-      BrodUtils.resolve_offset(connection, topic, partition, beginOffset)
+      BrodUtils.resolve_offset(connection, topic, partition, begin_offset)
     catch
       reason ->
         {:error, reason}
@@ -985,20 +980,20 @@ defmodule BrodMimic.Consumer do
   defp reset_buffer(
          r_state(
            pending_acks: r_pending_acks(queue: queue),
-           begin_offset: beginOffset0
+           begin_offset: begin_offset0
          ) = state
        ) do
-    beginOffset =
+    begin_offset =
       case :queue.peek(queue) do
         {:value, {offset, _}} ->
           offset
 
         :empty ->
-          beginOffset0
+          begin_offset0
       end
 
     r_state(state,
-      begin_offset: beginOffset,
+      begin_offset: begin_offset,
       pending_acks: r_pending_acks(),
       last_req_ref: :undefined
     )

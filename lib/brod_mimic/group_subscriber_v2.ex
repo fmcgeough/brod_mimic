@@ -260,9 +260,9 @@ defmodule BrodMimic.GroupSubscriberv2 do
   end
 
   def handle_info({:EXIT, pid, reason}, state) do
-    case (for {tP, pid1} <- :maps.to_list(r_state(state, :workers)),
+    case (for {tp, pid1} <- :maps.to_list(r_state(state, :workers)),
               pid1 === pid do
-            tP
+            tp
           end) do
       [topic_partition | _] ->
         :ok = handle_worker_failure(topic_partition, pid, reason, state)

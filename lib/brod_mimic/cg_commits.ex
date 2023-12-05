@@ -71,7 +71,7 @@ defmodule BrodMimic.CgCommits do
     client: :undefined,
     groupId: :undefined,
     memberId: :undefined,
-    generationId: :undefined,
+    generation_id: :undefined,
     coordinator: :undefined,
     topic: :undefined,
     offsets: :undefined,
@@ -104,10 +104,10 @@ defmodule BrodMimic.CgCommits do
     :ok = GenServer.call(pid, :sync, :infinity)
   end
 
-  def assignments_received(pid, memberId, generationId, topicAssignments) do
+  def assignments_received(pid, memberId, generation_id, topicAssignments) do
     GenServer.cast(
       pid,
-      {:new_assignments, memberId, generationId, topicAssignments}
+      {:new_assignments, memberId, generation_id, topicAssignments}
     )
   end
 
@@ -174,53 +174,57 @@ defmodule BrodMimic.CgCommits do
   end
 
   def handle_call(
-        {:assign_partitions, members, topicPartitions},
-        _From,
-        r_state(topic: myTopic, offsets: offsets) = state
+        {:assign_partitions, members, topic_partitions},
+        _from,
+        r_state(topic: my_topic, offsets: offsets) = state
       ) do
     log(state, :info, 'Assigning all topic partitions to self', [])
 
     myTP =
       for {p, _} <- offsets do
-        {myTopic, p}
+        {my_topic, p}
       end
 
     pred = fn tP ->
-      not :lists.member(tP, topicPartitions)
+      not :lists.member(tP, topic_partitions)
     end
 
     case :lists.filter(pred, myTP) do
       [] ->
         :ok
 
-      badPartitions ->
-        partitionNumbers =
-          for {_T, p} <- badPartitions do
+      bad_partitions ->
+        partition_numbers =
+          for {_t, p} <- bad_partitions do
             p
           end
 
-        log(state, :error, 'Nonexisting partitions in input: ~p', [partitionNumbers])
-        :erlang.exit({:non_existing_partitions, partitionNumbers})
+        log(state, :error, 'Nonexisting partitions in input: ~p', [partition_numbers])
+        :erlang.exit({:non_existing_partitions, partition_numbers})
     end
 
     result = assign_all_to_self(members, myTP)
     {:reply, result, r_state(state, is_elected: true)}
   end
 
-  def handle_call(:unsubscribe_all_partitions, _From, r_state() = state) do
+  def handle_call(:unsubscribe_all_partitions, _from, r_state() = state) do
     {:reply, :ok, state}
   end
 
-  def handle_call(call, _From, state) do
+  def handle_call(call, _from, state) do
     {:reply, {:error, {:unknown_call, call}}, state}
   end
 
   def handle_cast(
-        {:new_assignments, _MemberId, generationId, assignments},
-        r_state(is_elected: isLeader, offsets: offsetsToCommit, coordinator: pid, topic: myTopic) =
-          state
+        {:new_assignments, _MemberId, generation_id, assignments},
+        r_state(
+          is_elected: is_leader,
+          offsets: offsets_to_commit,
+          coordinator: pid,
+          topic: my_topic
+        ) = state
       ) do
-    isLeader or log(state, :info, 'Not elected', [])
+    is_leader or log(state, :info, 'Not elected', [])
 
     groupped0 =
       BrodUtils.group_per_key(
@@ -237,7 +241,7 @@ defmodule BrodMimic.CgCommits do
     groupped =
       :lists.filter(
         fn {topic, _} ->
-          topic === myTopic
+          topic === my_topic
         end,
         groupped0
       )
@@ -246,12 +250,12 @@ defmodule BrodMimic.CgCommits do
 
     case groupped do
       [] ->
-        log(state, :error, 'Topic ~s is not received in assignment', [myTopic])
+        log(state, :error, 'Topic ~s is not received in assignment', [my_topic])
         :erlang.exit({:bad_topic_assignment, groupped0})
 
-      [{^myTopic, partitionOffsetList}] ->
+      [{^my_topic, partitionOffsetList}] ->
         myPartitions =
-          for {p, _O} <- offsetsToCommit do
+          for {p, _O} <- offsets_to_commit do
             p
           end
 
@@ -269,7 +273,7 @@ defmodule BrodMimic.CgCommits do
               state,
               :error,
               'Partitions ~p are not received in assignment, There is probably another active group member subscribing to topic ~s, stop it and retry\n',
-              [myTopic, left]
+              [my_topic, left]
             )
 
             :erlang.exit({:unexpected_assignments, left})
@@ -278,10 +282,10 @@ defmodule BrodMimic.CgCommits do
 
     :lists.foreach(
       fn {partition, offset} ->
-        offsetToCommit = offset - 1
-        BrodGroupCoordinator.ack(pid, generationId, myTopic, partition, offsetToCommit)
+        offset_to_commit = offset - 1
+        BrodGroupCoordinator.ack(pid, generation_id, my_topic, partition, offset_to_commit)
       end,
-      offsetsToCommit
+      offsets_to_commit
     )
 
     case BrodGroupCoordinator.commit_offsets(pid) do
@@ -300,11 +304,11 @@ defmodule BrodMimic.CgCommits do
     {:stop, :normal, state}
   end
 
-  def handle_cast(_Cast, state) do
+  def handle_cast(_cast, state) do
     {:noreply, state}
   end
 
-  def code_change(_OldVsn, state, _Extra) do
+  def code_change(_old_vsn, state, _extra) do
     {:ok, state}
   end
 
@@ -330,8 +334,8 @@ defmodule BrodMimic.CgCommits do
     r_state(state, pending_sync: :undefined)
   end
 
-  defp assign_all_to_self([{myMemberId, _} | members], topicPartitions) do
-    groupped = BrodUtils.group_per_key(topicPartitions)
+  defp assign_all_to_self([{myMemberId, _} | members], topic_partitions) do
+    groupped = BrodUtils.group_per_key(topic_partitions)
 
     [
       {myMemberId, groupped}
