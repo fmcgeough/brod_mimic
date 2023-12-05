@@ -227,7 +227,7 @@ defmodule BrodMimic.TopicSubscriber do
     consumers =
       :lists.map(
         fn partition ->
-          ackedOffset =
+          acked_offset =
             case :lists.keyfind(
                    partition,
                    1,
@@ -242,7 +242,7 @@ defmodule BrodMimic.TopicSubscriber do
 
           r_consumer(
             partition: partition,
-            acked_offset: ackedOffset
+            acked_offset: acked_offset
           )
         end,
         partitions
@@ -259,17 +259,11 @@ defmodule BrodMimic.TopicSubscriber do
     {:noreply, new_state}
   end
 
-  def handle_info(
-        {:DOWN, mref, :process, _Pid, _reason},
-        r_state(client_mref: mref) = state
-      ) do
+  def handle_info({:DOWN, mref, :process, _pid, _reason}, r_state(client_mref: mref) = state) do
     {:stop, :client_down, state}
   end
 
-  def handle_info(
-        {:DOWN, _mref, :process, pid, reason},
-        r_state(consumers: consumers) = state
-      ) do
+  def handle_info({:DOWN, _mref, :process, pid, reason}, r_state(consumers: consumers) = state) do
     case get_consumer(pid, consumers) do
       r_consumer() = c ->
         consumer =
@@ -278,8 +272,8 @@ defmodule BrodMimic.TopicSubscriber do
             consumer_mref: :undefined
           )
 
-        newConsumers = put_consumer(consumer, consumers)
-        new_state = r_state(state, consumers: newConsumers)
+        new_consumers = put_consumer(consumer, consumers)
+        new_state = r_state(state, consumers: new_consumers)
         {:noreply, new_state}
 
       false ->
@@ -296,8 +290,8 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   def handle_cast({:ack, partition, offset}, state) do
-    ackRef = {partition, offset}
-    new_state = handle_ack(ackRef, state)
+    ack_ref = {partition, offset}
+    new_state = handle_ack(ack_ref, state)
     {:noreply, new_state}
   end
 
@@ -309,7 +303,7 @@ defmodule BrodMimic.TopicSubscriber do
     {:noreply, state}
   end
 
-  def code_change(_OldVsn, state, _Extra) do
+  def code_change(_old_vsn, state, _extra) do
     {:ok, state}
   end
 
@@ -322,7 +316,7 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   defp handle_consumer_delivery(
-         r_kafka_message_set(topic: topic, partition: partition, messages: messages) = msgSet,
+         r_kafka_message_set(topic: topic, partition: partition, messages: messages) = msg_set,
          r_state(topic: topic, message_type: msgType) = state0
        ) do
     state = update_last_offset(partition, messages, state0)
@@ -332,7 +326,7 @@ defmodule BrodMimic.TopicSubscriber do
         handle_messages(partition, messages, state)
 
       :message_set ->
-        handle_message_set(msgSet, state)
+        handle_message_set(msg_set, state)
     end
   end
 
@@ -359,7 +353,7 @@ defmodule BrodMimic.TopicSubscriber do
     r_consumer(
       partition: partition,
       consumer_pid: pid,
-      acked_offset: ackedOffset,
+      acked_offset: acked_offset,
       last_offset: lastOffset
     ) = consumer
 
@@ -368,20 +362,17 @@ defmodule BrodMimic.TopicSubscriber do
         consumer
 
       false
-      when ackedOffset !== lastOffset and lastOffset !== :undefined ->
+      when acked_offset !== lastOffset and lastOffset !== :undefined ->
         consumer
 
       false ->
-        options = resolve_begin_offset(ackedOffset)
+        options = resolve_begin_offset(acked_offset)
 
         case Brod.subscribe(client, self(), topic, partition, options) do
-          {:ok, consumerPid} ->
-            mref = :erlang.monitor(:process, consumerPid)
+          {:ok, consumer_pid} ->
+            mref = :erlang.monitor(:process, consumer_pid)
 
-            r_consumer(consumer,
-              consumer_pid: consumerPid,
-              consumer_mref: mref
-            )
+            r_consumer(consumer, consumer_pid: consumer_pid, consumer_mref: mref)
 
           {:error, reason} ->
             r_consumer(consumer,
@@ -407,20 +398,20 @@ defmodule BrodMimic.TopicSubscriber do
     [{:begin_offset, begin_offset}]
   end
 
-  defp handle_message_set(messageSet, state) do
-    r_kafka_message_set(partition: partition, messages: messages) = messageSet
+  defp handle_message_set(message_set, state) do
+    r_kafka_message_set(partition: partition, messages: messages) = message_set
     r_state(cb_module: cb_module, cb_state: cb_state) = state
 
-    {ack_now, newCbState} =
-      case cb_module.handle_message(partition, messageSet, cb_state) do
-        {:ok, newCbState_} ->
-          {false, newCbState_}
+    {ack_now, new_cb_state} =
+      case cb_module.handle_message(partition, message_set, cb_state) do
+        {:ok, new_cb_state_} ->
+          {false, new_cb_state_}
 
-        {:ok, :ack, newCbState_} ->
-          {true, newCbState_}
+        {:ok, :ack, new_cb_state_} ->
+          {true, new_cb_state_}
       end
 
-    state1 = r_state(state, cb_state: newCbState)
+    state1 = r_state(state, cb_state: new_cb_state)
 
     case ack_now do
       true ->
@@ -434,30 +425,30 @@ defmodule BrodMimic.TopicSubscriber do
     end
   end
 
-  defp handle_messages(_Partition, [], state) do
+  defp handle_messages(_partition, [], state) do
     state
   end
 
   defp handle_messages(partition, [msg | rest], state) do
     offset = kafka_message(msg, :offset)
     r_state(cb_module: cb_module, cb_state: cb_state) = state
-    ackRef = {partition, offset}
+    ack_ref = {partition, offset}
 
-    {ack_now, newCbState} =
+    {ack_now, new_cb_state} =
       case cb_module.handle_message(partition, msg, cb_state) do
-        {:ok, newCbState_} ->
-          {false, newCbState_}
+        {:ok, new_cb_state_} ->
+          {false, new_cb_state_}
 
-        {:ok, :ack, newCbState_} ->
-          {true, newCbState_}
+        {:ok, :ack, new_cb_state_} ->
+          {true, new_cb_state_}
       end
 
-    state1 = r_state(state, cb_state: newCbState)
+    state1 = r_state(state, cb_state: new_cb_state)
 
     new_state =
       case ack_now do
         true ->
-          handle_ack(ackRef, state1)
+          handle_ack(ack_ref, state1)
 
         false ->
           state1
@@ -466,8 +457,8 @@ defmodule BrodMimic.TopicSubscriber do
     handle_messages(partition, rest, new_state)
   end
 
-  defp handle_ack(ackRef, r_state(consumers: consumers) = state) do
-    {partition, offset} = ackRef
+  defp handle_ack(ack_ref, r_state(consumers: consumers) = state) do
+    {partition, offset} = ack_ref
 
     r_consumer(consumer_pid: pid) =
       consumer =
@@ -477,9 +468,9 @@ defmodule BrodMimic.TopicSubscriber do
       )
 
     :ok = consume_ack(pid, offset)
-    newConsumer = r_consumer(consumer, acked_offset: offset)
-    newConsumers = put_consumer(newConsumer, consumers)
-    r_state(state, consumers: newConsumers)
+    new_consumer = r_consumer(consumer, acked_offset: offset)
+    new_consumers = put_consumer(new_consumer, consumers)
+    r_state(state, consumers: new_consumers)
   end
 
   defp get_consumer(partition, consumers)
@@ -500,15 +491,15 @@ defmodule BrodMimic.TopicSubscriber do
     :ok
   end
 
-  defp send_lo_cmd(cMD) do
-    send_lo_cmd(cMD, 0)
+  defp send_lo_cmd(cmd) do
+    send_lo_cmd(cmd, 0)
   end
 
-  defp send_lo_cmd(cMD, 0) do
-    send(self(), cMD)
+  defp send_lo_cmd(cmd, 0) do
+    send(self(), cmd)
   end
 
-  defp send_lo_cmd(cMD, delayMS) do
-    :erlang.send_after(delayMS, self(), cMD)
+  defp send_lo_cmd(cmd, delay_ms) do
+    :erlang.send_after(delay_ms, self(), cmd)
   end
 end

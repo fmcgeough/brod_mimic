@@ -271,11 +271,11 @@ defmodule BrodMimic.GroupCoordinator do
       false ->
         is_pid(connection0) and :kpro.close_connection(connection0)
         client_id = make_group_connection_client_id()
-        connConfig = Map.put(conn_config0, :client_id, client_id)
+        conn_config = Map.put(conn_config0, :client_id, client_id)
 
         connection =
           (fn ->
-             case :kpro.connect(endpoint, connConfig) do
+             case :kpro.connect(endpoint, conn_config) do
                {:ok, result} ->
                  result
 
@@ -499,20 +499,20 @@ defmodule BrodMimic.GroupCoordinator do
            member_module: member_module
          ) = state
        ) do
-    reqBody = [
+    req_body = [
       {:group_id, group_id},
       {:generation_id, generation_id},
       {:member_id, member_id},
       {:assignments, assign_partitions(state)}
     ]
 
-    syncReq =
+    sync_req =
       BrodKafkaRequest.sync_group(
         connection,
-        reqBody
+        req_body
       )
 
-    rsp_body = send_sync(connection, syncReq)
+    rsp_body = send_sync(connection, sync_req)
     assignment = :kpro.find(:assignment, rsp_body)
 
     topic_assignments = get_topic_assignments(state, assignment)
@@ -525,7 +525,7 @@ defmodule BrodMimic.GroupCoordinator do
     start_offset_commit_timer(new_state)
   end
 
-  defp handle_ack(state, generation_id, _topic, _partition, _Offset)
+  defp handle_ack(state, generation_id, _topic, _partition, _offset)
        when generation_id < r_state(state, :generation_id) do
     state
   end
@@ -537,17 +537,12 @@ defmodule BrodMimic.GroupCoordinator do
          partition,
          offset
        ) do
-    newAckedOffsets =
-      merge_acked_offsets(
-        acked_offsets,
-        [{{topic, partition}, offset}]
-      )
-
-    r_state(state, acked_offsets: newAckedOffsets)
+    new_acked_offsets = merge_acked_offsets(acked_offsets, [{{topic, partition}, offset}])
+    r_state(state, acked_offsets: new_acked_offsets)
   end
 
-  defp merge_acked_offsets(acked_offsets, offsetsToAck) do
-    :lists.ukeymerge(1, offsetsToAck, acked_offsets)
+  defp merge_acked_offsets(acked_offsets, offsets_to_ack) do
+    :lists.ukeymerge(1, offsets_to_ack, acked_offsets)
   end
 
   defp format_assignments([]) do
@@ -623,13 +618,13 @@ defmodule BrodMimic.GroupCoordinator do
     topic_offsets0 =
       BrodUtils.group_per_key(
         fn {{topic, partition}, offset} ->
-          partitionOffset = [
+          partition_offset = [
             {:partition_index, partition},
             {:committed_offset, offset + 1},
             {:committed_metadata, metadata}
           ]
 
-          {topic, partitionOffset}
+          {topic, partition_offset}
         end,
         acked_offsets
       )
@@ -651,7 +646,7 @@ defmodule BrodMimic.GroupCoordinator do
           :timer.seconds(offset_retention_secs)
       end
 
-    reqBody = [
+    req_body = [
       {:group_id, group_id},
       {:generation_id, generation_id},
       {:member_id, member_id},
@@ -662,7 +657,7 @@ defmodule BrodMimic.GroupCoordinator do
     req =
       BrodKafkaRequest.offset_commit(
         connection,
-        reqBody
+        req_body
       )
 
     rsp_body = send_sync(connection, req)
@@ -845,8 +840,8 @@ defmodule BrodMimic.GroupCoordinator do
        ) do
     case is_valid_assignment.(topic, partition) do
       true ->
-        newTopics = :orddict.append_list(topic, [partition], assigned_topics)
-        member = {member_id, is_valid_assignment, newTopics}
+        new_topics = :orddict.append_list(topic, [partition], assigned_topics)
+        member = {member_id, is_valid_assignment, new_topics}
         roundrobin_assign_loop(rest, pending_members, [member | assigned_members])
 
       false ->
@@ -1010,8 +1005,8 @@ defmodule BrodMimic.GroupCoordinator do
           connection: connection
         ) = state
       ) do
-    reqBody = [{:group_id, group_id}, {:generation_id, generation_id}, {:member_id, member_id}]
-    req = :kpro.make_request(:heartbeat, 0, reqBody)
+    req_body = [{:group_id, group_id}, {:generation_id, generation_id}, {:member_id, member_id}]
+    req = :kpro.make_request(:heartbeat, 0, req_body)
     :ok = :kpro.request_async(connection, req)
     new_state = r_state(state, hb_ref: {kpro_req(req, :ref), :os.timestamp()})
     {:ok, new_state}

@@ -79,10 +79,10 @@ defmodule BrodMimic.GroupSubscriberWorker do
       cb_config: cb_config,
       partition: partition,
       begin_offset: begin_offset,
-      commit_fun: commitFun
+      commit_fun: commit_fun
     } = start_opts
 
-    initInfo =
+    init_info =
       :maps.with(
         [:topic, :partition, :group_id, :commit_fun],
         start_opts
@@ -98,7 +98,7 @@ defmodule BrodMimic.GroupSubscriberWorker do
           },
           :info,
           'Starting group_subscriber_worker: ~p~nOffset: ~p~nPid: ~p~n',
-          [initInfo, begin_offset, self()],
+          [init_info, begin_offset, self()],
           %{domain: [:brod]}
         ])
 
@@ -106,18 +106,18 @@ defmodule BrodMimic.GroupSubscriberWorker do
         :ok
     end
 
-    {:ok, cb_state} = cb_module.init(initInfo, cb_config)
+    {:ok, cb_state} = cb_module.init(init_info, cb_config)
 
     state =
       r_state(
         start_options: start_opts,
         cb_module: cb_module,
         cb_state: cb_state,
-        commit_fun: commitFun
+        commit_fun: commit_fun
       )
 
-    committedOffsets = resolve_committed_offsets(topic, partition, begin_offset)
-    {:ok, committedOffsets, state}
+    committed_offsets = resolve_committed_offsets(topic, partition, begin_offset)
+    {:ok, committed_offsets, state}
   end
 
   def handle_message(_partition, msg, state) do
@@ -154,16 +154,16 @@ defmodule BrodMimic.GroupSubscriberWorker do
     messages |> :lists.last() |> kafka_message(:offset)
   end
 
-  defp resolve_committed_offsets(_T, _P, :undefined) do
+  defp resolve_committed_offsets(_t, _p, :undefined) do
     []
   end
 
-  defp resolve_committed_offsets(_T, partition, offset)
+  defp resolve_committed_offsets(_t, partition, offset)
        when offset === :earliest or offset === :latest or offset === -2 or offset === -1 do
     [{partition, offset}]
   end
 
-  defp resolve_committed_offsets(_T, partition, offset)
+  defp resolve_committed_offsets(_t, partition, offset)
        when is_integer(offset) and offset >= 0 do
     [{partition, offset - 1}]
   end

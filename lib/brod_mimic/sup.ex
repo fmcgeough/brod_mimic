@@ -67,13 +67,10 @@ defmodule BrodMimic.Sup do
   end
 
   def start_client(endpoints, client_id, config) do
-    clientSpec = client_spec(endpoints, client_id, config)
+    client_spec = client_spec(endpoints, client_id, config)
 
-    case BrodSupervisor3.start_child(
-           :brod_sup,
-           clientSpec
-         ) do
-      {:ok, _Pid} ->
+    case BrodSupervisor3.start_child(:brod_sup, client_spec) do
+      {:ok, _pid} ->
         :ok
 
       error ->
@@ -94,7 +91,7 @@ defmodule BrodMimic.Sup do
     {:ok, _} = BrodKafkaApis.start_link()
     clients = :application.get_env(:brod, :clients, [])
 
-    clientSpecs =
+    client_specs =
       :lists.map(
         fn {client_id, args} ->
           is_atom(client_id) or exit({:bad_client_id, client_id})
@@ -103,7 +100,7 @@ defmodule BrodMimic.Sup do
         clients
       )
 
-    {:ok, {{:one_for_one, 0, 1}, clientSpecs}}
+    {:ok, {{:one_for_one, 0, 1}, client_specs}}
   end
 
   def post_init(_) do
@@ -125,7 +122,7 @@ defmodule BrodMimic.Sup do
   end
 
   defp client_spec(endpoints, client_id, config0) do
-    delaySecs = :proplists.get_value(:restart_delay_seconds, config0, 10)
+    delay_secs = :proplists.get_value(:restart_delay_seconds, config0, 10)
 
     config1 =
       :proplists.delete(
@@ -134,10 +131,10 @@ defmodule BrodMimic.Sup do
       )
 
     config = BrodUtils.init_sasl_opt(config1)
-    startArgs = [endpoints, client_id, config]
+    start_args = [endpoints, client_id, config]
 
-    {_Id = client_id, _Start = {:brod_client, :start_link, startArgs},
-     _Restart = {:permanent, delaySecs}, _Shutdown = 5000, _Type = :worker,
-     _Module = [:brod_client]}
+    {_id = client_id, _start = {:brod_client, :start_link, start_args},
+     _restart = {:permanent, delay_secs}, _shutdown = 5000, _type = :worker,
+     _module = [:brod_client]}
   end
 end

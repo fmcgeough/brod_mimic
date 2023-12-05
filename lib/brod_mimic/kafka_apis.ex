@@ -152,7 +152,7 @@ defmodule BrodMimic.KafkaApis do
     {:ok, state}
   end
 
-  def terminate(_Reason, _State) do
+  def terminate(_reason, _state) do
     :ok
   end
 
