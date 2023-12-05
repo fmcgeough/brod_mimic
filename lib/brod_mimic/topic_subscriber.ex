@@ -402,9 +402,9 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   defp resolve_begin_offset(offset) do
-    beginOffset = offset + 1
-    beginOffset >= 0 or :erlang.error({:invalid_offset, offset})
-    [{:begin_offset, beginOffset}]
+    begin_offset = offset + 1
+    begin_offset >= 0 or :erlang.error({:invalid_offset, offset})
+    [{:begin_offset, begin_offset}]
   end
 
   defp handle_message_set(messageSet, state) do

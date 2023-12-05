@@ -286,7 +286,7 @@ defmodule BrodMimic.Supervisor3 do
     end
   end
 
-  def handle_call({:start_child, eArgs}, _From, state)
+  def handle_call({:start_child, eArgs}, _from, state)
       when r_state(state, :strategy) === :simple_one_for_one do
     child = hd(r_state(state, :children))
     r_child(mfargs: {m, f, a}) = child
@@ -310,13 +310,13 @@ defmodule BrodMimic.Supervisor3 do
     end
   end
 
-  def handle_call({:terminate_child, name}, _From, state)
+  def handle_call({:terminate_child, name}, _from, state)
       when not is_pid(name) and
              r_state(state, :strategy) === :simple_one_for_one do
     {:reply, {:error, :simple_one_for_one}, state}
   end
 
-  def handle_call({:terminate_child, name}, _From, state) do
+  def handle_call({:terminate_child, name}, _from, state) do
     case get_child(name, state, r_state(state, :strategy) === :simple_one_for_one) do
       {:value, child} ->
         case do_terminate(child, r_state(state, :name)) do
@@ -334,12 +334,12 @@ defmodule BrodMimic.Supervisor3 do
     end
   end
 
-  def handle_call({_Req, _Data}, _From, state)
+  def handle_call({_Req, _Data}, _from, state)
       when r_state(state, :strategy) === :simple_one_for_one do
     {:reply, {:error, :simple_one_for_one}, state}
   end
 
-  def handle_call({:start_child, childSpec}, _From, state) do
+  def handle_call({:start_child, childSpec}, _from, state) do
     case check_childspec(childSpec) do
       {:ok, child} ->
         {resp, nState} = handle_start_child(child, state)
@@ -350,7 +350,7 @@ defmodule BrodMimic.Supervisor3 do
     end
   end
 
-  def handle_call({:restart_child, name}, _From, state) do
+  def handle_call({:restart_child, name}, _from, state) do
     case get_child(name, state) do
       {:value, child} when r_child(child, :pid) === :undefined ->
         case do_start_child(r_state(state, :name), child) do
@@ -380,7 +380,7 @@ defmodule BrodMimic.Supervisor3 do
     end
   end
 
-  def handle_call({:delete_child, name}, _From, state) do
+  def handle_call({:delete_child, name}, _from, state) do
     case get_child(name, state) do
       {:value, child} when r_child(child, :pid) === :undefined ->
         nState = remove_child(child, state)
@@ -402,7 +402,7 @@ defmodule BrodMimic.Supervisor3 do
 
   def handle_call(
         :which_children,
-        _From,
+        _from,
         r_state(children: [r_child(restart_type: :temporary, child_type: cT, modules: mods)]) =
           state
       )
@@ -425,7 +425,7 @@ defmodule BrodMimic.Supervisor3 do
 
   def handle_call(
         :which_children,
-        _From,
+        _from,
         r_state(children: [r_child(restart_type: rType, child_type: cT, modules: mods)]) = state
       )
       when r_state(state, :strategy) === :simple_one_for_one do
@@ -444,7 +444,7 @@ defmodule BrodMimic.Supervisor3 do
     {:reply, reply, state}
   end
 
-  def handle_call(:which_children, _From, state) do
+  def handle_call(:which_children, _from, state) do
     resp =
       :lists.map(
         fn
@@ -465,7 +465,7 @@ defmodule BrodMimic.Supervisor3 do
 
   def handle_call(
         :count_children,
-        _From,
+        _from,
         r_state(
           children: [
             r_child(
@@ -491,7 +491,7 @@ defmodule BrodMimic.Supervisor3 do
 
   def handle_call(
         :count_children,
-        _From,
+        _from,
         r_state(
           children: [
             r_child(
@@ -515,7 +515,7 @@ defmodule BrodMimic.Supervisor3 do
     {:reply, reply, state}
   end
 
-  def handle_call(:count_children, _From, state) do
+  def handle_call(:count_children, _from, state) do
     {specs, active, supers, workers} =
       :lists.foldl(
         fn child, counts ->
@@ -663,8 +663,8 @@ defmodule BrodMimic.Supervisor3 do
       end
 
     case res do
-      {:ok, newState} ->
-        {:noreply, newState}
+      {:ok, new_state} ->
+        {:noreply, new_state}
 
       {:stop, reason} ->
         {:stop, reason, state0}

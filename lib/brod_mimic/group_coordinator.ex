@@ -236,7 +236,7 @@ defmodule BrodMimic.GroupCoordinator do
     log(state, :info, 'Leaving group, reason: ~p\n', [reason])
     body = [{:group_id, group_id}, {:member_id, member_id}]
     _ = try_commit_offsets(state)
-    request = :kpro.make_request(:leave_group, _V = 0, body)
+    request = :kpro.make_request(:leave_group, _v = 0, body)
 
     try do
       _ = send_sync(connection, request, 1000)
@@ -440,7 +440,7 @@ defmodule BrodMimic.GroupCoordinator do
            session_timeout_seconds: session_timeout_sec,
            rebalance_timeout_seconds: rebalance_timeout_sec,
            protocol_name: protocol_name,
-           member_module: memberModule,
+           member_module: member_module,
            member_pid: member_pid
          ) = state0
        ) do
@@ -449,33 +449,33 @@ defmodule BrodMimic.GroupCoordinator do
       {:topics, topics},
       {:user_data,
        user_data(
-         memberModule,
+         member_module,
          member_pid
        )}
     ]
 
     protocol = [{:name, protocol_name}, {:metadata, meta}]
-    sessionTimeout = :timer.seconds(session_timeout_sec)
-    rebalanceTimeout = :timer.seconds(rebalance_timeout_sec)
+    session_timeout = :timer.seconds(session_timeout_sec)
+    rebalance_timeout = :timer.seconds(rebalance_timeout_sec)
 
     body = [
       {:group_id, group_id},
-      {:session_timeout_ms, sessionTimeout},
-      {:rebalance_timeout_ms, rebalanceTimeout},
+      {:session_timeout_ms, session_timeout},
+      {:rebalance_timeout_ms, rebalance_timeout},
       {:member_id, member_id0},
       {:protocol_type, "consumer"},
       {:protocols, [protocol]}
     ]
 
     req = BrodKafkaRequest.join_group(connection, body)
-    rsp_body = send_sync(connection, req, sessionTimeout)
+    rsp_body = send_sync(connection, req, session_timeout)
     generation_id = :kpro.find(:generation_id, rsp_body)
     leader_id = :kpro.find(:leader, rsp_body)
     member_id = :kpro.find(:member_id, rsp_body)
     members0 = :kpro.find(:members, rsp_body)
     members1 = translate_members(members0)
     members = ensure_leader_at_hd(leader_id, members1)
-    isGroupLeader = leader_id === member_id
+    is_group_leader = leader_id === member_id
 
     state =
       r_state(state0,
@@ -485,7 +485,7 @@ defmodule BrodMimic.GroupCoordinator do
         members: members
       )
 
-    log(state, :info, 'elected=~p', [isGroupLeader])
+    log(state, :info, 'elected=~p', [is_group_leader])
     {:ok, state}
   end
 
@@ -496,7 +496,7 @@ defmodule BrodMimic.GroupCoordinator do
            member_id: member_id,
            connection: connection,
            member_pid: member_pid,
-           member_module: memberModule
+           member_module: member_module
          ) = state
        ) do
     reqBody = [
@@ -518,7 +518,7 @@ defmodule BrodMimic.GroupCoordinator do
     topic_assignments = get_topic_assignments(state, assignment)
 
     :ok =
-      memberModule.assignments_received(member_pid, member_id, generation_id, topic_assignments)
+      member_module.assignments_received(member_pid, member_id, generation_id, topic_assignments)
 
     new_state = r_state(state, is_in_group: true)
     log(new_state, :info, 'assignments received:~s', [format_assignments(topic_assignments)])
@@ -620,7 +620,7 @@ defmodule BrodMimic.GroupCoordinator do
        ) do
     metadata = make_offset_commit_metadata()
 
-    topicOffsets0 =
+    topic_offsets0 =
       BrodUtils.group_per_key(
         fn {{topic, partition}, offset} ->
           partitionOffset = [
@@ -634,12 +634,12 @@ defmodule BrodMimic.GroupCoordinator do
         acked_offsets
       )
 
-    topicOffsets =
+    topic_offsets =
       :lists.map(
         fn {topic, partition_offsets} ->
           [{:name, topic}, {:partitions, partition_offsets}]
         end,
-        topicOffsets0
+        topic_offsets0
       )
 
     retention =
@@ -656,7 +656,7 @@ defmodule BrodMimic.GroupCoordinator do
       {:generation_id, generation_id},
       {:member_id, member_id},
       {:retention_time_ms, retention},
-      {:topics, topicOffsets}
+      {:topics, topic_offsets}
     ]
 
     req =
@@ -711,7 +711,7 @@ defmodule BrodMimic.GroupCoordinator do
       members: members,
       partition_assignment_strategy: strategy,
       member_pid: member_pid,
-      member_module: memberModule
+      member_module: member_module
     ) = state
 
     all_topics = all_topics(members)
@@ -724,7 +724,7 @@ defmodule BrodMimic.GroupCoordinator do
     assignments =
       case strategy === :callback_implemented do
         true ->
-          memberModule.assign_partitions(member_pid, members, all_partitions)
+          member_module.assign_partitions(member_pid, members, all_partitions)
 
         false ->
           do_assign_partitions(strategy, members, all_partitions)
@@ -771,10 +771,10 @@ defmodule BrodMimic.GroupCoordinator do
         meta = :kpro.find(:metadata, member)
         version = :kpro.find(:version, meta)
         topics = :kpro.find(:topics, meta)
-        userData = :kpro.find(:user_data, meta)
+        user_data = :kpro.find(:user_data, meta)
 
         {member_id,
-         r_kafka_group_member_metadata(version: version, topics: topics, user_data: userData)}
+         r_kafka_group_member_metadata(version: version, topics: topics, user_data: user_data)}
       end,
       members
     )
@@ -784,7 +784,7 @@ defmodule BrodMimic.GroupCoordinator do
     :lists.usort(
       :lists.append(
         :lists.map(
-          fn {_MemberId, m} ->
+          fn {_member_id, m} ->
             r_kafka_group_member_metadata(m, :topics)
           end,
           members
@@ -796,10 +796,7 @@ defmodule BrodMimic.GroupCoordinator do
   defp get_partitions(client, topic) do
     count =
       (fn ->
-         case BrodClient.get_partitions_count(
-                client,
-                topic
-              ) do
+         case BrodClient.get_partitions_count(client, topic) do
            {:ok, result} ->
              result
 
@@ -815,17 +812,17 @@ defmodule BrodMimic.GroupCoordinator do
     f = fn {member_id, m} ->
       subscribed_topics = r_kafka_group_member_metadata(m, :topics)
 
-      is_valid_assignment = fn topic, _Partition ->
+      is_valid_assignment = fn topic, _partition ->
         :lists.member(topic, subscribed_topics)
       end
 
       {member_id, is_valid_assignment, []}
     end
 
-    memberAssignment = :lists.map(f, members)
+    member_assignment = :lists.map(f, members)
 
-    for {member_id, _ValidationFun, assignments} <-
-          roundrobin_assign_loop(all_partitions, memberAssignment, []) do
+    for {member_id, _validation_fun, assignments} <-
+          roundrobin_assign_loop(all_partitions, member_assignment, []) do
       {member_id, assignments}
     end
   end
