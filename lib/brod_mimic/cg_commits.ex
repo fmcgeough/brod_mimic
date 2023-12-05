@@ -69,7 +69,7 @@ defmodule BrodMimic.CgCommits do
 
   defrecord(:r_state, :state,
     client: :undefined,
-    groupId: :undefined,
+    group_id: :undefined,
     memberId: :undefined,
     generation_id: :undefined,
     coordinator: :undefined,
@@ -120,21 +120,17 @@ defmodule BrodMimic.CgCommits do
     GenServer.call(pid, call, :infinity)
   end
 
-  def get_committed_offsets(_Pid, _TopicPartitions) do
+  def get_committed_offsets(_pid, _topic_partitions) do
     {:ok, []}
   end
 
   def init({client, group_input}) do
     :ok = BrodUtils.assert_client(client)
-    groupId = :proplists.get_value(:id, group_input)
-    :ok = BrodUtils.assert_group_id(groupId)
+    group_id = :proplists.get_value(:id, group_input)
+    :ok = BrodUtils.assert_group_id(group_id)
     topic = :proplists.get_value(:topic, group_input)
 
-    protocolName =
-      :proplists.get_value(
-        :protocol,
-        group_input
-      )
+    protocol_name = :proplists.get_value(:protocol, group_input)
 
     retention = :proplists.get_value(:retention, group_input)
     offsets = :proplists.get_value(:offsets, group_input)
@@ -142,14 +138,14 @@ defmodule BrodMimic.CgCommits do
     config = [
       {:partition_assignment_strategy, :callback_implemented},
       {:offset_retention_seconds, retention},
-      {:protocol_name, protocolName},
+      {:protocol_name, protocol_name},
       {:rejoin_delay_seconds, 2}
     ]
 
     {:ok, pid} =
       BrodGroupCoordinator.start_link(
         client,
-        groupId,
+        group_id,
         [topic],
         config,
         __MODULE__,
@@ -157,7 +153,13 @@ defmodule BrodMimic.CgCommits do
       )
 
     state =
-      r_state(client: client, groupId: groupId, coordinator: pid, topic: topic, offsets: offsets)
+      r_state(
+        client: client,
+        group_id: group_id,
+        coordinator: pid,
+        topic: topic,
+        offsets: offsets
+      )
 
     {:ok, state}
   end
@@ -216,7 +218,7 @@ defmodule BrodMimic.CgCommits do
   end
 
   def handle_cast(
-        {:new_assignments, _MemberId, generation_id, assignments},
+        {:new_assignments, _member_id, generation_id, assignments},
         r_state(
           is_elected: is_leader,
           offsets: offsets_to_commit,
@@ -253,18 +255,18 @@ defmodule BrodMimic.CgCommits do
         log(state, :error, 'Topic ~s is not received in assignment', [my_topic])
         :erlang.exit({:bad_topic_assignment, groupped0})
 
-      [{^my_topic, partitionOffsetList}] ->
-        myPartitions =
-          for {p, _O} <- offsets_to_commit do
+      [{^my_topic, partition_offset_list}] ->
+        my_partitions =
+          for {p, _o} <- offsets_to_commit do
             p
           end
 
-        receivedPartitions =
-          for {p, _O} <- partitionOffsetList do
+        received_partitions =
+          for {p, _o} <- partition_offset_list do
             p
           end
 
-        case myPartitions -- receivedPartitions do
+        case my_partitions -- received_partitions do
           [] ->
             :ok
 
@@ -334,18 +336,18 @@ defmodule BrodMimic.CgCommits do
     r_state(state, pending_sync: :undefined)
   end
 
-  defp assign_all_to_self([{myMemberId, _} | members], topic_partitions) do
+  defp assign_all_to_self([{my_member_id, _} | members], topic_partitions) do
     groupped = BrodUtils.group_per_key(topic_partitions)
 
     [
-      {myMemberId, groupped}
-      | for {id, _MemberMeta} <- members do
+      {my_member_id, groupped}
+      | for {id, _member_meta} <- members do
           {id, []}
         end
     ]
   end
 
-  defp log(r_state(groupId: group_id), level, fmt, args) do
+  defp log(r_state(group_id: group_id), level, fmt, args) do
     case :logger.allow(level, __MODULE__) do
       true ->
         :erlang.apply(:logger, :macro_log, [

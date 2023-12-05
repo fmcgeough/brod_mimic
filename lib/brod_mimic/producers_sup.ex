@@ -133,28 +133,28 @@ defmodule BrodMimic.ProducersSup do
     {config, delay_secs} = take_delay_secs(config0, :topic_restart_delay_seconds, 10)
     args = [:brod_producers_sup, {:brod_producers_sup2, client_pid, topic_name, config}]
 
-    {_Id = topic_name, _start = {BrodSupervisor3, :start_link, args},
-     _Restart = {:permanent, delay_secs}, _Shutdown = :infinity, _Type = :supervisor,
-     _Module = [:brod_producers_sup]}
+    {_id = topic_name, _start = {BrodSupervisor3, :start_link, args},
+     _restart = {:permanent, delay_secs}, _shutdown = :infinity, _type = :supervisor,
+     _module = [:brod_producers_sup]}
   end
 
   defp producer_spec(client_pid, topic, partition, config0) do
     {config, delay_secs} = take_delay_secs(config0, :partition_restart_delay_seconds, 5)
     args = [client_pid, topic, partition, config]
 
-    {_id = partition, _Start = {:brod_producer, :start_link, args},
+    {_id = partition, _start = {:brod_producer, :start_link, args},
      _restart = {:permanent, delay_secs}, _shutdown = 5000, _type = :worker,
      _module = [:brod_producer]}
   end
 
-  defp take_delay_secs(config, name, defaultValue) do
+  defp take_delay_secs(config, name, default_value) do
     secs =
       case :proplists.get_value(name, config) do
         n when is_integer(n) and n >= 1 ->
           n
 
         _ ->
-          defaultValue
+          default_value
       end
 
     {:proplists.delete(name, config), secs}

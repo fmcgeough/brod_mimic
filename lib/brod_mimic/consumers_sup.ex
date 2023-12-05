@@ -166,7 +166,7 @@ defmodule BrodMimic.ConsumersSup do
       _restart = {:transient, delay_secs},
       _shut_down = 5000,
       _type = :worker,
-      _Module = [__MODULE__]
+      _module = [__MODULE__]
     }
   end
 end

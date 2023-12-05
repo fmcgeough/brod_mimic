@@ -9,6 +9,7 @@ defmodule BrodMimic.Producer do
   alias BrodMimic.KafkaRequest, as: BrodKafkaRequest
   alias BrodMimic.Utils, as: BrodUtils
 
+  require Logger
   require Record
 
   defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
@@ -120,7 +121,7 @@ defmodule BrodMimic.Producer do
             :ok
         end
 
-      {:DOWN, ^mref, :process, _Pid, reason} ->
+      {:DOWN, ^mref, :process, _pid, reason} ->
         {:error, {:producer_down, reason}}
     end
   end
@@ -139,7 +140,7 @@ defmodule BrodMimic.Producer do
         :erlang.demonitor(mref, [:flush])
         {:ok, offset}
 
-      {:DOWN, ^mref, :process, _Pid, reason} ->
+      {:DOWN, ^mref, :process, _pid, reason} ->
         {:error, {:producer_down, reason}}
     after
       timeout ->
@@ -160,11 +161,11 @@ defmodule BrodMimic.Producer do
     max_retries = :proplists.get_value(:max_retries, config, 3)
     retry_backoff_ms = :proplists.get_value(:retry_backoff_ms, config, 500)
     required_acks = :proplists.get_value(:required_acks, config, -1)
-    ack_timeout = :proplists.get_value(:ack_timeout, config, 10000)
+    ack_timeout = :proplists.get_value(:ack_timeout, config, 10_000)
     compression = :proplists.get_value(:compression, config, :no_compression)
     max_linger_ms = :proplists.get_value(:max_linger_ms, config, 0)
     max_linger_count = :proplists.get_value(:max_linger_count, config, 0)
-    sendFun = make_send_fun(topic, partition, required_acks, ack_timeout, compression)
+    send_fun = make_send_fun(topic, partition, required_acks, ack_timeout, compression)
 
     buffer =
       ProducerBuffer.new(
@@ -174,7 +175,7 @@ defmodule BrodMimic.Producer do
         max_retries,
         max_linger_ms,
         max_linger_count,
-        sendFun
+        send_fun
       )
 
     default_vsn = BrodKafkaApis.default_version(:produce)
@@ -215,7 +216,7 @@ defmodule BrodMimic.Producer do
     {:noreply, state}
   end
 
-  def code_change(_OldVsn, r_state() = state, _Extra) do
+  def code_change(_old_vsn, r_state() = state, _extra) do
     {:ok, state}
   end
 
@@ -234,14 +235,11 @@ defmodule BrodMimic.Producer do
     :ok
   end
 
-  def format_status(:normal, [_PDict, state = r_state()]) do
+  def format_status(:normal, [_pdict, state = r_state()]) do
     [{:data, [{'State', state}]}]
   end
 
-  def format_status(
-        :terminate,
-        [_PDict, state = r_state(buffer: buffer)]
-      ) do
+  def format_status(:terminate, [_pdict, state = r_state(buffer: buffer)]) do
     r_state(state, buffer: ProducerBuffer.empty_buffers(buffer))
   end
 
@@ -250,26 +248,26 @@ defmodule BrodMimic.Producer do
     {&__MODULE__.do_send_fun/4, extra_arg}
   end
 
-  def do_send_fun(extra_arg, conn, batchInput, vsn) do
+  def do_send_fun(extra_arg, conn, batch_input, vsn) do
     {topic, partition, required_acks, ack_timeout, compression} = extra_arg
 
-    produceRequest =
+    produce_request =
       BrodKafkaRequest.produce(
         vsn,
         topic,
         partition,
-        batchInput,
+        batch_input,
         required_acks,
         ack_timeout,
         compression
       )
 
-    case send(conn, produceRequest) do
-      :ok when kpro_req(produceRequest, :no_ack) ->
+    case send(conn, produce_request) do
+      :ok when kpro_req(produce_request, :no_ack) ->
         :ok
 
       :ok ->
-        {:ok, kpro_req(produceRequest, :ref)}
+        {:ok, kpro_req(produce_request, :ref)}
 
       {:error, reason} ->
         {:error, reason}
@@ -288,7 +286,7 @@ defmodule BrodMimic.Producer do
   end
 
   def make_bufcb(call_ref, ack_cb, partition) do
-    {&:brod_producer.do_bufcb/2, _ExtraArg = {call_ref, ack_cb, partition}}
+    {&:brod_producer.do_bufcb/2, _extra_arg = {call_ref, ack_cb, partition}}
   end
 
   def do_bufcb({call_ref, ack_cb, partition}, arg) do
@@ -355,14 +353,14 @@ defmodule BrodMimic.Producer do
 
       {:ok, connection} ->
         :ok = maybe_demonitor(old_conn_mref)
-        connMref = :erlang.monitor(:process, connection)
+        conn_mref = :erlang.monitor(:process, connection)
 
         buffer = ProducerBuffer.nack_all(buffer0, :new_leader)
 
         {:ok,
          r_state(state,
            connection: connection,
-           conn_mref: connMref,
+           conn_mref: conn_mref,
            buffer: buffer,
            produce_req_vsn: req_vsn(connection, req_version)
          )}
@@ -434,8 +432,8 @@ defmodule BrodMimic.Producer do
 
   defp start_delay_send_timer(timeout) do
     msg_ref = make_ref()
-    tRef = :erlang.send_after(timeout, self(), {:delayed_send, msg_ref})
-    {tRef, msg_ref}
+    t_ref = :erlang.send_after(timeout, self(), {:delayed_send, msg_ref})
+    {t_ref, msg_ref}
   end
 
   defp cancel_delay_send_timer(:undefined) do
@@ -461,8 +459,8 @@ defmodule BrodMimic.Producer do
            retry_backoff_ms: timeout
          ) = state
        ) do
-    tRef = :erlang.send_after(timeout, self(), :retry)
-    {:ok, r_state(state, retry_tref: tRef)}
+    t_ref = :erlang.send_after(timeout, self(), :retry)
+    {:ok, r_state(state, retry_tref: t_ref)}
   end
 
   defp schedule_retry(state) do

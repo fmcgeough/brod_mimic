@@ -5,6 +5,7 @@ defmodule BrodMimic.Brod do
 
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.Consumer, as: BrodConsumer
+  alias BrodMimic.GroupSubscriberv2, as: BrodGroupSubscriberv2
   alias BrodMimic.Producer, as: BrodProducer
   alias BrodMimic.Sup, as: BrodSup
   alias BrodMimic.Utils, as: BrodUtils
@@ -149,7 +150,7 @@ defmodule BrodMimic.Brod do
       :ok ->
         :ok
 
-      {:error, {:already_started, _Pid}} ->
+      {:error, {:already_started, _pid}} ->
         :ok
 
       {:error, reason} ->
@@ -171,7 +172,7 @@ defmodule BrodMimic.Brod do
 
   def stop_client(client) when is_atom(client) do
     case BrodSup.find_client(client) do
-      [_Pid] ->
+      [_pid] ->
         BrodSup.stop_client(client)
 
       [] ->
@@ -226,14 +227,14 @@ defmodule BrodMimic.Brod do
   end
 
   def produce(client, topic, partitioner, key, value) do
-    partFun = BrodUtils.make_part_fun(partitioner)
+    part_fun = BrodUtils.make_part_fun(partitioner)
 
     case BrodClient.get_partitions_count(
            client,
            topic
          ) do
       {:ok, partitions_count} ->
-        {:ok, partition} = partFun.(topic, partitions_count, key, value)
+        {:ok, partition} = part_fun.(topic, partitions_count, key, value)
         produce(client, topic, partition, key, value)
 
       {:error, reason} ->
@@ -257,11 +258,11 @@ defmodule BrodMimic.Brod do
   end
 
   def produce_cb(client, topic, partitioner, key, value, ackCb) do
-    partFun = BrodUtils.make_part_fun(partitioner)
+    part_fun = BrodUtils.make_part_fun(partitioner)
 
     case BrodClient.get_partitions_count(client, topic) do
       {:ok, partitions_count} ->
-        {:ok, partition} = partFun.(topic, partitions_count, key, value)
+        {:ok, partition} = part_fun.(topic, partitions_count, key, value)
 
         case produce_cb(client, topic, partition, key, value, ackCb) do
           :ok ->
@@ -292,11 +293,11 @@ defmodule BrodMimic.Brod do
   end
 
   def produce_no_ack(client, topic, partitioner, key, value) do
-    partFun = BrodUtils.make_part_fun(partitioner)
+    part_fun = BrodUtils.make_part_fun(partitioner)
 
     case BrodClient.get_partitions_count(client, topic) do
       {:ok, partitions_count} ->
-        {:ok, partition} = partFun.(topic, partitions_count, key, value)
+        {:ok, partition} = part_fun.(topic, partitions_count, key, value)
         produce_no_ack(client, topic, partition, key, value)
 
       {:error, _reason} ->
@@ -362,10 +363,10 @@ defmodule BrodMimic.Brod do
 
   def subscribe(client, subscriberPid, topic, partition, options) do
     case BrodClient.get_consumer(client, topic, partition) do
-      {:ok, consumerPid} ->
-        case subscribe(consumerPid, subscriberPid, options) do
+      {:ok, consumer_pid} ->
+        case subscribe(consumer_pid, subscriberPid, options) do
           :ok ->
-            {:ok, consumerPid}
+            {:ok, consumer_pid}
 
           error ->
             error
@@ -376,8 +377,8 @@ defmodule BrodMimic.Brod do
     end
   end
 
-  def subscribe(consumerPid, subscriberPid, options) do
-    BrodConsumer.subscribe(consumerPid, subscriberPid, options)
+  def subscribe(consumer_pid, subscriberPid, options) do
+    BrodConsumer.subscribe(consumer_pid, subscriberPid, options)
   end
 
   def unsubscribe(client, topic, partition) do
@@ -386,50 +387,50 @@ defmodule BrodMimic.Brod do
 
   def unsubscribe(client, topic, partition, subscriberPid) do
     case BrodClient.get_consumer(client, topic, partition) do
-      {:ok, consumerPid} ->
-        unsubscribe(consumerPid, subscriberPid)
+      {:ok, consumer_pid} ->
+        unsubscribe(consumer_pid, subscriberPid)
 
       error ->
         error
     end
   end
 
-  def unsubscribe(consumerPid) do
-    unsubscribe(consumerPid, self())
+  def unsubscribe(consumer_pid) do
+    unsubscribe(consumer_pid, self())
   end
 
-  def unsubscribe(consumerPid, subscriberPid) do
-    BrodConsumer.unsubscribe(consumerPid, subscriberPid)
+  def unsubscribe(consumer_pid, subscriberPid) do
+    BrodConsumer.unsubscribe(consumer_pid, subscriberPid)
   end
 
   def consume_ack(client, topic, partition, offset) do
     case BrodClient.get_consumer(client, topic, partition) do
-      {:ok, consumerPid} ->
-        consume_ack(consumerPid, offset)
+      {:ok, consumer_pid} ->
+        consume_ack(consumer_pid, offset)
 
       {:error, reason} ->
         {:error, reason}
     end
   end
 
-  def consume_ack(consumerPid, offset) do
-    BrodConsumer.ack(consumerPid, offset)
+  def consume_ack(consumer_pid, offset) do
+    BrodConsumer.ack(consumer_pid, offset)
   end
 
   def start_link_group_subscriber(
         client,
-        groupId,
+        group_id,
         topics,
-        groupConfig,
+        group_config,
         consumer_config,
         cbModule,
         cbInitArg
       ) do
     :brod_group_subscriber.start_link(
       client,
-      groupId,
+      group_id,
       topics,
-      groupConfig,
+      group_config,
       consumer_config,
       cbModule,
       cbInitArg
@@ -437,14 +438,14 @@ defmodule BrodMimic.Brod do
   end
 
   def start_link_group_subscriber_v2(config) do
-    :brod_group_subscriber_v2.start_link(config)
+    BrodGroupSubscriberv2.start_link(config)
   end
 
   def start_link_group_subscriber(
         client,
-        groupId,
+        group_id,
         topics,
-        groupConfig,
+        group_config,
         consumer_config,
         messageType,
         cbModule,
@@ -452,9 +453,9 @@ defmodule BrodMimic.Brod do
       ) do
     :brod_group_subscriber.start_link(
       client,
-      groupId,
+      group_id,
       topics,
-      groupConfig,
+      group_config,
       consumer_config,
       messageType,
       cbModule,
@@ -538,12 +539,12 @@ defmodule BrodMimic.Brod do
     resolve_offset(hosts, topic, partition, time, [])
   end
 
-  def resolve_offset(hosts, topic, partition, time, connCfg) do
-    BrodUtils.resolve_offset(hosts, topic, partition, time, connCfg)
+  def resolve_offset(hosts, topic, partition, time, conn_cfg) do
+    BrodUtils.resolve_offset(hosts, topic, partition, time, conn_cfg)
   end
 
-  def resolve_offset(hosts, topic, partition, time, connCfg, opts) do
-    BrodUtils.resolve_offset(hosts, topic, partition, time, connCfg, opts)
+  def resolve_offset(hosts, topic, partition, time, conn_cfg, opts) do
+    BrodUtils.resolve_offset(hosts, topic, partition, time, conn_cfg, opts)
   end
 
   def fetch(conn_or_bootstrap, topic, partition, offset) do
@@ -559,15 +560,15 @@ defmodule BrodMimic.Brod do
     BrodUtils.fold(bootstrap, topic, partition, offset, opts, acc, fun, limits)
   end
 
-  def fetch(hosts, topic, partition, offset, maxWaitTime, minBytes, maxBytes) do
-    fetch(hosts, topic, partition, offset, maxWaitTime, minBytes, maxBytes, [])
+  def fetch(hosts, topic, partition, offset, maxWaitTime, min_bytes, max_bytes) do
+    fetch(hosts, topic, partition, offset, maxWaitTime, min_bytes, max_bytes, [])
   end
 
-  def fetch(hosts, topic, partition, offset, maxWaitTime, minBytes, maxBytes, connConfig) do
-    fetchOpts = %{max_wait_time: maxWaitTime, min_bytes: minBytes, max_bytes: maxBytes}
+  def fetch(hosts, topic, partition, offset, maxWaitTime, min_bytes, max_bytes, conn_config) do
+    fetchOpts = %{max_wait_time: maxWaitTime, min_bytes: min_bytes, max_bytes: max_bytes}
 
-    case fetch({hosts, connConfig}, topic, partition, offset, fetchOpts) do
-      {:ok, {_HwOffset, batch}} ->
+    case fetch({hosts, conn_config}, topic, partition, offset, fetchOpts) do
+      {:ok, {_hw_offset, batch}} ->
         {:ok, batch}
 
       {:error, reason} ->
@@ -575,40 +576,40 @@ defmodule BrodMimic.Brod do
     end
   end
 
-  def connect_leader(hosts, topic, partition, connConfig) do
-    kproOptions = BrodUtils.kpro_connection_options(connConfig)
-    :kpro.connect_partition_leader(hosts, connConfig, topic, partition, kproOptions)
+  def connect_leader(hosts, topic, partition, conn_config) do
+    kpro_options = BrodUtils.kpro_connection_options(conn_config)
+    :kpro.connect_partition_leader(hosts, conn_config, topic, partition, kpro_options)
   end
 
-  def list_all_groups(endpoints, connCfg) do
-    BrodUtils.list_all_groups(endpoints, connCfg)
+  def list_all_groups(endpoints, conn_cfg) do
+    BrodUtils.list_all_groups(endpoints, conn_cfg)
   end
 
-  def list_groups(coordinatorEndpoint, connCfg) do
-    BrodUtils.list_groups(coordinatorEndpoint, connCfg)
+  def list_groups(coordinator_endpoint, conn_cfg) do
+    BrodUtils.list_groups(coordinator_endpoint, conn_cfg)
   end
 
-  def describe_groups(coordinatorEndpoint, connCfg, iDs) do
-    BrodUtils.describe_groups(coordinatorEndpoint, connCfg, iDs)
+  def describe_groups(coordinator_endpoint, conn_cfg, iDs) do
+    BrodUtils.describe_groups(coordinator_endpoint, conn_cfg, iDs)
   end
 
-  def connect_group_coordinator(bootstrap_endpoints, connCfg, groupId) do
-    kproOptions = BrodUtils.kpro_connection_options(connCfg)
+  def connect_group_coordinator(bootstrap_endpoints, conn_cfg, group_id) do
+    kpro_options = BrodUtils.kpro_connection_options(conn_cfg)
 
     args =
       :maps.merge(
-        kproOptions,
-        %{type: :group, id: groupId}
+        kpro_options,
+        %{type: :group, id: group_id}
       )
 
-    :kpro.connect_coordinator(bootstrap_endpoints, connCfg, args)
+    :kpro.connect_coordinator(bootstrap_endpoints, conn_cfg, args)
   end
 
-  def fetch_committed_offsets(bootstrap_endpoints, connCfg, groupId) do
-    BrodUtils.fetch_committed_offsets(bootstrap_endpoints, connCfg, groupId, [])
+  def fetch_committed_offsets(bootstrap_endpoints, conn_cfg, group_id) do
+    BrodUtils.fetch_committed_offsets(bootstrap_endpoints, conn_cfg, group_id, [])
   end
 
-  def fetch_committed_offsets(client, groupId) do
-    BrodUtils.fetch_committed_offsets(client, groupId, [])
+  def fetch_committed_offsets(client, group_id) do
+    BrodUtils.fetch_committed_offsets(client, group_id, [])
   end
 end

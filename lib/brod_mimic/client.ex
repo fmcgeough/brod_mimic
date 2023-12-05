@@ -551,11 +551,11 @@ defmodule BrodMimic.Client do
     continue.(:ok, state)
   end
 
-  defp with_ok({{:ok, oK}, state}, continue) do
-    continue.(oK, state)
+  defp with_ok({{:ok, ok}, state}, continue) do
+    continue.(ok, state)
   end
 
-  defp with_ok({{:error, _}, r_state()} = return, _Continue) do
+  defp with_ok({{:error, _}, r_state()} = return, _continue) do
     return
   end
 

@@ -170,10 +170,10 @@ defmodule BrodMimic.GroupSubscriberv2 do
         _from,
         r_state(cb_module: cb_module, cb_config: cb_config) = state
       ) do
-    fun = fn tP = {topic, partition} ->
+    fun = fn tp = {topic, partition} ->
       case cb_module.get_committed_offset(cb_config, topic, partition) do
         {:ok, offset} ->
-          {true, {tP, offset}}
+          {true, {tp, offset}}
 
         :undefined ->
           false
@@ -251,7 +251,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
     {:noreply, state}
   end
 
-  def handle_cast(_Cast, state) do
+  def handle_cast(_cast, state) do
     {:noreply, state}
   end
 
@@ -294,7 +294,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
     end
   end
 
-  def handle_info(_Info, state) do
+  def handle_info(_info, state) do
     {:noreply, state}
   end
 
@@ -426,7 +426,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
       _ ->
         self = self()
 
-        commitFun = fn offset ->
+        commit_fun = fn offset ->
           commit(self, topic, partition, offset)
         end
 
@@ -436,7 +436,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
           partition: partition,
           begin_offset: begin_offset,
           group_id: group_id,
-          commit_fun: commitFun,
+          commit_fun: commit_fun,
           topic: topic
         }
 

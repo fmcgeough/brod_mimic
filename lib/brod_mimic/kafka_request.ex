@@ -83,24 +83,24 @@ defmodule BrodMimic.KafkaRequest do
     cb_data: :undefined
   )
 
-  def produce(maybePid, topic, partition, batchInput, requiredAcks, ackTimeout, compression) do
+  def produce(maybePid, topic, partition, batch_input, required_acks, ack_timeout, compression) do
     vsn = pick_version(:produce, maybePid)
 
-    :kpro_req_lib.produce(vsn, topic, partition, batchInput, %{
-      required_acks: requiredAcks,
-      ack_timeout: ackTimeout,
+    :kpro_req_lib.produce(vsn, topic, partition, batch_input, %{
+      required_acks: required_acks,
+      ack_timeout: ack_timeout,
       compression: compression
     })
   end
 
-  def create_topics(connection, topicConfigs, requestConfigs)
+  def create_topics(connection, topic_configs, request_configs)
       when is_pid(connection) do
     vsn = BrodKafkaApis.pick_version(connection, :create_topics)
-    create_topics(vsn, topicConfigs, requestConfigs)
+    create_topics(vsn, topic_configs, request_configs)
   end
 
-  def create_topics(vsn, topicConfigs, requestConfigs) do
-    :kpro_req_lib.create_topics(vsn, topicConfigs, requestConfigs)
+  def create_topics(vsn, topic_configs, request_configs) do
+    :kpro_req_lib.create_topics(vsn, topic_configs, request_configs)
   end
 
   def delete_topics(connection, topics, timeout) when is_pid(connection) do
