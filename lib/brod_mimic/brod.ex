@@ -1,7 +1,5 @@
 defmodule BrodMimic.Brod do
-  alias BrodMimic.Macros
-
-  require BrodMimic.Macros
+  use BrodMimic.Macros
 
   ### Types created for Elixir port ============================================
   @type ets_table_id() :: atom() | term()
@@ -20,9 +18,7 @@ defmodule BrodMimic.Brod do
   @type partition() :: :kpro.partition()
   @type topic_partition() :: {topic(), partition()}
   @type offset() :: :kpro.offset()
-  @type key() ::
-          :undefined
-          | binary()
+  @type key() :: :undefined | binary()
   # %% no value, transformed to <<>>
   @type value() ::
           :undefined
@@ -31,9 +27,9 @@ defmodule BrodMimic.Brod do
           # one message with timestamp
           | {msg_ts(), binary()}
           # backward compatible
-          | [Macros.kv(key(), value())]
+          | [{key(), value()}]
           # backward compatible
-          | [Macros.tkv(msg_ts(), key(), value())]
+          | [{msg_ts(), key(), value()}]
           # one magic v2 message
           | :kpro.msg_input()
           # maybe nested batch
@@ -113,10 +109,5 @@ defmodule BrodMimic.Brod do
           | :reached_target_offset
           | {:error, any()}
   ## OffsetToContinue: begin offset for the next fold call
-  @type fold_result() ::
-          Macros.brod_fold_ret(
-            fold_acc(),
-            offset_to_continue :: offset(),
-            fold_stop_reason()
-          )
+  # @type fold_result() :: brod_fold_ret(fold_acc(), offset_to_continue :: offset(), fold_stop_reason())
 end

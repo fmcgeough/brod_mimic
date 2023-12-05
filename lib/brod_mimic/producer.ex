@@ -168,7 +168,7 @@ defmodule BrodMimic.Producer do
     sendFun = make_send_fun(topic, partition, required_acks, ack_timeout, compression)
 
     buffer =
-      __MODULE__Buffer.new(
+      ProducerBuffer.new(
         buffer_limit,
         on_wire_limit,
         max_batch_size,

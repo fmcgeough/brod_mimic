@@ -1,8 +1,6 @@
 defmodule BrodMimic.GroupSubscriberv2 do
   use GenServer
 
-  import Bitwise
-
   @behaviour :brod_group_member
 
   alias BrodMimic.Utils, as: BrodUtils
