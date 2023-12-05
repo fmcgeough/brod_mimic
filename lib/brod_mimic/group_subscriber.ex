@@ -20,6 +20,10 @@ defmodule BrodMimic.GroupSubscriber do
 
   import Record, only: [defrecord: 2, extract: 2]
 
+  alias BrodMimic.Brod
+  alias BrodMimic.GroupCoordinator, as: BrodGroupCoordinator
+  alias BrodMimic.Utils, as: BrodUtils
+
   # -behaviour(brod_group_member).
 
   # -export([ ack/4

@@ -1,36 +1,34 @@
 defmodule BrodMimic.Supervisor3 do
   use GenServer
 
-  import Bitwise
-
   require Record
 
-  @type child() :: 'undefined' | pid()
+  @type child() :: :undefined | pid()
   @type child_id() :: term()
-  @type mfargs() :: {M :: module(), F :: atom(), A :: [term()] | undefined}
-  @type modules() :: [module()] | 'dynamic'
+  @type mfargs() :: {module(), atom(), [term()] | :undefined}
+  @type modules() :: [module()] | :dynamic
   @type delay() :: non_neg_integer()
   @type restart() ::
-          'permanent'
-          | 'transient'
-          | 'temporary'
-          | 'intrinsic'
-          | {'permanent', delay()}
-          | {'transient', delay()}
-          | {'intrinsic', delay()}
-  @type shutdown() :: 'brutal_kill' | timeout()
-  @type worker() :: 'worker' | 'supervisor'
-  @type sup_name() :: {'local', name :: atom()} | {'global', name :: atom()}
+          :permanent
+          | :transient
+          | :temporary
+          | :intrinsic
+          | {:permanent, delay()}
+          | {:transient, delay()}
+          | {:intrinsic, delay()}
+  @type shutdown() :: :brutal_kill | timeout()
+  @type worker() :: :worker | :supervisor
+  @type sup_name() :: {:local, name :: atom()} | {:global, name :: atom()}
   @type sup_ref() ::
           (name :: atom())
           | {name :: atom(), node :: node()}
-          | {'global', name :: atom()}
+          | {:global, name :: atom()}
           | pid()
   @type child_spec() ::
           {id :: child_id(), start_func :: mfargs(), restart :: restart(), shutdown :: shutdown(),
            type :: worker(), modules :: modules()}
 
-  @type strategy() :: 'one_for_all' | 'one_for_one' | 'rest_for_one' | 'simple_one_for_one'
+  @type strategy() :: :one_for_all | :one_for_one | :rest_for_one | :simple_one_for_one
 
   @type tref() :: reference()
 

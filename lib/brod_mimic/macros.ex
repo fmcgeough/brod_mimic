@@ -25,6 +25,7 @@ defmodule BrodMimic.Macros do
       def producer(topic, partition, pid), do: {producer_key(topic, partition), pid}
       # def consumer(pid), do: [{:consumer, _, _}, pid]
       def consumer(topic, partition, pid), do: {consumer_key(topic, partition), pid}
+      def incomplete_batch(expected_size), do: {:incomplete_batch, expected_size}
     end
   end
 end

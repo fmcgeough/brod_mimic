@@ -1,7 +1,6 @@
 defmodule BrodMimic.Consumer do
+  use BrodMimic.Macros
   use GenServer
-
-  import Bitwise
 
   import Record, only: [defrecord: 2, extract: 2]
 
@@ -147,15 +146,15 @@ defmodule BrodMimic.Consumer do
       :proplists.get_value(name, config, default)
     end
 
-    min_bytes = cfg(:min_bytes, @default_min_bytes)
-    max_bytes = cfg(:max_bytes, @default_max_bytes)
-    max_wait_time = cfg(:max_wait_time, @default_max_wait_time)
-    sleep_timeout = cfg(:sleep_timeout, @default_sleep_timeout)
-    prefetch_count = :erlang.max(cfg(:prefetch_count, @default_prefetch_count), 0)
-    prefetch_bytes = :erlang.max(cfg(:prefetch_bytes, @default_prefetch_bytes), 0)
-    begin_offset = cfg(:begin_offset, @default_begin_offset)
-    offset_reset_policy = cfg(:offset_reset_policy, @default_offset_reset_policy)
-    isolation_level = cfg(:isolation_level, @default_isolation_level)
+    min_bytes = cfg.(:min_bytes, @default_min_bytes)
+    max_bytes = cfg.(:max_bytes, @default_max_bytes)
+    max_wait_time = cfg.(:max_wait_time, @default_max_wait_time)
+    sleep_timeout = cfg.(:sleep_timeout, @default_sleep_timeout)
+    prefetch_count = :erlang.max(cfg.(:prefetch_count, @default_prefetch_count), 0)
+    prefetch_bytes = :erlang.max(cfg.(:prefetch_bytes, @default_prefetch_bytes), 0)
+    begin_offset = cfg.(:begin_offset, @default_begin_offset)
+    offset_reset_policy = cfg.(:offset_reset_policy, @default_offset_reset_policy)
+    isolation_level = cfg.(:isolation_level, @default_isolation_level)
 
     # If bootstrap is a client pid, register self to the client
     case is_shared_conn(bootstrap) do
@@ -184,7 +183,7 @@ defmodule BrodMimic.Consumer do
        offset_reset_policy: offset_reset_policy,
        avg_bytes: 0,
        max_bytes: max_bytes,
-       size_stat_window: cfg(:size_stat_window, @default_avg_window),
+       size_stat_window: cfg.(:size_stat_window, @default_avg_window),
        connection_mref: :undef,
        isolation_level: isolation_level
      )}
@@ -471,6 +470,87 @@ defmodule BrodMimic.Consumer do
     end
   end
 
+  def handle_batches(:undef, [], state0) do
+    # It is only possible to end up here in a incremental
+    # fetch session, empty fetch response implies no
+    # new messages to fetch, and no changes in partition
+    # metadata (e.g. high watermark offset, or last stable offset) either.
+    # Do not advance offset, try again (maybe after a delay) with
+    # the last begin_offset in use.
+    state = maybe_delay_fetch_request(state0)
+    {:noreply, state}
+  end
+
+  def handle_batches(_header, {:incomplete_batch, size}, r_state(max_bytes: max_bytes) = state0) do
+    # max_bytes is too small to fetch ONE complete batch
+    true = size > max_bytes
+    state1 = r_state(state0, max_bytes: size)
+    state = maybe_send_fetch_request(state1)
+    {:noreply, state}
+  end
+
+  def handle_batches(header, [], r_state(begin_offset: begin_offset) = state0) do
+    stable_offset = BrodUtils.get_stable_offset(header)
+
+    state =
+      case begin_offset < stable_offset do
+        true ->
+          # There are chances that kafka may return empty message set
+          # when messages are deleted from a compacted topic.
+          # Since there is no way to know how big the 'hole' is
+          # we can only bump begin_offset with +1 and try again.
+          state1 = r_state(state0, begin_offset: begin_offset + 1)
+          maybe_send_fetch_request(state1)
+
+        false ->
+          # we have either reached the end of a partition
+          # or trying to read uncommitted messages
+          # try to poll again (maybe after a delay)
+          maybe_delay_fetch_request(state0)
+      end
+
+    {:noreply, state}
+  end
+
+  def handle_batches(
+        header,
+        batches,
+        r_state(
+          subscriber: subscriber,
+          pending_acks: pending_acks,
+          begin_offset: begin_offset,
+          topic: topic,
+          partition: partition
+        ) = state0
+      ) do
+    stable_offset = BrodUtils.get_stable_offset(header)
+    {new_begin_offset, messages} = BrodUtils.flatten_batches(begin_offset, header, batches)
+    state1 = r_state(state0, begin_offset: new_begin_offset)
+
+    state =
+      case messages != [] do
+        true ->
+          # All messages are before requested offset, hence dropped
+          state1
+
+        false ->
+          msg_set =
+            r_kafka_message_set(
+              topic: topic,
+              partition: partition,
+              high_wm_offset: stable_offset,
+              messages: messages
+            )
+
+          :ok = cast_to_subscriber(subscriber, msg_set)
+          new_pending_acks = add_pending_acks(pending_acks, messages)
+          state2 = r_state(state1, pending_acks: new_pending_acks)
+          maybe_shrink_max_bytes(state2, messages)
+      end
+
+    {:noreply, maybe_send_fetch_request(state)}
+  end
+
   def add_pending_acks(pending_acks, messages) do
     :lists.foldl(&add_pending_ack/2, pending_acks, messages)
   end
@@ -519,24 +599,32 @@ defmodule BrodMimic.Consumer do
     r_state(state, max_bytes: :erlang.min(newMaxBytes, maxBytes))
   end
 
-  defp update_avg_size(r_state() = state, []) do
+  def update_avg_size(r_state() = state, []) do
     state
   end
 
-  defp update_avg_size(
-         r_state(
-           avg_bytes: avgBytes,
-           size_stat_window: windowSize
-         ) = state,
-         [kafka_message(key: key, value: value) | rest]
-       ) do
+  def update_avg_size(
+        r_state(
+          avg_bytes: avgBytes,
+          size_stat_window: windowSize
+        ) = state,
+        [kafka_message(key: key, value: value) | rest]
+      ) do
     msgBytes = :erlang.size(key) + :erlang.size(value) + 40
     newAvgBytes = ((windowSize - 1) * avgBytes + msgBytes) / windowSize
     update_avg_size(r_state(state, avg_bytes: newAvgBytes), rest)
   end
 
+  def err_op(:request_timed_out), do: :retry
+  def err_op(:invalid_topic_exception), do: :stop
+  def err_op(:offset_out_of_range), do: :reset_offset
+  def err_op(:leader_not_available), do: :reset_connection
+  def err_op(:not_leader_for_partition), do: :reset_connection
+  def err_op(:unknown_topic_or_partition), do: :reset_connection
+  def err_op(_), do: :restart
+
   defp handle_fetch_error(
-         r_kafka_fetch_error(error_code: errorCode) = error,
+         r_kafka_fetch_error(error_code: error_code) = error,
          r_state(
            topic: topic,
            partition: partition,
@@ -544,21 +632,18 @@ defmodule BrodMimic.Consumer do
            connection_mref: mRef
          ) = state
        ) do
-    case err_op(errorCode) do
+    case err_op(error_code) do
       :reset_connection ->
         case :logger.allow(:info, :brod_consumer) do
           true ->
-            :erlang.apply(:logger, :macro_log, [
-              %{
-                mfa: {:brod_consumer, :handle_fetch_error, 2},
-                line: 614,
-                file: '../brod/src/brod_consumer.erl'
-              },
-              :info,
-              'Fetch error ~s-~p: ~p',
-              [topic, partition, errorCode],
+            Logger.info(
+              fn ->
+                "Fetch error ~s-~p: ~p"
+                |> :io_lib.format([topic, partition, error_code])
+                |> to_string()
+              end,
               %{domain: [:brod]}
-            ])
+            )
 
           false ->
             :ok
@@ -583,17 +668,10 @@ defmodule BrodMimic.Consumer do
 
         case :logger.allow(:error, :brod_consumer) do
           true ->
-            :erlang.apply(:logger, :macro_log, [
-              %{
-                mfa: {:brod_consumer, :handle_fetch_error, 2},
-                line: 631,
-                file: '../brod/src/brod_consumer.erl'
-              },
-              :error,
-              'Consumer ~s-~p shutdown\nreason: ~p',
-              [topic, partition, errorCode],
-              %{domain: [:brod]}
-            ])
+            "Consumer ~s-~p shutdown\nreason: ~p"
+            |> :io_lib.format([topic, partition, error_code])
+            |> to_string()
+            |> Logger.error(%{domain: [:brod]})
 
           false ->
             :ok
@@ -606,7 +684,7 @@ defmodule BrodMimic.Consumer do
 
       :restart ->
         :ok = cast_to_subscriber(subscriber, error)
-        {:stop, {:restart, errorCode}, state}
+        {:stop, {:restart, error_code}, state}
     end
   end
 

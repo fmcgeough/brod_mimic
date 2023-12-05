@@ -28,77 +28,77 @@ defmodule BrodMimic.Client do
   use BrodMimic.Macros
   use GenServer
 
-  import Bitwise
-
   require Logger
-  import Record, only: [defrecord: 2, extract: 2]
+  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
 
-  alias BrodMimic.{BrodConsumersSup, BrodProducersSup, KafkaRequest}
+  alias BrodMimic.ConsumersSup, as: BrodConsumersSup
+  alias BrodMimic.KafkaRequest
+  alias BrodMimic.ProducersSup, as: BrodProducersSup
 
   defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
 
-  Record.defrecord(:r_kafka_message_set, :kafka_message_set,
+  defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
     partition: :undefined,
     high_wm_offset: :undefined,
     messages: :undefined
   )
 
-  Record.defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
+  defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
     topic: :undefined,
     partition: :undefined,
     error_code: :undefined,
     error_desc: ''
   )
 
-  Record.defrecord(:r_brod_call_ref, :brod_call_ref,
+  defrecord(:r_brod_call_ref, :brod_call_ref,
     caller: :undefined,
     callee: :undefined,
     ref: :undefined
   )
 
-  Record.defrecord(:r_brod_produce_reply, :brod_produce_reply,
+  defrecord(:r_brod_produce_reply, :brod_produce_reply,
     call_ref: :undefined,
     base_offset: :undefined,
     result: :undefined
   )
 
-  Record.defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
+  defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
     version: :undefined,
     topics: :undefined,
     user_data: :undefined
   )
 
-  Record.defrecord(:r_brod_received_assignment, :brod_received_assignment,
+  defrecord(:r_brod_received_assignment, :brod_received_assignment,
     topic: :undefined,
     partition: :undefined,
     begin_offset: :undefined
   )
 
-  Record.defrecord(:r_brod_cg, :brod_cg,
+  defrecord(:r_brod_cg, :brod_cg,
     id: :undefined,
     protocol_type: :undefined
   )
 
-  Record.defrecord(:r_socket, :socket,
+  defrecord(:r_socket, :socket,
     pid: :undefined,
     host: :undefined,
     port: :undefined,
     node_id: :undefined
   )
 
-  Record.defrecord(:r_cbm_init_data, :cbm_init_data,
+  defrecord(:r_cbm_init_data, :cbm_init_data,
     committed_offsets: :undefined,
     cb_fun: :undefined,
     cb_data: :undefined
   )
 
-  Record.defrecord(:r_conn, :conn,
+  defrecord(:r_conn, :conn,
     endpoint: :undefined,
     pid: :undefined
   )
 
-  Record.defrecord(:r_state, :state,
+  defrecord(:r_state, :state,
     client_id: :undefined,
     bootstrap_endpoints: :undefined,
     meta_conn: :undefined,
@@ -151,7 +151,7 @@ defmodule BrodMimic.Client do
           {mega_secs :: non_neg_integer(), secs :: non_neg_integer(),
            micro_secs :: non_neg_integer()}
   @type dead_conn() :: {:dead_since, timestamp(), any()}
-  Record.defrecord(:conn, endpoint: nil, pid: nil)
+  defrecord(:conn, endpoint: nil, pid: nil)
   @type conn :: record(:conn, endpoint: endpoint(), pid: connection() | dead_conn())
 
   @type conn_state() :: conn()

@@ -2,68 +2,71 @@ defmodule BrodMimic.GroupCoordinator do
   use BrodMimic.Macros
   use GenServer
 
-  import Bitwise
-  import Record, only: [defrecord: 2, extract: 2]
+  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
+
+  alias BrodMimic.Client, as: BrodClient
+  alias BrodMimic.KafkaRequest, as: BrodKafkaRequest
+  alias BrodMimic.Utils, as: BrodUtils
 
   defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
 
-  Record.defrecord(:r_kafka_message_set, :kafka_message_set,
+  defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
     partition: :undefined,
     high_wm_offset: :undefined,
     messages: :undefined
   )
 
-  Record.defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
+  defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
     topic: :undefined,
     partition: :undefined,
     error_code: :undefined,
     error_desc: ''
   )
 
-  Record.defrecord(:r_brod_call_ref, :brod_call_ref,
+  defrecord(:r_brod_call_ref, :brod_call_ref,
     caller: :undefined,
     callee: :undefined,
     ref: :undefined
   )
 
-  Record.defrecord(:r_brod_produce_reply, :brod_produce_reply,
+  defrecord(:r_brod_produce_reply, :brod_produce_reply,
     call_ref: :undefined,
     base_offset: :undefined,
     result: :undefined
   )
 
-  Record.defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
+  defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
     version: :undefined,
     topics: :undefined,
     user_data: :undefined
   )
 
-  Record.defrecord(:r_brod_received_assignment, :brod_received_assignment,
+  defrecord(:r_brod_received_assignment, :brod_received_assignment,
     topic: :undefined,
     partition: :undefined,
     begin_offset: :undefined
   )
 
-  Record.defrecord(:r_brod_cg, :brod_cg,
+  defrecord(:r_brod_cg, :brod_cg,
     id: :undefined,
     protocol_type: :undefined
   )
 
-  Record.defrecord(:r_socket, :socket,
+  defrecord(:r_socket, :socket,
     pid: :undefined,
     host: :undefined,
     port: :undefined,
     node_id: :undefined
   )
 
-  Record.defrecord(:r_cbm_init_data, :cbm_init_data,
+  defrecord(:r_cbm_init_data, :cbm_init_data,
     committed_offsets: :undefined,
     cb_fun: :undefined,
     cb_data: :undefined
   )
 
-  Record.defrecord(:r_state, :state,
+  defrecord(:r_state, :state,
     client: :undefined,
     group_id: :undefined,
     member_id: "",
@@ -179,7 +182,7 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   def handle_info({:ack, generation_id, topic, partition, offset}, state) do
-    {:no_reply, handle_ack(state, generation_id, topic, partition, offset)}
+    {:noreply, handle_ack(state, generation_id, topic, partition, offset)}
   end
 
   def handle_info(:lo_cmd_commit_offsets, r_state(is_in_group: true) = state) do
@@ -191,7 +194,7 @@ defmodule BrodMimic.GroupCoordinator do
           stabilize(state, 0, reason)
       end
 
-    {:no_reply, new_state}
+    {:noreply, new_state}
   end
 
   def handle_call({:commit_offsets, extra_offsets}, from, state) do

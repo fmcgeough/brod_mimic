@@ -1,9 +1,8 @@
 defmodule BrodMimic.Producer do
   use GenServer
 
-  import Bitwise
   import Kernel, except: [send: 2]
-  import Record, only: [defrecord: 2, extract: 2]
+  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
 
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.KafkaApis, as: BrodKafkaApis
@@ -14,63 +13,63 @@ defmodule BrodMimic.Producer do
 
   defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
 
-  Record.defrecord(:r_kafka_message_set, :kafka_message_set,
+  defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
     partition: :undefined,
     high_wm_offset: :undefined,
     messages: :undefined
   )
 
-  Record.defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
+  defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
     topic: :undefined,
     partition: :undefined,
     error_code: :undefined,
     error_desc: ''
   )
 
-  Record.defrecord(:r_brod_call_ref, :brod_call_ref,
+  defrecord(:r_brod_call_ref, :brod_call_ref,
     caller: :undefined,
     callee: :undefined,
     ref: :undefined
   )
 
-  Record.defrecord(:r_brod_produce_reply, :brod_produce_reply,
+  defrecord(:r_brod_produce_reply, :brod_produce_reply,
     call_ref: :undefined,
     base_offset: :undefined,
     result: :undefined
   )
 
-  Record.defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
+  defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
     version: :undefined,
     topics: :undefined,
     user_data: :undefined
   )
 
-  Record.defrecord(:r_brod_received_assignment, :brod_received_assignment,
+  defrecord(:r_brod_received_assignment, :brod_received_assignment,
     topic: :undefined,
     partition: :undefined,
     begin_offset: :undefined
   )
 
-  Record.defrecord(:r_brod_cg, :brod_cg,
+  defrecord(:r_brod_cg, :brod_cg,
     id: :undefined,
     protocol_type: :undefined
   )
 
-  Record.defrecord(:r_socket, :socket,
+  defrecord(:r_socket, :socket,
     pid: :undefined,
     host: :undefined,
     port: :undefined,
     node_id: :undefined
   )
 
-  Record.defrecord(:r_cbm_init_data, :cbm_init_data,
+  defrecord(:r_cbm_init_data, :cbm_init_data,
     committed_offsets: :undefined,
     cb_fun: :undefined,
     cb_data: :undefined
   )
 
-  Record.defrecord(:r_state, :state,
+  defrecord(:r_state, :state,
     client_pid: :undefined,
     topic: :undefined,
     partition: :undefined,
@@ -247,12 +246,12 @@ defmodule BrodMimic.Producer do
   end
 
   defp make_send_fun(topic, partition, required_acks, ack_timeout, compression) do
-    extraArg = {topic, partition, required_acks, ack_timeout, compression}
-    {&__MODULE__.do_send_fun/4, extraArg}
+    extra_arg = {topic, partition, required_acks, ack_timeout, compression}
+    {&__MODULE__.do_send_fun/4, extra_arg}
   end
 
-  def do_send_fun(extraArg, conn, batchInput, vsn) do
-    {topic, partition, required_acks, ack_timeout, compression} = extraArg
+  def do_send_fun(extra_arg, conn, batchInput, vsn) do
+    {topic, partition, required_acks, ack_timeout, compression} = extra_arg
 
     produceRequest =
       BrodKafkaRequest.produce(
@@ -281,27 +280,14 @@ defmodule BrodMimic.Producer do
     :ok
   end
 
-  defp log_error_code(topic, partition, offset, error_code) do
-    case :logger.allow(:error, :brod_producer) do
-      true ->
-        :erlang.apply(:logger, :macro_log, [
-          %{
-            mfa: {:brod_producer, :log_error_code, 4},
-            line: 444,
-            file: '../brod/src/brod_producer.erl'
-          },
-          :error,
-          'Produce error ~s-~B Offset: ~B Error: ~p',
-          [topic, partition, offset, error_code],
-          %{domain: [:brod]}
-        ])
-
-      false ->
-        :ok
-    end
+  def log_error_code(topic, partition, offset, error_code) do
+    "Produce error ~s-~B Offset: ~B Error: ~p"
+    |> :io_lib.format([topic, partition, offset, error_code])
+    |> to_string()
+    |> Logger.error(%{domain: [:brod]})
   end
 
-  defp make_bufcb(call_ref, ack_cb, partition) do
+  def make_bufcb(call_ref, ack_cb, partition) do
     {&:brod_producer.do_bufcb/2, _ExtraArg = {call_ref, ack_cb, partition}}
   end
 
@@ -311,7 +297,7 @@ defmodule BrodMimic.Producer do
     case arg do
       :brod_produce_req_buffered when is_pid(pid) ->
         reply = r_brod_produce_reply(call_ref: call_ref, result: :brod_produce_req_buffered)
-        :erlang.send(pid, reply)
+        send(pid, reply)
 
       :brod_produce_req_buffered ->
         :ok
@@ -324,24 +310,23 @@ defmodule BrodMimic.Producer do
             result: :brod_produce_req_acked
           )
 
-        :erlang.send(pid, reply)
+        send(pid, reply)
 
       {:brod_produce_req_acked, base_offset} when is_function(ack_cb, 2) ->
         ack_cb.(partition, base_offset)
     end
   end
 
-  defp handle_produce(buf_cb, batch, r_state(retry_tref: ref) = state)
-       when is_reference(ref) do
+  def handle_produce(buf_cb, batch, r_state(retry_tref: ref) = state) when is_reference(ref) do
     do_handle_produce(buf_cb, batch, state)
   end
 
-  defp handle_produce(buf_cb, batch, r_state(connection: pid) = state)
-       when is_pid(pid) do
+  def handle_produce(buf_cb, batch, r_state(connection: pid) = state)
+      when is_pid(pid) do
     do_handle_produce(buf_cb, batch, state)
   end
 
-  defp handle_produce(buf_cb, batch, r_state() = state) do
+  def handle_produce(buf_cb, batch, r_state() = state) do
     {:ok, new_state} = maybe_reinit_connection(state)
     do_handle_produce(buf_cb, batch, new_state)
   end

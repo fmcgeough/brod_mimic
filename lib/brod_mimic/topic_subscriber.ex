@@ -1,71 +1,67 @@
 defmodule BrodMimic.TopicSubscriber do
   use GenServer
 
-  import Bitwise
-  import Record, only: [defrecord: 2, extract: 2]
+  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
 
-  Record.defrecord(
-    :kafka_message,
-    extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl")
-  )
+  defrecord(:kafka_message, extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl"))
 
-  Record.defrecord(:r_kafka_message_set, :kafka_message_set,
+  defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
     partition: :undefined,
     high_wm_offset: :undefined,
     messages: :undefined
   )
 
-  Record.defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
+  defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
     topic: :undefined,
     partition: :undefined,
     error_code: :undefined,
     error_desc: ''
   )
 
-  Record.defrecord(:r_brod_call_ref, :brod_call_ref,
+  defrecord(:r_brod_call_ref, :brod_call_ref,
     caller: :undefined,
     callee: :undefined,
     ref: :undefined
   )
 
-  Record.defrecord(:r_brod_produce_reply, :brod_produce_reply,
+  defrecord(:r_brod_produce_reply, :brod_produce_reply,
     call_ref: :undefined,
     base_offset: :undefined,
     result: :undefined
   )
 
-  Record.defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
+  defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
     version: :undefined,
     topics: :undefined,
     user_data: :undefined
   )
 
-  Record.defrecord(:r_brod_received_assignment, :brod_received_assignment,
+  defrecord(:r_brod_received_assignment, :brod_received_assignment,
     topic: :undefined,
     partition: :undefined,
     begin_offset: :undefined
   )
 
-  Record.defrecord(:r_brod_cg, :brod_cg,
+  defrecord(:r_brod_cg, :brod_cg,
     id: :undefined,
     protocol_type: :undefined
   )
 
-  Record.defrecord(:r_socket, :socket,
+  defrecord(:r_socket, :socket,
     pid: :undefined,
     host: :undefined,
     port: :undefined,
     node_id: :undefined
   )
 
-  Record.defrecord(:r_cbm_init_data, :cbm_init_data,
+  defrecord(:r_cbm_init_data, :cbm_init_data,
     committed_offsets: :undefined,
     cb_fun: :undefined,
     cb_data: :undefined
   )
 
-  Record.defrecord(:r_consumer, :consumer,
+  defrecord(:r_consumer, :consumer,
     partition: :undefined,
     consumer_pid: :undefined,
     consumer_mref: :undefined,
@@ -73,7 +69,7 @@ defmodule BrodMimic.TopicSubscriber do
     last_offset: :undefined
   )
 
-  Record.defrecord(:r_state, :state,
+  defrecord(:r_state, :state,
     client: :undefined,
     client_mref: :undefined,
     topic: :undefined,
@@ -341,9 +337,9 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   defp update_last_offset(partition, messages, r_state(consumers: consumers) = state) do
-    kafka_message(offset: lastOffset) = :lists.last(messages)
+    last_offset = messages |> :lists.last() |> kafka_message(:offset)
     c = get_consumer(partition, consumers)
-    consumer = r_consumer(c, last_offset: lastOffset)
+    consumer = r_consumer(c, last_offset: last_offset)
     r_state(state, consumers: put_consumer(consumer, consumers))
   end
 
@@ -415,7 +411,7 @@ defmodule BrodMimic.TopicSubscriber do
     r_kafka_message_set(partition: partition, messages: messages) = messageSet
     r_state(cb_module: cb_module, cb_state: cb_state) = state
 
-    {ackNow, newCbState} =
+    {ack_now, newCbState} =
       case cb_module.handle_message(partition, messageSet, cb_state) do
         {:ok, newCbState_} ->
           {false, newCbState_}
@@ -426,12 +422,12 @@ defmodule BrodMimic.TopicSubscriber do
 
     state1 = r_state(state, cb_state: newCbState)
 
-    case ackNow do
+    case ack_now do
       true ->
-        lastMessage = :lists.last(messages)
-        lastOffset = r_kafka_message(lastMessage, :offset)
-        ackRef = {partition, lastOffset}
-        handle_ack(ackRef, state1)
+        last_message = :lists.last(messages)
+        last_offset = kafka_message(last_message, :offset)
+        ack_ref = {partition, last_offset}
+        handle_ack(ack_ref, state1)
 
       false ->
         state1
@@ -443,11 +439,11 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   defp handle_messages(partition, [msg | rest], state) do
-    r_kafka_message(offset: offset) = msg
+    offset = kafka_message(msg, :offset)
     r_state(cb_module: cb_module, cb_state: cb_state) = state
     ackRef = {partition, offset}
 
-    {ackNow, newCbState} =
+    {ack_now, newCbState} =
       case cb_module.handle_message(partition, msg, cb_state) do
         {:ok, newCbState_} ->
           {false, newCbState_}
@@ -459,7 +455,7 @@ defmodule BrodMimic.TopicSubscriber do
     state1 = r_state(state, cb_state: newCbState)
 
     new_state =
-      case ackNow do
+      case ack_now do
         true ->
           handle_ack(ackRef, state1)
 
