@@ -1,69 +1,72 @@
 defmodule BrodMimic.GroupSubscriberWorker do
   @behaviour BrodMimic.TopicSubscriber
 
-  import Bitwise
+  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
 
   alias BrodMimic.Utils, as: BrodUtils
 
-  require Record
+  defrecord(
+    :kafka_message,
+    extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl")
+  )
 
-  Record.defrecord(:r_kafka_message_set, :kafka_message_set,
+  defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
     partition: :undefined,
     high_wm_offset: :undefined,
     messages: :undefined
   )
 
-  Record.defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
+  defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
     topic: :undefined,
     partition: :undefined,
     error_code: :undefined,
     error_desc: ''
   )
 
-  Record.defrecord(:r_brod_call_ref, :brod_call_ref,
+  defrecord(:r_brod_call_ref, :brod_call_ref,
     caller: :undefined,
     callee: :undefined,
     ref: :undefined
   )
 
-  Record.defrecord(:r_brod_produce_reply, :brod_produce_reply,
+  defrecord(:r_brod_produce_reply, :brod_produce_reply,
     call_ref: :undefined,
     base_offset: :undefined,
     result: :undefined
   )
 
-  Record.defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
+  defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
     version: :undefined,
     topics: :undefined,
     user_data: :undefined
   )
 
-  Record.defrecord(:r_brod_received_assignment, :brod_received_assignment,
+  defrecord(:r_brod_received_assignment, :brod_received_assignment,
     topic: :undefined,
     partition: :undefined,
     begin_offset: :undefined
   )
 
-  Record.defrecord(:r_brod_cg, :brod_cg,
+  defrecord(:r_brod_cg, :brod_cg,
     id: :undefined,
     protocol_type: :undefined
   )
 
-  Record.defrecord(:r_socket, :socket,
+  defrecord(:r_socket, :socket,
     pid: :undefined,
     host: :undefined,
     port: :undefined,
     node_id: :undefined
   )
 
-  Record.defrecord(:r_cbm_init_data, :cbm_init_data,
+  defrecord(:r_cbm_init_data, :cbm_init_data,
     committed_offsets: :undefined,
     cb_fun: :undefined,
     cb_data: :undefined
   )
 
-  Record.defrecord(:r_state, :state,
+  defrecord(:r_state, :state,
     start_options: :undefined,
     cb_module: :undefined,
     cb_state: :undefined,
@@ -143,13 +146,12 @@ defmodule BrodMimic.GroupSubscriberWorker do
     BrodUtils.optional_callback(cb_module, :terminate, [reason, state], :ok)
   end
 
-  defp get_last_offset(r_kafka_message(offset: offset)) do
+  defp get_last_offset(kafka_message(offset: offset)) do
     offset
   end
 
   defp get_last_offset(r_kafka_message_set(messages: messages)) do
-    r_kafka_message(offset: offset) = :lists.last(messages)
-    offset
+    messages |> :lists.last() |> kafka_message(:offset)
   end
 
   defp resolve_committed_offsets(_T, _P, :undefined) do

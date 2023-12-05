@@ -55,7 +55,7 @@ defmodule BrodMimic.ConsumersSup do
 
       [partitions_sup_pid] ->
         try do
-          case BrodSupervisor3.find_child(partitionssup_pid, partition) do
+          case BrodSupervisor3.find_child(partitions_sup_pid, partition) do
             [] ->
               # no such partition?
               {:error, {:consumer_not_found, topic, partition}}
