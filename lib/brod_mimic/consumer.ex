@@ -9,6 +9,24 @@ defmodule BrodMimic.Consumer do
   alias BrodMimic.KafkaRequest, as: BrodKafkaRequest
   alias BrodMimic.Utils, as: BrodUtils
 
+  @default_min_bytes 0
+  # 1 MB
+  @default_max_bytes 1_048_576
+  # 10 sec
+  @default_max_wait_time 10000
+  # 1 sec
+  @default_sleep_timeout 1000
+  @default_prefetch_count 10
+  # 100 KB
+  @default_prefetch_bytes 102_400
+  @default_offset_reset_policy :reset_by_subscriber
+  @error_cooldown 1000
+  @connection_retry_delay_ms 1000
+  @default_offset_reset_policy :reset_by_subscriber
+  @default_isolation_level :read_committed
+  @default_avg_window 5
+  @default_begin_offset 0
+
   defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
   defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
   defrecord(:kafka_message, extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl"))
@@ -120,6 +138,56 @@ defmodule BrodMimic.Consumer do
         :erlang.exit(pid, :kill)
         :ok
     end
+  end
+
+  def init({bootstrap, topic, partition, config}) do
+    :erlang.process_flag(:trap_exit, true)
+
+    cfg = fn name, default ->
+      :proplists.get_value(name, config, default)
+    end
+
+    min_bytes = cfg(:min_bytes, @default_min_bytes)
+    max_bytes = cfg(:max_bytes, @default_max_bytes)
+    max_wait_time = cfg(:max_wait_time, @default_max_wait_time)
+    sleep_timeout = cfg(:sleep_timeout, @default_sleep_timeout)
+    prefetch_count = :erlang.max(cfg(:prefetch_count, @default_prefetch_count), 0)
+    prefetch_bytes = :erlang.max(cfg(:prefetch_bytes, @default_prefetch_bytes), 0)
+    begin_offset = cfg(:begin_offset, @default_begin_offset)
+    offset_reset_policy = cfg(:offset_reset_policy, @default_offset_reset_policy)
+    isolation_level = cfg(:isolation_level, @default_isolation_level)
+
+    # If bootstrap is a client pid, register self to the client
+    case is_shared_conn(bootstrap) do
+      true ->
+        :ok = BrodClient.register_consumer(bootstrap, topic, partition)
+
+      false ->
+        :ok
+    end
+
+    {:ok,
+     r_state(
+       bootstrap: bootstrap,
+       topic: topic,
+       partition: partition,
+       begin_offset: begin_offset,
+       max_wait_time: max_wait_time,
+       min_bytes: min_bytes,
+       max_bytes_orig: max_bytes,
+       sleep_timeout: sleep_timeout,
+       prefetch_count: prefetch_count,
+       prefetch_bytes: prefetch_bytes,
+       connection: :undef,
+       pending_acks: r_pending_acks(),
+       is_suspended: false,
+       offset_reset_policy: offset_reset_policy,
+       avg_bytes: 0,
+       max_bytes: max_bytes,
+       size_stat_window: cfg(:size_stat_window, @default_avg_window),
+       connection_mref: :undef,
+       isolation_level: isolation_level
+     )}
   end
 
   def subscribe(pid, subscriber_pid, consumer_options) do
@@ -403,14 +471,14 @@ defmodule BrodMimic.Consumer do
     end
   end
 
-  defp add_pending_acks(pending_acks, messages) do
+  def add_pending_acks(pending_acks, messages) do
     :lists.foldl(&add_pending_ack/2, pending_acks, messages)
   end
 
-  defp add_pending_ack(
-         kafka_message(offset: offset, key: key, value: value),
-         r_pending_acks(queue: queue, count: count, bytes: bytes) = pending_acks
-       ) do
+  def add_pending_ack(
+        kafka_message(offset: offset, key: key, value: value),
+        r_pending_acks(queue: queue, count: count, bytes: bytes) = pending_acks
+      ) do
     size = :erlang.size(key) + :erlang.size(value)
     newQueue = :queue.in({offset, size}, queue)
     r_pending_acks(pending_acks, queue: newQueue, count: count + 1, bytes: bytes + size)

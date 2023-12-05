@@ -77,9 +77,7 @@ defmodule BrodMimic.ProducerBuffer do
     max_retries: 0,
     max_linger_ms: 0,
     max_linger_count: 0,
-    send_fun: fn ->
-      :erlang.error(:bad_init)
-    end,
+    send_fun: &__MODULE__.bad_init_error/0,
     buffer_count: 0,
     onwire_count: 0,
     pending: :queue.new(),
@@ -112,6 +110,10 @@ defmodule BrodMimic.ProducerBuffer do
       max_linger_count: max_linger_count,
       send_fun: send_fun
     )
+  end
+
+  def bad_init_error do
+    :erlang.error(:bad_init)
   end
 
   def add(r_buf(pending: pending) = buf, buf_cb, batch) do

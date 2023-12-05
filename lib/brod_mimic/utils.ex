@@ -3,13 +3,14 @@ defmodule BrodMimic.Utils do
   Collection of generally useful utility functions
   """
 
-  require BrodMimic.Macros
+  use BrodMimic.Macros
+
   import Record, only: [defrecord: 2, extract: 2]
 
   defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
   defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
 
-  alias BrodMimic.{Brod, Macros, KafkaRequest}
+  alias BrodMimic.{Brod, KafkaRequest}
 
   @type kpro_rsp :: kpro_rsp()
   @type kpro_req :: kpro_req()
@@ -120,7 +121,7 @@ defmodule BrodMimic.Utils do
   @spec resolve_offset([endpoint()], topic(), partition(), offset_time(), conn_config()) ::
           {:ok, Brod.offset()} | {:error, any()}
   def resolve_offset(hosts, topic, partition, time, conn_cfg) do
-    timeout = :proplists.get_value(:connect_timeout, conn_cfg, Macros.brod_default_timeout())
+    timeout = :proplists.get_value(:connect_timeout, conn_cfg, brod_default_timeout())
     opts = %{timeout: timeout}
     resolve_offset(hosts, topic, partition, time, conn_cfg, opts)
   end

@@ -2,8 +2,12 @@ defmodule BrodMimic.TopicSubscriber do
   use GenServer
 
   import Bitwise
+  import Record, only: [defrecord: 2, extract: 2]
 
-  require Record
+  Record.defrecord(
+    :kafka_message,
+    extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl")
+  )
 
   Record.defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
@@ -192,8 +196,8 @@ defmodule BrodMimic.TopicSubscriber do
     {:ok, state}
   end
 
-  def handle_info({_ConsumerPid, r_kafka_message_set() = msgSet}, state0) do
-    state = handle_consumer_delivery(msgSet, state0)
+  def handle_info({_consumer_pid, r_kafka_message_set() = msg_set}, state0) do
+    state = handle_consumer_delivery(msg_set, state0)
     {:noreply, state}
   end
 
@@ -337,7 +341,7 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   defp update_last_offset(partition, messages, r_state(consumers: consumers) = state) do
-    r_kafka_message(offset: lastOffset) = :lists.last(messages)
+    kafka_message(offset: lastOffset) = :lists.last(messages)
     c = get_consumer(partition, consumers)
     consumer = r_consumer(c, last_offset: lastOffset)
     r_state(state, consumers: put_consumer(consumer, consumers))

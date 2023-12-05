@@ -1,89 +1,30 @@
 defmodule BrodMimic.Macros do
   @moduledoc false
 
-  defmacro offset_earliest do
+  defmacro __using__(_) do
     quote do
-      :earliest
-    end
-  end
+      def offset_earliest, do: :earliest
+      def offset_latest, do: :latest
+      def unknown_topic_cache_expire_seconds, do: 120
+      def topic_metadata_key(topic), do: {:topic_metadata, topic}
+      def is_error(ec), do: ec != :no_error
 
-  defmacro unknown_topic_cache_expire_seconds do
-    120
-  end
+      def escalate_ec(ec) do
+        if is_error(ec) do
+          throw(ec)
+        end
+      end
 
-  defmacro topic_metadata_key(topic) do
-    quote do
-      {:topic_metadata, unquote(topic)}
-    end
-  end
-
-  defmacro is_error(ec) do
-    quote do
-      unquote(ec) != :no_error
-    end
-  end
-
-  defmacro offset_latest do
-    quote do
-      :latest
-    end
-  end
-
-  defmacro kv(key, value) do
-    quote do
-      {unquote(key), unquote(value)}
-    end
-  end
-
-  defmacro tkv(ts, key, value) do
-    quote do
-      {unquote(ts), unquote(key), unquote(value)}
-    end
-  end
-
-  defmacro brod_fold_ret(acc, next_offset, reason) do
-    quote do
-      {unquote(acc), unquote(next_offset), unquote(reason)}
-    end
-  end
-
-  defmacro brod_default_timeout do
-    :timer.seconds(5)
-  end
-
-  defmacro consumer_key(topic, partition) do
-    quote do
-      {:consumer, unquote(topic), unquote(partition)}
-    end
-  end
-
-  defmacro producer_key(topic, partition) do
-    quote do
-      {:producer, unquote(topic), unquote(partition)}
-    end
-  end
-
-  defmacro producer(pid) do
-    quote do
-      [{:producer, _, _}, unquote(pid)]
-    end
-  end
-
-  defmacro producer(topic, partition, pid) do
-    quote do
-      {unquote(producer_key(topic, partition)), unquote(pid)}
-    end
-  end
-
-  defmacro consumer(pid) do
-    quote do
-      [{:consumer, _, _}, unquote(pid)]
-    end
-  end
-
-  defmacro consumer(topic, partition, pid) do
-    quote do
-      {unquote(consumer_key(topic, partition)), unquote(pid)}
+      def kv(key, value), do: {key, value}
+      def tkv(ts, key, value), do: {ts, key, value}
+      def brod_fold_ret(acc, next_offset, reason), do: {acc, next_offset, reason}
+      def brod_default_timeout, do: :timer.seconds(5)
+      def consumer_key(topic, partition), do: {:consumer, topic, partition}
+      def producer_key(topic, partition), do: {:producer, topic, partition}
+      # def producer(pid), do: [{:producer, _, _}, pid]
+      def producer(topic, partition, pid), do: {producer_key(topic, partition), pid}
+      # def consumer(pid), do: [{:consumer, _, _}, pid]
+      def consumer(topic, partition, pid), do: {consumer_key(topic, partition), pid}
     end
   end
 end

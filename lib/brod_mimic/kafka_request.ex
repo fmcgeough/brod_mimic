@@ -17,8 +17,6 @@ defmodule BrodMimic.KafkaRequest do
   """
   require Record
 
-  import Bitwise
-
   @type api() :: KafkaApis.api()
   @type vsn() :: KafkaApis.vsn()
   @type topic() :: Brod.topic()
@@ -27,7 +25,7 @@ defmodule BrodMimic.KafkaRequest do
   @type offset() :: Brod.offset()
   @type conn() :: :kpro.connection()
 
-  alias BrodMimic.KafkaApis
+  alias BrodMimic.KafkaApis, as: BrodKafkaApis
 
   Record.defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
