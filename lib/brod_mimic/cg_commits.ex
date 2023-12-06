@@ -13,6 +13,7 @@ defmodule BrodMimic.CgCommits do
   require Record
 
   @partitions_not_received "Partitions ~p are not received in assignment, There is probably another active group member subscribing to topic ~s, stop it and retry"
+  @nonexistent_partitions "Nonexisting partitions in input: ~p"
 
   defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
@@ -194,9 +195,7 @@ defmodule BrodMimic.CgCommits do
       bad_partitions ->
         partition_numbers = Enum.map(bad_partitions, &elem(&1, 1))
 
-        Logger.error(fn ->
-          log_string(state, "Nonexisting partitions in input: ~p", [partition_numbers])
-        end)
+        Logger.error(fn -> log_string(state, @nonexistent_partitions, [partition_numbers]) end)
 
         :erlang.exit({:non_existing_partitions, partition_numbers})
     end
