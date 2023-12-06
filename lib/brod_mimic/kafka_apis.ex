@@ -219,7 +219,7 @@ defmodule BrodMimic.KafkaApis do
 
   # Do not change range without verification.
   def supported_versions(api) do
-    Map.get(@supported_versions, api, :erlang.error({:unsupported_api, api})
+    Map.get(@supported_versions, api, :erlang.error({:unsupported_api, api}))
   end
 
   defp monitor_connection(conn) do
