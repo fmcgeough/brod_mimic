@@ -192,10 +192,7 @@ defmodule BrodMimic.CgCommits do
         :ok
 
       bad_partitions ->
-        partition_numbers =
-          for {_t, p} <- bad_partitions do
-            p
-          end
+        partition_numbers = Enum.map(bad_partitions, &elem(&1, 1))
 
         Logger.error(fn ->
           log_string(state, "Nonexisting partitions in input: ~p", [partition_numbers])
