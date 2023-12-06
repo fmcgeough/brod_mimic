@@ -10,6 +10,8 @@ defmodule BrodMimic.Consumer do
   alias BrodMimic.KafkaRequest, as: BrodKafkaRequest
   alias BrodMimic.Utils, as: BrodUtils
 
+  require Logger
+
   @default_min_bytes 0
   # 1 MB
   @default_max_bytes 1_048_576

@@ -8,6 +8,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
   import Record, only: [defrecord: 3]
 
   alias BrodMimic.TopicSubscriber, as: BrodTopicSubscriber
+  alias BrodMimic.GroupCoordinator, as: BrodGroupCoordinator
   alias BrodMimic.Utils, as: BrodUtils
 
   require Logger

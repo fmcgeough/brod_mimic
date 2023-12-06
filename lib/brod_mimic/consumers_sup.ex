@@ -84,6 +84,7 @@ defmodule BrodMimic.ConsumersSup do
     post_init(args)
   end
 
+  @impl true
   def post_init({@partitions_sup, client_pid, topic, config}) do
     # spawn consumer process for every partition
     # in a topic if partitions are not set explicitly

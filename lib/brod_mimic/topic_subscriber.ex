@@ -4,6 +4,7 @@ defmodule BrodMimic.TopicSubscriber do
 
   import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
 
+  alias BrodMimic.Brod
   alias BrodMimic.Utils, as: BrodUtils
 
   defrecord(:kafka_message, extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl"))
