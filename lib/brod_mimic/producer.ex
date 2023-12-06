@@ -9,6 +9,7 @@ defmodule BrodMimic.Producer do
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.KafkaApis, as: BrodKafkaApis
   alias BrodMimic.KafkaRequest, as: BrodKafkaRequest
+  alias BrodMimic.ProducerBuffer
   alias BrodMimic.Utils, as: BrodUtils
 
   require Logger

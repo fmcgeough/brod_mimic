@@ -343,6 +343,17 @@ defmodule BrodMimic.Client do
   end
 
   @doc """
+  Get number of partitions for an existing topic.
+
+  Ensured not to auto create a topic even when Kafka is configured
+  with topic auto creation enabled.
+  """
+  @spec get_partitions_count_safe(client(), topic()) :: {:ok, pos_integer()} | {:error, any()}
+  def get_partitions_count_safe(client, topic) do
+    get_partitions_count(client, topic, %{allow_topic_auto_creation: false})
+  end
+
+  @doc """
   Get broker endpoint and connection config for connecting a group coordinator.
   """
   @spec get_group_coordinator(client(), group_id()) ::

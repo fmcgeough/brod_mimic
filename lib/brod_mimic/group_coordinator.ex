@@ -741,6 +741,7 @@ defmodule BrodMimic.GroupCoordinator do
     )
   end
 
+  # only leader can assign partitions to members
   defp assign_partitions(r_state()) do
     []
   end

@@ -10,6 +10,7 @@ defmodule BrodMimic.Brod do
   alias BrodMimic.GroupSubscriberv2, as: BrodGroupSubscriberv2
   alias BrodMimic.Producer, as: BrodProducer
   alias BrodMimic.Sup, as: BrodSup
+  alias BrodMimic.TopicSubscriber, as: BrodTopicSubscriber
   alias BrodMimic.Utils, as: BrodUtils
 
   ### Types created for Elixir port ============================================
