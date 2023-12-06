@@ -185,16 +185,9 @@ defmodule BrodMimic.CgCommits do
       ) do
     Logger.info("Assigning all topic partitions to self")
 
-    my_tp =
-      for {p, _} <- offsets do
-        {my_topic, p}
-      end
+    my_tp = Enum.map(offsets, fn {p, _} -> {my_topic, p} end)
 
-    pred = fn tp ->
-      not :lists.member(tp, topic_partitions)
-    end
-
-    case :lists.filter(pred, my_tp) do
+    case Enum.filter(my_tp, &Enum.member?(topic_partitions, &1)) do
       [] ->
         :ok
 
