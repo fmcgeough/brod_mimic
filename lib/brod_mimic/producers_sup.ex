@@ -1,7 +1,7 @@
 defmodule BrodMimic.ProducersSup do
   @moduledoc false
 
-  @behaviour BrodSupervisor3
+  @behaviour BrodMimic.Supervisor3
 
   require Record
 

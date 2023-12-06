@@ -7,6 +7,10 @@ defmodule BrodMimic.TopicSubscriber do
   alias BrodMimic.Brod
   alias BrodMimic.Utils, as: BrodUtils
 
+  @type committed_offsets() :: [{Brod.partition(), Brod.offset()}]
+  @type cb_state() :: term()
+  @type cb_ret() :: {:ok, cb_state()} | {:ok, :ack, cb_state()}
+
   defrecord(:kafka_message, extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl"))
 
   defrecord(:r_kafka_message_set, :kafka_message_set,
@@ -82,6 +86,44 @@ defmodule BrodMimic.TopicSubscriber do
     cb_state: :undefined,
     message_type: :undefined
   )
+
+  # behaviour callbacks ======================================================
+
+  # Initialize the callback modules state.
+  # Return `{ok, CommittedOffsets, CbState}' where `CommitedOffset' is
+  # the "last seen" before start/restart offsets of each topic in a tuple list
+  # The offset+1 of each partition will be used as the start point when fetching
+  # messages from kafka.
+  #
+  # OBS: If there is no offset committed before for certain (or all) partitions
+  #      e.g. CommittedOffsets = [], the consumer will use 'latest' by default,
+  #      or `begin_offset' in consumer config (if found) to start fetching.
+  # cb_state is the user's looping state for message processing.
+  @callback init(Brod.topic(), term()) :: {:ok, committed_offsets(), cb_state()}
+
+  # Handle a message. Return one of:
+  #
+  # `{:ok, new_callback_state}`
+  #   The subscriber has received the message for processing async-ly.
+  #   It should call brod_topic_subscriber:ack/3 to acknowledge later.
+  #
+  # `{:ok, ack, new_callback_state}`
+  #   The subscriber has completed processing the message
+  #
+  # NOTE: While this callback function is being evaluated, the fetch-ahead
+  #       partition-consumers are polling for more messages behind the scene
+  #       unless prefetch_count and prefetch_bytes are set to 0 in consumer
+  #       config.
+  @callback handle_message(
+              Brod.partition(),
+              Brod.message() | Brod.message_set(),
+              cb_state()
+            ) :: cb_ret()
+
+  # This callback is called before stopping the subscriber
+  @callback terminate(any(), cb_state()) :: any()
+
+  @optional_callbacks [terminate: 2]
 
   def start_link(client, topic, partitions, consumer_config, cb_module, cb_init_arg) do
     args = %{

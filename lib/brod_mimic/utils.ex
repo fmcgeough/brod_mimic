@@ -463,6 +463,40 @@ defmodule BrodMimic.Utils do
     end
   end
 
+  @doc """
+  Fetch a message-set. If the given MaxBytes is not enough to fetch a
+  single message, expand it to fetch exactly one message
+  """
+  def fetch(conn, req_fun, offset, max_bytes) do
+    request = req_fun.(offset, max_bytes)
+
+    case request_sync(conn, request, :infinity) do
+      {:ok, %{error_code: error_code}} when error_code != :no_error ->
+        {:error, error_code}
+
+      {:ok, %{batches: {:incomplete_batch, size}}} ->
+        fetch(conn, req_fun, offset, size)
+
+      {:ok, %{header: header, batches: batches}} ->
+        stable_offset = get_stable_offset(header)
+        {new_begin_offset, msgs} = flatten_batches(offset, header, batches)
+
+        case offset < stable_offset and msgs == [] do
+          true ->
+            # Not reached the latest stable offset yet,
+            # but received an empty batch-set (all messages are dropped).
+            # try again with new begin-offset
+            fetch(conn, req_fun, new_begin_offset, max_bytes)
+
+          false ->
+            {:ok, {stable_offset, msgs}}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   def list_all_groups(endpoints, options) do
     {:ok, metadata} = get_metadata(endpoints, [], options)
     brokers0 = :kpro.find(:brokers, metadata)
@@ -850,11 +884,11 @@ defmodule BrodMimic.Utils do
   The second argument is used as error reason.
   """
   @spec ok_when(boolean(), any()) :: :ok | no_return()
-  defp ok_when(true, _) do
+  def ok_when(true, _) do
     :ok
   end
 
-  defp ok_when(_, reason) do
+  def ok_when(_, reason) do
     :erlang.error(reason)
   end
 
