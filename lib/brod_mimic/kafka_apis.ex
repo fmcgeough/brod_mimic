@@ -18,6 +18,24 @@ defmodule BrodMimic.KafkaApis do
   require Logger
   require Record
 
+  @supported_versions %{
+    produce: {0, 5},
+    fetch: {0, 7},
+    list_offsets: {0, 2},
+    metadata: {0, 2},
+    offset_commit: {2, 2},
+    offset_fetch: {1, 2},
+    find_coordinator: {0, 0},
+    join_group: {0, 0},
+    heartbeat: {0, 0},
+    leave_group: {0, 0},
+    sync_group: {0, 0},
+    describe_groups: {0, 0},
+    list_groups: {0, 0},
+    create_topics: {0, 0},
+    delete_topics: {0, 0}
+  }
+
   Record.defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
     partition: :undefined,
@@ -201,24 +219,7 @@ defmodule BrodMimic.KafkaApis do
 
   # Do not change range without verification.
   def supported_versions(api) do
-    case api do
-      :produce -> {0, 5}
-      :fetch -> {0, 7}
-      :list_offsets -> {0, 2}
-      :metadata -> {0, 2}
-      :offset_commit -> {2, 2}
-      :offset_fetch -> {1, 2}
-      :find_coordinator -> {0, 0}
-      :join_group -> {0, 0}
-      :heartbeat -> {0, 0}
-      :leave_group -> {0, 0}
-      :sync_group -> {0, 0}
-      :describe_groups -> {0, 0}
-      :list_groups -> {0, 0}
-      :create_topics -> {0, 0}
-      :delete_topics -> {0, 0}
-      _ -> :erlang.error({:unsupported_api, api})
-    end
+    Map.get(@supported_versions, api, :erlang.error({:unsupported_api, api})
   end
 
   defp monitor_connection(conn) do
