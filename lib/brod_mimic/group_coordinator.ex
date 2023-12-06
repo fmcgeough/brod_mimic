@@ -1,4 +1,6 @@
 defmodule BrodMimic.GroupCoordinator do
+  @moduledoc false
+
   use BrodMimic.Macros
   use GenServer
 
@@ -198,17 +200,15 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   def handle_call({:commit_offsets, extra_offsets}, from, state) do
-    try do
-      offsets = merge_acked_offsets(r_state(state, :acked_offsets), extra_offsets)
+    offsets = merge_acked_offsets(r_state(state, :acked_offsets), extra_offsets)
 
-      {:ok, new_state} = do_commit_offsets(r_state(state, acked_offsets: offsets))
-      {:reply, :ok, new_state}
-    catch
-      reason ->
-        GenServer.reply(from, {:error, reason})
-        {:ok, new_state_} = stabilize(state, 0, reason)
-        {:noreply, new_state_}
-    end
+    {:ok, new_state} = do_commit_offsets(r_state(state, acked_offsets: offsets))
+    {:reply, :ok, new_state}
+  catch
+    reason ->
+      GenServer.reply(from, {:error, reason})
+      {:ok, new_state_} = stabilize(state, 0, reason)
+      {:noreply, new_state_}
   end
 
   def handle_call(call, _from, state) do
@@ -400,13 +400,11 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   defp do_stabilize([f | rest], retry_fun, state) do
-    try do
-      {:ok, r_state() = new_state} = f.(state)
-      do_stabilize(rest, retry_fun, new_state)
-    catch
-      reason ->
-        retry_fun.(state, reason)
-    end
+    {:ok, r_state() = new_state} = f.(state)
+    do_stabilize(rest, retry_fun, new_state)
+  catch
+    reason ->
+      retry_fun.(state, reason)
   end
 
   defp maybe_reset_member_id(state, reason) do
@@ -582,12 +580,10 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   defp try_commit_offsets(r_state() = state) do
-    try do
-      {:ok, r_state()} = do_commit_offsets(state)
-    catch
-      _, _ ->
-        {:ok, state}
-    end
+    {:ok, r_state()} = do_commit_offsets(state)
+  catch
+    _, _ ->
+      {:ok, state}
   end
 
   defp do_commit_offsets(state) do
@@ -1063,7 +1059,7 @@ defmodule BrodMimic.GroupCoordinator do
     end
   end
 
-  defp make_offset_commit_metadata() do
+  defp make_offset_commit_metadata do
     bin(['+1/', coordinator_id()])
   end
 
@@ -1071,11 +1067,11 @@ defmodule BrodMimic.GroupCoordinator do
     BrodUtils.optional_callback(module, :user_data, [pid], <<>>)
   end
 
-  defp make_group_connection_client_id() do
+  defp make_group_connection_client_id do
     coordinator_id()
   end
 
-  defp coordinator_id() do
+  defp coordinator_id do
     bin(:io_lib.format('~p/~p', [node(), self()]))
   end
 

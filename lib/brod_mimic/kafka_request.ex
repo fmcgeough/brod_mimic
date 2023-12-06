@@ -140,6 +140,25 @@ defmodule BrodMimic.KafkaRequest do
     :kpro_req_lib.metadata(vsn, topics)
   end
 
+  def offset_fetch(connection, group_id, topics0) do
+    topics =
+      Enum.map(topics0, fn {topic, partitions} ->
+        [{:name, topic}, {:partition_indexes, partitions}]
+      end)
+
+    body = [
+      {:group_id, group_id},
+      {:topics,
+       case topics do
+         [] -> nil
+         _ -> topics
+       end}
+    ]
+
+    vsn = pick_version(:offset_fetch, connection)
+    :kpro.make_request(:offset_fetch, vsn, body)
+  end
+
   def list_groups(connection) do
     vsn = pick_version(:list_groups, connection)
     :kpro.make_request(:list_groups, vsn, [])

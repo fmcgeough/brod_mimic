@@ -1,4 +1,6 @@
 defmodule BrodMimic.Consumer do
+  @moduledoc false
+
   use BrodMimic.Macros
   use GenServer
 
@@ -127,16 +129,14 @@ defmodule BrodMimic.Consumer do
   end
 
   def stop_maybe_kill(pid, timeout) do
-    try do
-      GenServer.call(pid, :stop, timeout)
-    catch
-      :exit, {:noproc, _} ->
-        :ok
+    GenServer.call(pid, :stop, timeout)
+  catch
+    :exit, {:noproc, _} ->
+      :ok
 
-      :exit, {:timeout, _} ->
-        :erlang.exit(pid, :kill)
-        :ok
-    end
+    :exit, {:timeout, _} ->
+      :erlang.exit(pid, :kill)
+      :ok
   end
 
   def init({bootstrap, topic, partition, config}) do
@@ -756,13 +756,11 @@ defmodule BrodMimic.Consumer do
   end
 
   defp cast_to_subscriber(pid, msg) do
-    try do
-      send(pid, {self(), msg})
+    send(pid, {self(), msg})
+    :ok
+  catch
+    _, _ ->
       :ok
-    catch
-      _, _ ->
-        :ok
-    end
   end
 
   defp maybe_delay_fetch_request(r_state(sleep_timeout: t) = state) when t > 0 do
@@ -836,14 +834,12 @@ defmodule BrodMimic.Consumer do
     end
   end
 
-  defp handle_subscribe_call(pid, options, r_state(subscriber_mref: oldMref) = state0) do
+  defp handle_subscribe_call(pid, options, r_state(subscriber_mref: old_mref) = state0) do
     case update_options(options, state0) do
       {:ok, state1} ->
-        is_reference(oldMref) and
-          :erlang.demonitor(
-            oldMref,
-            [:flush]
-          )
+        if is_reference(old_mref) do
+          :erlang.demonitor(old_mref, [:flush])
+        end
 
         mref = :erlang.monitor(:process, pid)
 
@@ -929,12 +925,10 @@ defmodule BrodMimic.Consumer do
   end
 
   defp resolve_offset(connection, topic, partition, begin_offset) do
-    try do
-      BrodUtils.resolve_offset(connection, topic, partition, begin_offset)
-    catch
-      reason ->
-        {:error, reason}
-    end
+    BrodUtils.resolve_offset(connection, topic, partition, begin_offset)
+  catch
+    reason ->
+      {:error, reason}
   end
 
   defp reset_buffer(
@@ -960,12 +954,10 @@ defmodule BrodMimic.Consumer do
   end
 
   defp safe_gen_call(server, call, timeout) do
-    try do
-      GenServer.call(server, call, timeout)
-    catch
-      :exit, {reason, _} ->
-        {:error, reason}
-    end
+    GenServer.call(server, call, timeout)
+  catch
+    :exit, {reason, _} ->
+      {:error, reason}
   end
 
   defp maybe_init_connection(
@@ -997,9 +989,9 @@ defmodule BrodMimic.Consumer do
     {:ok, state}
   end
 
-  defp connect_leader(clientPid, topic, partition)
-       when is_pid(clientPid) do
-    BrodClient.get_leader_connection(clientPid, topic, partition)
+  defp connect_leader(client_pid, topic, partition)
+       when is_pid(client_pid) do
+    BrodClient.get_leader_connection(client_pid, topic, partition)
   end
 
   defp connect_leader(endpoints, topic, partition)

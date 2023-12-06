@@ -1,12 +1,12 @@
 defmodule BrodMimic.ProducersSup do
-  @behaviour BrodSupervisor3
+  @moduledoc false
 
-  import Bitwise
+  @behaviour BrodSupervisor3
 
   require Record
 
-  alias BrodMimic.Supervisor3, as: BrodSupervisor3
   alias BrodMimic.Client, as: BrodClient
+  alias BrodMimic.Supervisor3, as: BrodSupervisor3
 
   Record.defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
@@ -64,7 +64,7 @@ defmodule BrodMimic.ProducersSup do
     cb_data: :undefined
   )
 
-  def start_link() do
+  def start_link do
     BrodSupervisor3.start_link(__MODULE__, __MODULE__)
   end
 

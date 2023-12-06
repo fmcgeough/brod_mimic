@@ -1,4 +1,6 @@
 defmodule BrodMimic.GroupMember do
+  @moduledoc false
+
   @optional_callbacks [assign_partitions: 3, user_data: 1]
 
   @doc """

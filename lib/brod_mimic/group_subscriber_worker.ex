@@ -1,4 +1,6 @@
 defmodule BrodMimic.GroupSubscriberWorker do
+  @moduledoc false
+
   @behaviour BrodMimic.TopicSubscriber
 
   import Record, only: [defrecord: 2, defrecord: 3, extract: 2]

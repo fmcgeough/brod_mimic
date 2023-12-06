@@ -1,4 +1,5 @@
 defmodule BrodMimic.CgCommits do
+  @moduledoc false
   use GenServer
 
   import Record, only: [defrecord: 3]
@@ -10,6 +11,8 @@ defmodule BrodMimic.CgCommits do
 
   require Logger
   require Record
+
+  @partitions_not_received "Partitions ~p are not received in assignment, There is probably another active group member subscribing to topic ~s, stop it and retry"
 
   defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
@@ -180,18 +183,18 @@ defmodule BrodMimic.CgCommits do
         _from,
         r_state(topic: my_topic, offsets: offsets) = state
       ) do
-    log(state, :info, 'Assigning all topic partitions to self', [])
+    Logger.info("Assigning all topic partitions to self")
 
-    myTP =
+    my_tp =
       for {p, _} <- offsets do
         {my_topic, p}
       end
 
-    pred = fn tP ->
-      not :lists.member(tP, topic_partitions)
+    pred = fn tp ->
+      not :lists.member(tp, topic_partitions)
     end
 
-    case :lists.filter(pred, myTP) do
+    case :lists.filter(pred, my_tp) do
       [] ->
         :ok
 
@@ -205,7 +208,7 @@ defmodule BrodMimic.CgCommits do
         :erlang.exit({:non_existing_partitions, partition_numbers})
     end
 
-    result = assign_all_to_self(members, myTP)
+    result = assign_all_to_self(members, my_tp)
     {:reply, result, r_state(state, is_elected: true)}
   end
 
@@ -271,12 +274,10 @@ defmodule BrodMimic.CgCommits do
             :ok
 
           left ->
-            log(
-              state,
-              :error,
-              'Partitions ~p are not received in assignment, There is probably another active group member subscribing to topic ~s, stop it and retry\n',
-              [my_topic, left]
-            )
+            @partitions_not_received
+            |> :io_lib.format([my_topic, left])
+            |> to_string()
+            |> Logger.error()
 
             :erlang.exit({:unexpected_assignments, left})
         end

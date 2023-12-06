@@ -1,7 +1,10 @@
 defmodule BrodMimic.TopicSubscriber do
+  @moduledoc false
   use GenServer
 
   import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
+
+  alias BrodMimic.Utils, as: BrodUtils
 
   defrecord(:kafka_message, extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl"))
 
@@ -213,11 +216,11 @@ defmodule BrodMimic.TopicSubscriber do
           all_partitions
 
         l when is_list(l) ->
-          pS = :lists.usort(l)
+          ps = :lists.usort(l)
 
-          case :lists.min(pS) >= 0 and :lists.max(pS) < partitions_count do
+          case :lists.min(ps) >= 0 and :lists.max(ps) < partitions_count do
             true ->
-              pS
+              ps
 
             false ->
               :erlang.error({:bad_partitions, partitions0, partitions_count})
@@ -299,7 +302,7 @@ defmodule BrodMimic.TopicSubscriber do
     {:stop, :normal, state}
   end
 
-  def handle_cast(_Cast, state) do
+  def handle_cast(_cast, state) do
     {:noreply, state}
   end
 
@@ -317,11 +320,11 @@ defmodule BrodMimic.TopicSubscriber do
 
   defp handle_consumer_delivery(
          r_kafka_message_set(topic: topic, partition: partition, messages: messages) = msg_set,
-         r_state(topic: topic, message_type: msgType) = state0
+         r_state(topic: topic, message_type: msg_type) = state0
        ) do
     state = update_last_offset(partition, messages, state0)
 
-    case msgType do
+    case msg_type do
       :message ->
         handle_messages(partition, messages, state)
 
@@ -354,7 +357,7 @@ defmodule BrodMimic.TopicSubscriber do
       partition: partition,
       consumer_pid: pid,
       acked_offset: acked_offset,
-      last_offset: lastOffset
+      last_offset: last_offset
     ) = consumer
 
     case BrodUtils.is_pid_alive(pid) do
@@ -362,7 +365,7 @@ defmodule BrodMimic.TopicSubscriber do
         consumer
 
       false
-      when acked_offset !== lastOffset and lastOffset !== :undefined ->
+      when acked_offset !== last_offset and last_offset !== :undefined ->
         consumer
 
       false ->

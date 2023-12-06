@@ -1,4 +1,6 @@
 defmodule BrodMimic.Producer do
+  @moduledoc false
+
   use GenServer
 
   import Kernel, except: [send: 2]
