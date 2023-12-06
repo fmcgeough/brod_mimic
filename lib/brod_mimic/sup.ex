@@ -1,4 +1,6 @@
 defmodule BrodMimic.Sup do
+  @moduledoc false
+
   @behaviour BrodMimic.Supervisor3
 
   alias BrodMimic.KafkaApis, as: BrodKafkaApis
@@ -62,7 +64,7 @@ defmodule BrodMimic.Sup do
     cb_data: :undefined
   )
 
-  def start_link() do
+  def start_link do
     BrodSupervisor3.start_link({:local, :brod_sup}, :brod_sup, :clients_sup)
   end
 

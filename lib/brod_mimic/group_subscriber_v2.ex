@@ -1,4 +1,6 @@
 defmodule BrodMimic.GroupSubscriberv2 do
+  @moduledoc false
+
   use GenServer
 
   @behaviour :brod_group_member
@@ -8,7 +10,10 @@ defmodule BrodMimic.GroupSubscriberv2 do
   alias BrodMimic.TopicSubscriber, as: BrodTopicSubscriber
   alias BrodMimic.Utils, as: BrodUtils
 
+  require Logger
   require Record
+
+  @worker_crashed "group_subscriber_v2 worker crashed.~n  group_id = ~s~n  topic = ~s~n  partition = ~p~n  pid = ~p~n  reason = ~p"
 
   defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
@@ -195,7 +200,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
     {:reply, reply, state}
   end
 
-  def handle_call(:get_workers, _from, state = r_state(workers: workers)) do
+  def handle_call(:get_workers, _from, r_state(workers: workers) = state) do
     {:reply, workers, state}
   end
 
@@ -340,26 +345,10 @@ defmodule BrodMimic.GroupSubscriberv2 do
   defp handle_worker_failure({topic, partition}, pid, reason, state) do
     r_state(group_id: group_id) = state
 
-    case :logger.allow(
-           :error,
-           :brod_group_subscriber_v2
-         ) do
-      true ->
-        :erlang.apply(:logger, :macro_log, [
-          %{
-            mfa: {:brod_group_subscriber_v2, :handle_worker_failure, 4},
-            line: 422,
-            file: '../brod/src/brod_group_subscriber_v2.erl'
-          },
-          :error,
-          'group_subscriber_v2 worker crashed.~n  group_id = ~s~n  topic = ~s~n  partition = ~p~n  pid = ~p~n  reason = ~p',
-          [group_id, topic, partition, pid, reason],
-          %{domain: [:brod]}
-        ])
-
-      false ->
-        :ok
-    end
+    @worker_crashed
+    |> :io_lib.format([group_id, topic, partition, pid, reason])
+    |> to_string()
+    |> Logger.error(%{domain: [:brod]})
 
     :ok
   end

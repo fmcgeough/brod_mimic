@@ -1,4 +1,6 @@
 defmodule BrodMimic.ConsumersSup do
+  @moduledoc false
+
   @behaviour BrodMimic.Supervisor3
 
   @topics_sup :brod_consumers_sup
@@ -86,7 +88,7 @@ defmodule BrodMimic.ConsumersSup do
     # spawn consumer process for every partition
     # in a topic if partitions are not set explicitly
     # in the config
-    # TODO: make it dynamic when consumer groups API is ready
+    # MODIFY: make it dynamic when consumer groups API is ready
     case get_partitions(client_pid, topic, config) do
       {:ok, partitions} ->
         children =

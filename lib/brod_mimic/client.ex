@@ -498,7 +498,7 @@ defmodule BrodMimic.Client do
   def find_producer(client, topic, partition) do
     case safe_gen_call(client, :get_producers_sup_pid, :infinity) do
       {:ok, sup_pid} ->
-        # TODO brod_producers_sup:find_producer(sup_id, topic, partition)
+        # MODIFY brod_producers_sup:find_producer(sup_id, topic, partition)
         {sup_pid, topic, partition}
 
       {:error, reason} ->
@@ -516,7 +516,7 @@ defmodule BrodMimic.Client do
   def find_consumer(client, topic, partition) do
     case safe_gen_call(client, :get_consumers_sup_pid, :infinity) do
       {:ok, sup_pid} ->
-        # TODO brod_consumers_sup:find_consumer(sup_id, topic, partition)
+        # MODIFY brod_consumers_sup:find_consumer(sup_id, topic, partition)
         {sup_pid, topic, partition}
 
       {:error, reason} ->
@@ -546,7 +546,6 @@ defmodule BrodMimic.Client do
 
   # Continue with {{ok, Result}, NewState}
   # return whatever error immediately.
-  # @spec with_ok(result, fn((_, state()) end) :: result)) :: result when result :: {:ok | {:ok, term()} | {:error, any()}, state()}
   defp with_ok({:ok, state}, continue) do
     continue.(:ok, state)
   end

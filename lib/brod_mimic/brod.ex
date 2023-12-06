@@ -1,4 +1,6 @@
 defmodule BrodMimic.Brod do
+  @moduledoc false
+
   use BrodMimic.Macros
 
   import Bitwise
@@ -560,14 +562,14 @@ defmodule BrodMimic.Brod do
     BrodUtils.fold(bootstrap, topic, partition, offset, opts, acc, fun, limits)
   end
 
-  def fetch(hosts, topic, partition, offset, maxWaitTime, min_bytes, max_bytes) do
-    fetch(hosts, topic, partition, offset, maxWaitTime, min_bytes, max_bytes, [])
+  def fetch(hosts, topic, partition, offset, max_wait_time, min_bytes, max_bytes) do
+    fetch(hosts, topic, partition, offset, max_wait_time, min_bytes, max_bytes, [])
   end
 
-  def fetch(hosts, topic, partition, offset, maxWaitTime, min_bytes, max_bytes, conn_config) do
-    fetchOpts = %{max_wait_time: maxWaitTime, min_bytes: min_bytes, max_bytes: max_bytes}
+  def fetch(hosts, topic, partition, offset, max_wait_time, min_bytes, max_bytes, conn_config) do
+    fetch_opts = %{max_wait_time: max_wait_time, min_bytes: min_bytes, max_bytes: max_bytes}
 
-    case fetch({hosts, conn_config}, topic, partition, offset, fetchOpts) do
+    case fetch({hosts, conn_config}, topic, partition, offset, fetch_opts) do
       {:ok, {_hw_offset, batch}} ->
         {:ok, batch}
 

@@ -1,4 +1,6 @@
 defmodule BrodMimic.ProducerBuffer do
+  @moduledoc false
+
   import Record, only: [defrecord: 3]
 
   alias BrodMimic.Utils, as: BrodUtils
@@ -154,7 +156,7 @@ defmodule BrodMimic.ProducerBuffer do
     r_buf(buf, onwire_count: on_wire_count - 1, onwire: rest)
   end
 
-  def nack(r_buf(onwire: [{ref, _Reqs} | _]) = buf, ref, reason) do
+  def nack(r_buf(onwire: [{ref, _reqs} | _]) = buf, ref, reason) do
     nack_all(buf, reason)
   end
 
@@ -358,7 +360,7 @@ defmodule BrodMimic.ProducerBuffer do
     (m * 1_000_000 + s) * 1000 + div(micro, 1000)
   end
 
-  def empty_buffers(buffer = r_buf()) do
+  def empty_buffers(r_buf() = buffer) do
     r_buf(buffer, pending: :queue.new(), buffer: :queue.new(), onwire: [])
   end
 end
