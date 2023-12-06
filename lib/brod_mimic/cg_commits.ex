@@ -168,7 +168,7 @@ defmodule BrodMimic.CgCommits do
   end
 
   def handle_info(info, state) do
-    log(state, :info, 'Info discarded:~p', [info])
+    Logger.info(fn -> log_string(state, "Info discarded:~p", [info]) end)
     {:noreply, state}
   end
 
@@ -204,7 +204,10 @@ defmodule BrodMimic.CgCommits do
             p
           end
 
-        log(state, :error, 'Nonexisting partitions in input: ~p', [partition_numbers])
+        Logger.error(fn ->
+          log_string(state, "Nonexisting partitions in input: ~p", [partition_numbers])
+        end)
+
         :erlang.exit({:non_existing_partitions, partition_numbers})
     end
 
@@ -229,7 +232,9 @@ defmodule BrodMimic.CgCommits do
           topic: my_topic
         ) = state
       ) do
-    is_leader or log(state, :info, 'Not elected', [])
+    if not is_leader do
+      Logger.info(fn -> log_string(state, "Not elected", []) end)
+    end
 
     groupped0 =
       BrodUtils.group_per_key(
@@ -251,11 +256,14 @@ defmodule BrodMimic.CgCommits do
         groupped0
       )
 
-    log(state, :info, 'current offsets:\n~p', [groupped])
+    Logger.info(fn -> log_string(state, "current offsets:\n~p", [groupped]) end)
 
     case groupped do
       [] ->
-        log(state, :error, 'Topic ~s is not received in assignment', [my_topic])
+        Logger.error(fn ->
+          log_string(state, "Topic ~s is not received in assignment", [my_topic])
+        end)
+
         :erlang.exit({:bad_topic_assignment, groupped0})
 
       [{^my_topic, partition_offset_list}] ->
@@ -296,7 +304,7 @@ defmodule BrodMimic.CgCommits do
         :ok
 
       {:error, reason} ->
-        log(state, :error, 'Failed to commit, reason:\n~p', [reason])
+        Logger.error(fn -> log_string(state, "Failed to commit, reason:\n~p", [reason]) end)
         :erlang.exit(:commit_failed)
     end
 
@@ -333,7 +341,7 @@ defmodule BrodMimic.CgCommits do
 
   defp maybe_reply_sync(r_state(pending_sync: from) = state) do
     GenServer.reply(from, :ok)
-    log(state, :info, 'done\n', [])
+    Logger.info(fn -> log_string(state, "done\n", []) end)
     r_state(state, pending_sync: :undefined)
   end
 
@@ -348,19 +356,7 @@ defmodule BrodMimic.CgCommits do
     ]
   end
 
-  defp log(r_state(group_id: group_id), level, fmt, args) do
-    case :logger.allow(level, __MODULE__) do
-      true ->
-        :erlang.apply(:logger, :macro_log, [
-          %{mfa: {__MODULE__, :log, 4}, line: 308, file: '../brod/src/brod_cg_commits.erl'},
-          level,
-          'Group member (~s,coor=~p):\n' ++ fmt,
-          [group_id, self() | args],
-          %{domain: [:brod]}
-        ])
-
-      false ->
-        :ok
-    end
+  defp log_string(r_state(group_id: group_id), format_string, args) do
+    :io_lib.format("Group member (~s,coor=~p):\n" <> format_string, [group_id, self() | args])
   end
 end
