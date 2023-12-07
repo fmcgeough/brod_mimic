@@ -91,7 +91,7 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   def start_link(sup_name, mod, args) do
-    GenServer.start_link(sup_name, BrodSupervisor3, {sup_name, mod, args}, [])
+    :gen_server.start_link(sup_name, BrodSupervisor3, {sup_name, mod, args}, [])
   end
 
   def start_child(supervisor, child_spec) do
@@ -997,10 +997,10 @@ defmodule BrodMimic.Supervisor3 do
 
       {:terminate, _n_state} ->
         t_ref =
-          :erlang.send_after(
-            trunc(delay * 1000),
+          Process.send_after(
             self(),
-            {:delayed_restart, {{restart_type, delay}, reason, child}}
+            {:delayed_restart, {{restart_type, delay}, reason, child}},
+            trunc(delay * 1000)
           )
 
         n_state =

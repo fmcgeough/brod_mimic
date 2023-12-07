@@ -757,19 +757,18 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   defp translate_members(members) do
-    :lists.map(
-      fn member ->
-        member_id = :kpro.find(:member_id, member)
-        meta = :kpro.find(:metadata, member)
-        version = :kpro.find(:version, meta)
-        topics = :kpro.find(:topics, meta)
-        user_data = :kpro.find(:user_data, meta)
+    Enum.map(members, fn member ->
+      member_id = :kpro.find(:member_id, member)
+      meta = :kpro.find(:metadata, member)
+      version = :kpro.find(:version, meta)
+      topics = :kpro.find(:topics, meta)
+      user_data = :kpro.find(:user_data, meta)
 
-        {member_id,
-         r_kafka_group_member_metadata(version: version, topics: topics, user_data: user_data)}
-      end,
-      members
-    )
+      member_data =
+        r_kafka_group_member_metadata(version: version, topics: topics, user_data: user_data)
+
+      {member_id, member_data}
+    end)
   end
 
   defp all_topics(members) do
@@ -962,7 +961,7 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   defp start_heartbeat_timer(hb_rate_sec) do
-    :erlang.send_after(:timer.seconds(hb_rate_sec), self(), :lo_cmd_send_heartbeat)
+    Process.send_after(self(), :lo_cmd_send_heartbeat, :timer.seconds(hb_rate_sec))
     :ok
   end
 
@@ -988,7 +987,7 @@ defmodule BrodMimic.GroupCoordinator do
         end
 
         timeout = :timer.seconds(seconds)
-        timer = :erlang.send_after(timeout, self(), :lo_cmd_commit_offsets)
+        Process.send_after(self(), :lo_cmd_commit_offsets, timeout)
         {:ok, r_state(state, offset_commit_timer: timer)}
     end
   end

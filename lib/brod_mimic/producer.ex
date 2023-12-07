@@ -435,7 +435,7 @@ defmodule BrodMimic.Producer do
 
   defp start_delay_send_timer(timeout) do
     msg_ref = make_ref()
-    t_ref = :erlang.send_after(timeout, self(), {:delayed_send, msg_ref})
+    t_ref = Process.send_after(self(), {:delayed_send, msg_ref}, timeout)
     {t_ref, msg_ref}
   end
 
@@ -462,7 +462,7 @@ defmodule BrodMimic.Producer do
            retry_backoff_ms: timeout
          ) = state
        ) do
-    t_ref = :erlang.send_after(timeout, self(), :retry)
+    t_ref = Process.send_after(self(), :retry, timeout)
     {:ok, r_state(state, retry_tref: t_ref)}
   end
 

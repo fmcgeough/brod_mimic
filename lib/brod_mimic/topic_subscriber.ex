@@ -546,6 +546,6 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   defp send_lo_cmd(cmd, delay_ms) do
-    :erlang.send_after(delay_ms, self(), cmd)
+    Process.send_after(self(), cmd, delay_ms)
   end
 end

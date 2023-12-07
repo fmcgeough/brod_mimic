@@ -23,7 +23,6 @@ defmodule BrodMimic.Consumer do
   # 100 KB
   @default_prefetch_bytes 102_400
   @default_offset_reset_policy :reset_by_subscriber
-  @error_cooldown 1_000
   @connection_retry_delay_ms 1_000
   @default_offset_reset_policy :reset_by_subscriber
   @default_isolation_level :read_committed
@@ -766,7 +765,7 @@ defmodule BrodMimic.Consumer do
   end
 
   defp maybe_delay_fetch_request(r_state(sleep_timeout: t) = state) when t > 0 do
-    _ = :erlang.send_after(t, self(), :send_fetch_request)
+    _ = Process.send_after(self(), :send_fetch_request, t)
     state
   end
 
@@ -1006,14 +1005,11 @@ defmodule BrodMimic.Consumer do
   end
 
   defp maybe_send_init_connection(r_state(subscriber: subscriber)) do
-    timeout = 1000
+    timeout = @connection_retry_delay_ms
 
-    BrodUtils.is_pid_alive(subscriber) and
-      :erlang.send_after(
-        timeout,
-        self(),
-        :init_connection
-      )
+    if BrodUtils.is_pid_alive(subscriber) do
+      Process.send_after(self(), :init_connection, timeout)
+    end
 
     :ok
   end

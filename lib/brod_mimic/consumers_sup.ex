@@ -22,7 +22,7 @@ defmodule BrodMimic.ConsumersSup do
   """
   @spec start_link() :: {:ok, pid()}
   def start_link do
-    BrodSupervisor3.start_link(__MODULE__, __MODULE__)
+    BrodSupervisor3.start_link(__MODULE__, @topics_sup)
   end
 
   @doc """
@@ -76,7 +76,7 @@ defmodule BrodMimic.ConsumersSup do
   supervisor3 callback.
   """
   @impl true
-  def init(__MODULE__) do
+  def init(@topics_sup) do
     {:ok, {{:one_for_one, 0, 1}, []}}
   end
 
