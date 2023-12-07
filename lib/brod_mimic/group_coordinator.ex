@@ -10,6 +10,15 @@ defmodule BrodMimic.GroupCoordinator do
   alias BrodMimic.KafkaRequest, as: BrodKafkaRequest
   alias BrodMimic.Utils, as: BrodUtils
 
+  require Logger
+
+  @leaving_group "Leaving group, reason: ~p\n"
+  @rejoining_group "re-joining group, reason:~p"
+  @failed_to_join_group "failed to join group\nreason: ~p"
+  @elected "elected=~p"
+  @assignments_received "assignments received:~s"
+  @group_member_info "Group member (~s,coor=~p,cb=~p,generation=~p):\n"
+
   defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
 
   defrecord(:r_kafka_message_set, :kafka_message_set,
@@ -233,7 +242,7 @@ defmodule BrodMimic.GroupCoordinator do
         reason,
         r_state(connection: connection, group_id: group_id, member_id: member_id) = state
       ) do
-    log(state, :info, 'Leaving group, reason: ~p\n', [reason])
+    Logger.info(fn -> log_string(state, @leaving_group, [reason]) end)
     body = [{:group_id, group_id}, {:member_id, member_id}]
     _ = try_commit_offsets(state)
     request = :kpro.make_request(:leave_group, _v = 0, body)
@@ -331,7 +340,7 @@ defmodule BrodMimic.GroupCoordinator do
     is_reference(offset_commit_timer) and :erlang.cancel_timer(offset_commit_timer)
 
     if reason != :undef do
-      log(state0, :info, "re-joining group, reason:~p", [reason])
+      Logger.info(fn -> log_string(state0, @rejoining_group, [reason]) end)
     end
 
     # 1. unsubscribe all currently assigned partitions
@@ -372,7 +381,7 @@ defmodule BrodMimic.GroupCoordinator do
     f3 = &sync_group/1
 
     retry_fun = fn state_in, new_reason ->
-      log(state_in, :info, "failed to join group\nreason: ~p", [new_reason])
+      Logger.info(fn -> log_string(state_in, @failed_to_join_group, [new_reason]) end)
 
       case attempt_num === 0 do
         true ->
@@ -483,7 +492,7 @@ defmodule BrodMimic.GroupCoordinator do
         members: members
       )
 
-    log(state, :info, 'elected=~p', [is_group_leader])
+    Logger.info(fn -> log_string(state, @elected, [is_group_leader]) end)
     {:ok, state}
   end
 
@@ -519,7 +528,11 @@ defmodule BrodMimic.GroupCoordinator do
       member_module.assignments_received(member_pid, member_id, generation_id, topic_assignments)
 
     new_state = r_state(state, is_in_group: true)
-    log(new_state, :info, 'assignments received:~s', [format_assignments(topic_assignments)])
+
+    Logger.info(fn ->
+      log_string(new_state, @assignments_received, [format_assignments(topic_assignments)])
+    end)
+
     start_offset_commit_timer(new_state)
   end
 
@@ -987,7 +1000,7 @@ defmodule BrodMimic.GroupCoordinator do
         end
 
         timeout = :timer.seconds(seconds)
-        Process.send_after(self(), :lo_cmd_commit_offsets, timeout)
+        timer = Process.send_after(self(), :lo_cmd_commit_offsets, timeout)
         {:ok, r_state(state, offset_commit_timer: timer)}
     end
   end
@@ -1026,37 +1039,6 @@ defmodule BrodMimic.GroupCoordinator do
            throw(reason)
        end
      end).()
-  end
-
-  defp log(
-         r_state(group_id: group_id, generation_id: generation_id, member_pid: member_pid),
-         level,
-         fmt,
-         args
-       ) do
-    case :logger.allow(level, :brod_group_coordinator) do
-      true ->
-        :erlang.apply(:logger, :macro_log, [
-          %{
-            mfa: {:brod_group_coordinator, :log, 4},
-            line: 1099,
-            file: '../brod/src/brod_group_coordinator.erl'
-          },
-          level,
-          'Group member (~s,coor=~p,cb=~p,generation=~p):\n' ++ fmt,
-          [
-            group_id,
-            self(),
-            member_pid,
-            generation_id
-            | args
-          ],
-          %{domain: [:brod]}
-        ])
-
-      false ->
-        :ok
-    end
   end
 
   defp make_offset_commit_metadata do
@@ -1125,5 +1107,18 @@ defmodule BrodMimic.GroupCoordinator do
 
   defp is_default_offset_retention(_) do
     false
+  end
+
+  defp log_string(
+         r_state(group_id: group_id, generation_id: generation_id, member_pid: member_pid),
+         format_string,
+         args
+       ) do
+    :io_lib.format(@group_member_info <> format_string, [
+      group_id,
+      self(),
+      member_pid,
+      generation_id | args
+    ])
   end
 end

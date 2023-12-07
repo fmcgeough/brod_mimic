@@ -609,18 +609,16 @@ defmodule BrodMimic.Utils do
   """
   @spec parse_rsp(kpro_rsp()) :: :ok | {:ok, term()} | {:error, any()}
   def parse_rsp(kpro_rsp(api: api, vsn: vsn, msg: msg)) do
-    try do
-      parse(api, vsn, msg)
-    catch
-      error_code_or_message ->
-        {:error, error_code_or_message}
-    else
-      :ok ->
-        :ok
+    parse(api, vsn, msg)
+  catch
+    error_code_or_message ->
+      {:error, error_code_or_message}
+  else
+    :ok ->
+      :ok
 
-      result ->
-        {:ok, result}
-    end
+    result ->
+      {:ok, result}
   end
 
   @spec request_sync(connection(), Brod.req()) :: :ok | {:ok, term()} | {:error, any()}
@@ -717,22 +715,20 @@ defmodule BrodMimic.Utils do
   end
 
   defp do_acc(spawn, fetcher, offset, acc, fun, [msg | rest], end__, count) do
-    try do
-      fun.(msg, acc)
-    catch
-      c, e ->
-        :ok
-        kill_fetcher(fetcher)
-        :erlang.raise(c, e, __STACKTRACE__)
-    else
-      {:ok, new_acc} ->
-        next_offset = kafka_message(msg, :offset) + 1
-        do_acc(spawn, fetcher, next_offset, new_acc, fun, rest, end__, count - 1)
+    fun.(msg, acc)
+  catch
+    c, e ->
+      :ok
+      kill_fetcher(fetcher)
+      :erlang.raise(c, e, __STACKTRACE__)
+  else
+    {:ok, new_acc} ->
+      next_offset = kafka_message(msg, :offset) + 1
+      do_acc(spawn, fetcher, next_offset, new_acc, fun, rest, end__, count - 1)
 
-      {:error, reason} ->
-        :ok = kill_fetcher(fetcher)
-        {acc, offset, reason}
-    end
+    {:error, reason} ->
+      :ok = kill_fetcher(fetcher)
+      {acc, offset, reason}
   end
 
   defp kill_fetcher(:undefined) do

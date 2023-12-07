@@ -631,11 +631,7 @@ defmodule BrodMimic.Consumer do
 
         is_reference(mref) and :erlang.demonitor(mref)
 
-        new_state =
-          r_state(state,
-            connection: :undefined,
-            connection_mref: :undefined
-          )
+        new_state = r_state(state, connection: :undefined, connection_mref: :undefined)
 
         :ok = maybe_send_init_connection(new_state)
         {:noreply, new_state}

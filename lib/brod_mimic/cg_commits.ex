@@ -14,6 +14,7 @@ defmodule BrodMimic.CgCommits do
 
   @partitions_not_received "Partitions ~p are not received in assignment, There is probably another active group member subscribing to topic ~s, stop it and retry"
   @nonexistent_partitions "Nonexisting partitions in input: ~p"
+  @topic_not_in_assignment "Topic ~s is not received in assignment"
 
   defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
@@ -237,34 +238,18 @@ defmodule BrodMimic.CgCommits do
         assignments
       )
 
-    groupped =
-      :lists.filter(
-        fn {topic, _} ->
-          topic === my_topic
-        end,
-        groupped0
-      )
+    groupped = Enum.filter(groupped0, fn {topic, _} -> topic === my_topic end)
 
     Logger.info(fn -> log_string(state, "current offsets:\n~p", [groupped]) end)
 
     case groupped do
       [] ->
-        Logger.error(fn ->
-          log_string(state, "Topic ~s is not received in assignment", [my_topic])
-        end)
-
+        Logger.error(fn -> log_string(state, @topic_not_in_assignment, [my_topic]) end)
         :erlang.exit({:bad_topic_assignment, groupped0})
 
       [{^my_topic, partition_offset_list}] ->
-        my_partitions =
-          for {p, _o} <- offsets_to_commit do
-            p
-          end
-
-        received_partitions =
-          for {p, _o} <- partition_offset_list do
-            p
-          end
+        my_partitions = Enum.map(offsets_to_commit, &elem(&1, 0))
+        received_partitions = Enum.map(partition_offset_list, &elem(&1, 0))
 
         case my_partitions -- received_partitions do
           [] ->
