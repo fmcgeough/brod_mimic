@@ -189,6 +189,7 @@ defmodule BrodMimic.KafkaRequest do
     vsn
   end
 
+  @spec pick_version(api(), pid() | integer()) :: vsn()
   defp pick_version(api, connection) when is_pid(connection) do
     BrodKafkaApis.pick_version(connection, api)
   end

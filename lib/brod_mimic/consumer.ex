@@ -12,6 +12,8 @@ defmodule BrodMimic.Consumer do
 
   require Logger
 
+  @fetch_error "Fetch error ~s-~p: ~p"
+
   @default_min_bytes 0
   # 1 MB
   @default_max_bytes 1_048_576
@@ -614,20 +616,9 @@ defmodule BrodMimic.Consumer do
        ) do
     case err_op(error_code) do
       :reset_connection ->
-        case :logger.allow(:info, :brod_consumer) do
-          true ->
-            Logger.info(
-              fn ->
-                "Fetch error ~s-~p: ~p"
-                |> :io_lib.format([topic, partition, error_code])
-                |> to_string()
-              end,
-              %{domain: [:brod]}
-            )
-
-          false ->
-            :ok
-        end
+        Logger.info(fn -> log_string(@fetch_error, [topic, partition, error_code]) end, %{
+          domain: [:brod]
+        })
 
         is_reference(mref) and :erlang.demonitor(mref)
 
@@ -1012,5 +1003,9 @@ defmodule BrodMimic.Consumer do
 
   defp is_shared_conn(bootstrap) do
     is_pid(bootstrap)
+  end
+
+  defp log_string(format_string, args) do
+    :io_lib.format(format_string, args)
   end
 end
