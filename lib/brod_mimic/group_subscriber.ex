@@ -741,9 +741,7 @@ defmodule BrodMimic.GroupSubscriber do
 
   def subscribe_partition(client, consumer) do
     consumer(
-      topic_partition: {topic, partition},
       consumer_pid: pid,
-      begin_offset: begin_offset0,
       acked_offset: acked_offset,
       last_offset: last_offset
     ) = consumer
@@ -762,27 +760,37 @@ defmodule BrodMimic.GroupSubscriber do
       false ->
         # fetch from the last acked offset + 1
         # otherwise fetch from the assigned begin_offset
-        begin_offset =
-          case acked_offset do
-            :undefined -> begin_offset0
-            n when n >= 0 -> n + 1
-          end
+        resubscribe_partition(client, consumer)
+    end
+  end
 
-        options =
-          case begin_offset == :undefined do
-            # fetch from 'begin_offset' in consumer config
-            true -> []
-            false -> [{:begin_offset, begin_offset}]
-          end
+  defp resubscribe_partition(client, consumer) do
+    consumer(
+      topic_partition: {topic, partition},
+      begin_offset: begin_offset0,
+      acked_offset: acked_offset
+    ) = consumer
 
-        case Brod.subscribe(client, self(), topic, partition, options) do
-          {:ok, consumer_pid} ->
-            mref = Process.monitor(consumer_pid)
-            consumer(consumer, consumer_pid: consumer_pid, consumer_mref: mref)
+    begin_offset =
+      case acked_offset do
+        :undefined -> begin_offset0
+        n when n >= 0 -> n + 1
+      end
 
-          {:error, reason} ->
-            consumer(consumer, consumer_pid: down(reason), consumer_mref: :undefined)
-        end
+    options =
+      case begin_offset == :undefined do
+        # fetch from 'begin_offset' in consumer config
+        true -> []
+        false -> [{:begin_offset, begin_offset}]
+      end
+
+    case Brod.subscribe(client, self(), topic, partition, options) do
+      {:ok, consumer_pid} ->
+        mref = Process.monitor(consumer_pid)
+        consumer(consumer, consumer_pid: consumer_pid, consumer_mref: mref)
+
+      {:error, reason} ->
+        consumer(consumer, consumer_pid: down(reason), consumer_mref: :undefined)
     end
   end
 

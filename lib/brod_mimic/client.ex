@@ -607,7 +607,7 @@ defmodule BrodMimic.Client do
     request = KafkaRequest.metadata(conn, topics)
 
     case request_sync(state, request) do
-      {:ok, kpro_rsp(api: metadata, msg: metadata)} ->
+      {:ok, kpro_rsp(api: :metadata, msg: metadata)} ->
         topic_metadata_array = kf(:topics, metadata)
         :ok = update_partitions_count_cache(ets, topic_metadata_array)
         {{:ok, metadata}, state}

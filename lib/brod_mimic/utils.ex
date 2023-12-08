@@ -521,32 +521,16 @@ defmodule BrodMimic.Utils do
     )
   end
 
+  @doc """
+  List all groups in the given coordinator broker
+  """
   def list_groups(endpoint, conn_cfg) do
     with_conn([endpoint], conn_cfg, fn pid ->
       request = BrodKafkaRequest.list_groups(pid)
 
       case request_sync(pid, request) do
         {:ok, groups0} ->
-          groups =
-            :lists.map(
-              fn struct ->
-                id =
-                  :kpro.find(
-                    :group_id,
-                    struct
-                  )
-
-                type =
-                  :kpro.find(
-                    :protocol_type,
-                    struct
-                  )
-
-                r_brod_cg(id: id, protocol_type: type)
-              end,
-              groups0
-            )
-
+          groups = map_list_groups_result(groups0)
           {:ok, groups}
 
         {:error, reason} ->
@@ -666,6 +650,14 @@ defmodule BrodMimic.Utils do
       end
 
     %{timeout: timeout}
+  end
+
+  defp map_list_groups_result(groups0) do
+    Enum.map(groups0, fn struct ->
+      id = :kpro.find(:group_id, struct)
+      type = :kpro.find(:protocol_type, struct)
+      r_brod_cg(id: id, protocol_type: type)
+    end)
   end
 
   defp do_fold(spawn, {pid, mref}, offset, acc, fun, end__, count) do

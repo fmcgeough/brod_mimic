@@ -687,26 +687,21 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   defp collect_commit_response_error_codes(topics) do
-    :lists.foldl(
-      fn topic, acc1 ->
-        partitions = :kpro.find(:partitions, topic)
+    List.foldl(topics, :gb_sets.new(), fn topic, acc1 ->
+      partitions = :kpro.find(:partitions, topic)
+      collect_partitions_response_error_codes(partitions, acc1)
+    end)
+  end
 
-        :lists.foldl(
-          fn partition, acc2 ->
-            ec = :kpro.find(:error_code, partition)
+  defp collect_partitions_response_error_codes(partitions, gb_set) do
+    List.foldl(partitions, gb_set, fn partition, acc2 ->
+      ec = :kpro.find(:error_code, partition)
 
-            case is_error(ec) do
-              true -> :gb_sets.add_element(ec, acc2)
-              false -> acc2
-            end
-          end,
-          acc1,
-          partitions
-        )
-      end,
-      :gb_sets.new(),
-      topics
-    )
+      case is_error(ec) do
+        true -> :gb_sets.add_element(ec, acc2)
+        false -> acc2
+      end
+    end)
   end
 
   defp assign_partitions(state) when r_state(state, :leader_id) === r_state(state, :member_id) do
