@@ -330,6 +330,14 @@ defmodule BrodMimic.Client do
   end
 
   @doc """
+  Ensure not topic auto creation even if Kafka has it enabled.
+  """
+  @spec get_metadata_safe(client(), topic()) :: {:ok, :kpro.struct()} | {:error, any()}
+  def get_metadata_safe(client, topic) do
+    safe_gen_call(client, {:get_metadata, {_fetch_metdata_for_topic = :all, topic}}, :infinity)
+  end
+
+  @doc """
   Get number of partitions for a given topic.
   """
   @spec get_partitions_count(client(), topic()) :: {:ok, pos_integer()} | {:error, any()}
@@ -339,11 +347,11 @@ defmodule BrodMimic.Client do
     get_partitions_count(client, topic, %{allow_topic_auto_creation: true})
   end
 
-  defp get_partitions_count(client, topic, opts) when is_atom(client) do
+  def get_partitions_count(client, topic, opts) when is_atom(client) do
     do_get_partitions_count(client, client, topic, opts)
   end
 
-  defp get_partitions_count(client, topic, opts) when is_pid(client) do
+  def get_partitions_count(client, topic, opts) when is_pid(client) do
     case safe_gen_call(client, :get_workers_table, :infinity) do
       {:ok, ets} ->
         do_get_partitions_count(client, ets, topic, opts)
@@ -486,6 +494,99 @@ defmodule BrodMimic.Client do
     {:noreply, state}
   end
 
+  @impl true
+  def handle_call({:stop_producer, topic}, _from, state) do
+    :ok = BrodProducersSup.stop_producer(r_state(state, :producers_sup), topic)
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:stop_consumer, topic}, _from, state) do
+    :ok = BrodConsumersSup.stop_consumer(r_state(state, :consumers_sup), topic)
+    {:reply, :ok, state}
+  end
+
+  def handle_call({:get_leader_connection, topic, partition}, _from, state) do
+    {result, new_state} = do_get_leader_connection(state, topic, partition)
+    {:reply, result, new_state}
+  end
+
+  def handle_call({:get_connection, host, port}, _from, state) do
+    {result, new_state} = maybe_connect(state, {host, port})
+    {:reply, result, new_state}
+  end
+
+  def handle_call({:get_group_coordinator, group_id}, _from, state) do
+    {result, new_state} = do_get_group_coordinator(state, group_id)
+    {:reply, result, new_state}
+  end
+
+  def handle_call({:start_producer, topic_name, producer_config}, _from, state) do
+    {reply, new_state} = do_start_producer(topic_name, producer_config, state)
+    {:reply, reply, new_state}
+  end
+
+  def handle_call({:start_consumer, topic_name, consumer_config}, _from, state) do
+    {reply, new_state} = do_start_consumer(topic_name, consumer_config, state)
+    {:reply, reply, new_state}
+  end
+
+  def handle_call({:auto_start_producer, topic}, _from, state) do
+    config = r_state(state, :config)
+
+    case config(:auto_start_producers, config, false) do
+      true ->
+        producer_config = config(:default_producer_config, config, [])
+        {reply, new_state} = do_start_producer(topic, producer_config, state)
+        {:reply, reply, new_state}
+
+      false ->
+        {:reply, {:error, :disabled}, state}
+    end
+  end
+
+  def handle_call(:get_workers_table, _from, state) do
+    {:reply, {:ok, r_state(state, :workers_tab)}, state}
+  end
+
+  def handle_call(:get_producers_sup_pid, _from, state) do
+    {:reply, {:ok, r_state(state, :producers_sup)}, state}
+  end
+
+  def handle_call(:get_consumers_sup_pid, _from, state) do
+    {:reply, {:ok, r_state(state, :consumers_sup)}, state}
+  end
+
+  def handle_call({:get_metadata, topic}, _from, state) do
+    {result, new_state} = do_get_metadata(topic, state)
+    {:reply, result, new_state}
+  end
+
+  def handle_call(:stop, _from, state) do
+    {:stop, :normal, :ok, state}
+  end
+
+  def handle_call(call, _from, state) do
+    {:reply, {:error, {:unknown_call, call}}, state}
+  end
+
+  @impl true
+  def handle_cast({:register, key, pid}, r_state(workers_tab: tab) = state) do
+    :ets.insert(tab, {key, pid})
+    {:noreply, state}
+  end
+
+  def handle_cast({:deregister, key}, r_state(workers_tab: tab) = state) do
+    :ets.delete(tab, key)
+    {:noreply, state}
+  end
+
+  def handle_cast(cast, state) do
+    client_id = r_state(state, :client_id)
+    msg = "#{__MODULE__}, #{inspect(self())}, #{client_id} got unexpected cast: #{inspect(cast)})"
+    Logger.warn(msg)
+    {:noreply, state}
+  end
+
   ### Internal use
 
   @spec get_partition_worker(client(), partition_worker_key()) ::
@@ -507,15 +608,35 @@ defmodule BrodMimic.Client do
   end
 
   def get_partition_worker(client_id, key) when is_atom(client_id) do
-    lookup_partition_worker(client_id, ets(client_id), key)
+    case lookup_partition_worker(client_id, client_id, key) do
+      {:ok, pid} ->
+        case :erlang.is_process_alive(pid) do
+          true ->
+            {:ok, pid}
+
+          false ->
+            get_partition_worker_with_ets(client_id, key)
+        end
+
+      other ->
+        other
+    end
   end
 
-  @doc """
-  """
+  defp get_partition_worker_with_ets(client, key) do
+    case safe_gen_call(client, :get_workers_table, :infinity) do
+      {:ok, ets} ->
+        lookup_partition_worker(client, ets, key)
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   @spec lookup_partition_worker(client(), :ets.tab(), partition_worker_key()) ::
           {:ok, pid()}
           | {:error, get_worker_error()}
-  def lookup_partition_worker(client, ets, key) do
+  defp lookup_partition_worker(client, ets, key) do
     case :ets.lookup(ets, key) do
       [] ->
         ## not yet registered, 2 possible reasons:
@@ -538,11 +659,11 @@ defmodule BrodMimic.Client do
 
   @spec find_partition_worker(client(), partition_worker_key()) ::
           {:ok, pid()} | {:error, get_worker_error()}
-  def find_partition_worker(client, {:producer, topic, partition}) do
+  defp find_partition_worker(client, {:producer, topic, partition}) do
     find_producer(client, topic, partition)
   end
 
-  def find_partition_worker(client, {:consumer, topic, partition}) do
+  defp find_partition_worker(client, {:consumer, topic, partition}) do
     find_consumer(client, topic, partition)
   end
 
@@ -591,7 +712,7 @@ defmodule BrodMimic.Client do
       false ->
         # Try fetch metadata (and populate partition count cache)
         # Then validate topic existence again.
-        get_metadata_result = get_metadata_safe(topic, state)
+        get_metadata_result = do_get_metadata_safe(topic, state)
         with_ok_func = fn _, s -> validate_topic_existence(topic, s, true) end
         with_ok(get_metadata_result, with_ok_func)
     end
@@ -615,7 +736,7 @@ defmodule BrodMimic.Client do
   # do not try to fetch metadata per topic name, fetch all topics instead.
   # As sending metadata request with topic name will cause an auto creation
   # of the topic if auto.create.topics.enable is enabled in broker config.
-  defp get_metadata_safe(topic0, r_state(config: config) = state) do
+  defp do_get_metadata_safe(topic0, r_state(config: config) = state) do
     topic =
       case config(:allow_topic_auto_creation, config, true) do
         true -> topic0
@@ -751,14 +872,15 @@ defmodule BrodMimic.Client do
     :ok
   end
 
-  @doc """
-  Get partition counter from cache.
-
-  If cache is not hit, send meta data request to retrieve.
-  """
-  @spec get_partitions_count(client(), :ets.tab(), topic()) ::
-          {:ok, pos_integer()} | {:error, any()}
-  def get_partitions_count(client, ets, topic) do
+  # Get partition counter from cache.
+  #
+  # If cache is not hit, send meta data request to retrieve.
+  @spec do_get_partitions_count(client(), :ets.tab(), topic(), %{
+          required(:allow_topic_auto_creation) => boolean()
+        }) :: {:ok, pos_integer()} | {:error, any()}
+  defp do_get_partitions_count(client, ets, topic, %{
+         allow_topic_auto_creation: allow_auto_creation
+       }) do
     case lookup_partitions_count_cache(ets, topic) do
       {:ok, result} ->
         {:ok, result}
@@ -767,26 +889,44 @@ defmodule BrodMimic.Client do
         {:error, reason}
 
       false ->
-        # This call should populate the cache
-        case get_metadata(client, topic) do
-          {:ok, meta} ->
-            [topic_metadata] = kf(:topic_metadata, meta)
-            do_get_partitions_count(topic_metadata)
+        metadata_response =
+          case allow_auto_creation do
+            true ->
+              get_metadata(client, topic)
 
-          {:error, reason} ->
-            {:error, reason}
-        end
+            false ->
+              get_metadata_safe(client, topic)
+          end
+
+        find_partition_count_in_metadata(metadata_response, topic)
     end
   end
 
-  @spec do_get_partitions_count(:kpro.struct()) :: {:ok, pos_integer()} | {:error, any()}
-  def do_get_partitions_count(topic_metadata) do
-    error_code = kf(:error_code, topic_metadata)
-    partitions = kf(:partition_metadata, topic_metadata)
+  defp find_partition_count_in_metadata({:ok, meta}, topic) do
+    topic_metadata_arrary = kf(:topics, meta)
 
-    case is_error(error_code) do
-      true -> {:error, error_code}
-      false -> {:ok, Enum.count(partitions)}
+    find_partition_count_in_topic_metadata_array(topic_metadata_arrary, topic)
+  end
+
+  defp find_partition_count_in_metadata({:error, reason}, _) do
+    {:error, reason}
+  end
+
+  defp find_partition_count_in_topic_metadata_array(topic_metadata_arrary, topic) do
+    filter_f = fn
+      %{name: n} when n === topic ->
+        true
+
+      _ ->
+        false
+    end
+
+    case :lists.filter(filter_f, topic_metadata_arrary) do
+      [topic_metadata] ->
+        get_partitions_count_in_metadata(topic_metadata)
+
+      [] ->
+        {:error, :unknown_topic_or_partition}
     end
   end
 
@@ -797,6 +937,10 @@ defmodule BrodMimic.Client do
           {:ok, pos_integer()}
           | {:error, any()}
           | false
+  def lookup_partitions_count_cache(_ets, :undefined) do
+    false
+  end
+
   def lookup_partitions_count_cache(ets, topic) do
     case :ets.lookup(ets, topic_metadata_key(topic)) do
       [{_, count, _ts}] when is_integer(count) ->
@@ -839,6 +983,17 @@ defmodule BrodMimic.Client do
 
       {:error, reason} ->
         {:error, reason}
+    end
+  end
+
+  @spec get_partitions_count_in_metadata(:kpro.struct()) :: {:ok, pos_integer()} | {:error, any()}
+  def get_partitions_count_in_metadata(topic_metadata) do
+    error_code = kf(:error_code, topic_metadata)
+    partitions = kf(:partitions, topic_metadata)
+
+    case is_error(error_code) do
+      true -> {:error, error_code}
+      false -> {:ok, length(partitions)}
     end
   end
 
@@ -1038,7 +1193,7 @@ defmodule BrodMimic.Client do
   defp update_partitions_count_cache(ets, [topic_metadata | rest]) do
     topic = kf(:topic, topic_metadata)
 
-    case do_get_partitions_count(topic_metadata) do
+    case get_partitions_count_in_metadata(topic_metadata) do
       {:ok, cnt} ->
         :ets.insert(ets, {{:topic_metadata, topic}, cnt, :os.timestamp()})
 
@@ -1063,99 +1218,4 @@ defmodule BrodMimic.Client do
   def ensure_binary(client_id) when is_binary(client_id) do
     client_id
   end
-
-  @impl true
-  def handle_call({:stop_producer, topic}, _from, state) do
-    :ok = BrodProducersSup.stop_producer(r_state(state, :producers_sup), topic)
-    {:reply, :ok, state}
-  end
-
-  def handle_call({:stop_consumer, topic}, _from, state) do
-    :ok = BrodConsumersSup.stop_consumer(r_state(state, :consumers_sup), topic)
-    {:reply, :ok, state}
-  end
-
-  def handle_call({:get_leader_connection, topic, partition}, _from, state) do
-    {result, new_state} = do_get_leader_connection(state, topic, partition)
-    {:reply, result, new_state}
-  end
-
-  def handle_call({:get_connection, host, port}, _from, state) do
-    {result, new_state} = maybe_connect(state, {host, port})
-    {:reply, result, new_state}
-  end
-
-  def handle_call({:get_group_coordinator, group_id}, _from, state) do
-    {result, new_state} = do_get_group_coordinator(state, group_id)
-    {:reply, result, new_state}
-  end
-
-  def handle_call({:start_producer, topic_name, producer_config}, _from, state) do
-    {reply, new_state} = do_start_producer(topic_name, producer_config, state)
-    {:reply, reply, new_state}
-  end
-
-  def handle_call({:start_consumer, topic_name, consumer_config}, _from, state) do
-    {reply, new_state} = do_start_consumer(topic_name, consumer_config, state)
-    {:reply, reply, new_state}
-  end
-
-  def handle_call({:auto_start_producer, topic}, _from, state) do
-    config = r_state(state, :config)
-
-    case config(:auto_start_producers, config, false) do
-      true ->
-        producer_config = config(:default_producer_config, config, [])
-        {reply, new_state} = do_start_producer(topic, producer_config, state)
-        {:reply, reply, new_state}
-
-      false ->
-        {:reply, {:error, :disabled}, state}
-    end
-  end
-
-  def handle_call(:get_workers_table, _from, state) do
-    {:reply, {:ok, r_state(state, :workers_tab)}, state}
-  end
-
-  def handle_call(:get_producers_sup_pid, _from, state) do
-    {:reply, {:ok, r_state(state, :producers_sup)}, state}
-  end
-
-  def handle_call(:get_consumers_sup_pid, _from, state) do
-    {:reply, {:ok, r_state(state, :consumers_sup)}, state}
-  end
-
-  def handle_call({:get_metadata, topic}, _from, state) do
-    {result, new_state} = do_get_metadata(topic, state)
-    {:reply, result, new_state}
-  end
-
-  def handle_call(:stop, _from, state) do
-    {:stop, :normal, :ok, state}
-  end
-
-  def handle_call(call, _from, state) do
-    {:reply, {:error, {:unknown_call, call}}, state}
-  end
-
-  @impl true
-  def handle_cast({:register, key, pid}, r_state(workers_tab: tab) = state) do
-    :ets.insert(tab, {key, pid})
-    {:noreply, state}
-  end
-
-  def handle_cast({:deregister, key}, r_state(workers_tab: tab) = state) do
-    :ets.delete(tab, key)
-    {:noreply, state}
-  end
-
-  def handle_cast(cast, state) do
-    client_id = r_state(state, :client_id)
-    msg = "#{__MODULE__}, #{inspect(self())}, #{client_id} got unexpected cast: #{inspect(cast)})"
-    Logger.warn(msg)
-    {:noreply, state}
-  end
-
-  defp ets(client_id), do: client_id
 end
