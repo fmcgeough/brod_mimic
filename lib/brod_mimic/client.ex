@@ -35,6 +35,10 @@ defmodule BrodMimic.Client do
   alias BrodMimic.KafkaRequest
   alias BrodMimic.ProducersSup, as: BrodProducersSup
 
+  @producer_supervisor_down "client ~p producers supervisor down~nreason: ~p"
+  @consumer_supervisor_down "client ~p consumers supervisor down~nreason: ~p"
+  @unexpected_info "~p [~p] ~p got unexpected info: ~p"
+
   defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
 
   defrecord(:r_kafka_message_set, :kafka_message_set,
@@ -226,7 +230,7 @@ defmodule BrodMimic.Client do
   @spec get_consumer(client(), topic(), partition()) ::
           {:ok, pid()} | {:error, get_consumer_error()}
   def get_consumer(client, topic, partition) do
-    get_partition_worker(client, consumer_key(topic, partition))
+    get_partition_worker(client, {:consumer, topic, partition})
   end
 
   @doc """
@@ -240,7 +244,7 @@ defmodule BrodMimic.Client do
         # already started
         :ok
 
-      {:error, {:producer_not_found, topic_name}} ->
+      {:error, {:producer_not_found, ^topic_name}} ->
         call = {:start_producer, topic_name, producer_config}
         safe_gen_call(client, call, :infinity)
 
@@ -329,16 +333,23 @@ defmodule BrodMimic.Client do
   Get number of partitions for a given topic.
   """
   @spec get_partitions_count(client(), topic()) :: {:ok, pos_integer()} | {:error, any()}
-  def get_partitions_count(client, topic) when is_atom(client) do
+  def get_partitions_count(client, topic) do
     # the name of the ets table that stores this data
     # is the same as the atom client id
-    get_partitions_count(client, client, topic)
+    get_partitions_count(client, topic, %{allow_topic_auto_creation: true})
   end
 
-  def get_partitions_count(client, topic) when is_pid(client) do
+  defp get_partitions_count(client, topic, opts) when is_atom(client) do
+    do_get_partitions_count(client, client, topic, opts)
+  end
+
+  defp get_partitions_count(client, topic, opts) when is_pid(client) do
     case safe_gen_call(client, :get_workers_table, :infinity) do
-      {:ok, ets} -> get_partitions_count(client, ets, topic)
-      {:error, reason} -> {:error, reason}
+      {:ok, ets} ->
+        do_get_partitions_count(client, ets, topic, opts)
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -441,6 +452,37 @@ defmodule BrodMimic.Client do
         consumers_sup: consumers_sup_pid
       )
 
+    {:noreply, state}
+  end
+
+  def handle_info(
+        {:EXIT, pid, reason},
+        r_state(client_id: client_id, producers_sup: pid) = state
+      ) do
+    error_string = :io_lib.format(@producer_supervisor_down, [client_id, pid, reason])
+    Logger.error(error_string, %{domain: [:brod]})
+    {:stop, {:producers_sup_down, reason}, state}
+  end
+
+  def handle_info(
+        {:EXIT, pid, reason},
+        r_state(client_id: client_id, consumers_sup: pid) = state
+      ) do
+    error_string = :io_lib.format(@consumer_supervisor_down, [client_id, pid, reason])
+    Logger.error(error_string, %{domain: [:brod]})
+    {:stop, {:consumers_sup_down, reason}, state}
+  end
+
+  def handle_info({:EXIT, pid, reason}, state) do
+    new_state = handle_connection_down(state, pid, reason)
+    {:noreply, new_state}
+  end
+
+  def handle_info(info, state) do
+    error_string =
+      :io_lib.format(@unexpected_info, [:brod_client, self(), r_state(state, :client_id), info])
+
+    Logger.warning(error_string, %{domain: [:brod]})
     {:noreply, state}
   end
 
