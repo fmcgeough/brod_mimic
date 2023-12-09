@@ -23,7 +23,6 @@ defmodule BrodMimic.Client do
   * `stop/1`
   * `stop_producer/2`
   * `stop_consumer/2`
-  ```
   """
   use BrodMimic.Macros
   use GenServer
@@ -639,10 +638,10 @@ defmodule BrodMimic.Client do
   defp lookup_partition_worker(client, ets, key) do
     case :ets.lookup(ets, key) do
       [] ->
-        ## not yet registered, 2 possible reasons:
-        ## 1. caller is too fast, producers/consumers are starting up
-        ##    make a synced call all the way down the supervision tree
-        ##    to the partition producer sup should resolve the race
+        # not yet registered, 2 possible reasons:
+        # 1. caller is too fast, producers/consumers are starting up
+        #    make a synced call all the way down the supervision tree
+        #    to the partition producer sup should resolve the race
         # 2. bad argument, no such worker started, supervisors should know
         find_partition_worker(client, key)
 

@@ -1,18 +1,19 @@
 defmodule BrodMimic.KafkaApis do
   @moduledoc """
-    -export([ default_version/1
-            , pick_version/2
-            , start_link/0
-            , stop/0
-            ]).
+  Wrapper around Kafka APIs
 
-    -export([ code_change/3
-            , handle_call/3
-            , handle_cast/2
-            , handle_info/2
-            , init/1
-            , terminate/2
-            ])
+  The Erlang library exports the following functions:
+
+  - `default_version/1`
+  - `pick_version/2`
+  - `start_link/0`
+  - `stop/0`
+  - `code_change/3`
+  - `handle_call/3`
+  - `handle_cast/2`
+  - `handle_info/2`
+  - `init/1`
+  - `terminate/2`
   """
 
   require Logger

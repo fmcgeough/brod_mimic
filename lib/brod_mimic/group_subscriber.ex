@@ -7,14 +7,14 @@ defmodule BrodMimic.GroupSubscriber do
     An overview of what it does behind the scene:
 
     * Start a consumer group coordinator to manage the consumer group states,
-      see {@link brod_group_coordinator:start_link/6}
+      see `BrodMimic.GroupCoordinator.start_link/6`
     * Start (if not already started) topic-consumers (pollers) and subscribe
       to the partition workers when group assignment is received from the
-      group leader, see {@link brod:start_consumer/3}
-    * Call `CallbackModule:handle_message/4' when messages are received from
+      group leader, see `BrodMimic.Brod.start_consumer/3`
+    * Call `cb_module.handle_message/4` when messages are received from
       the partition consumers.
     * Send acknowledged offsets to group coordinator which will be committed
-      to kafka periodically.
+      to Kafka periodically.
   """
   use GenServer
 
@@ -105,7 +105,7 @@ defmodule BrodMimic.GroupSubscriber do
       {:ok, [{{Brod.topic(), Brod.partition()}, Brod.offset()}], cb_state()}
   ```
    This function is called only when 'partition_assignment_strategy' is
-   'callback_implemented' in group config.
+   'callback_implemented` in group config.
    The first element in the group member list is ensured to be the group leader.
   commented out as it's an optional callback
 
@@ -220,32 +220,30 @@ defmodule BrodMimic.GroupSubscriber do
   @doc """
   Start (link) a group subscriber.
 
-   `Client': Client ID (or pid, but not recommended) of the brod client.
+   `client`: Client ID (or pid, but not recommended) of the brod client.
 
-   `GroupId': Consumer group ID which should be unique per kafka cluster
+   `group_id`: Consumer group ID which should be unique per kafka cluster
 
-   `Topics': Predefined set of topic names to join the group.
+   `topics`: Predefined set of topic names to join the group.
 
      NOTE: The group leader member will collect topics from all members and
            assign all collected topic-partitions to members in the group.
            i.e. members can join with arbitrary set of topics.
 
-   `GroupConfig': For group coordinator, see
-      {@link brod_group_coordinator:start_link/6}
+   `group_config': For group coordinator, see `BrodMimic.GroupCoordinator.start_link/6`
 
-   `ConsumerConfig': For partition consumer, see
-   {@link brod_consumer:start_link/4}
+   `consumer_config': For partition consumer, see `BrodMimic.Consumer.start_link/4`
 
-   `MessageType':
+   `message_type`:
      The type of message that is going to be handled by the callback
      module. Can be either `message' or `message_set'.
 
-   `CbModule':
+   `cb_module':
      Callback module which should have the callback functions
      implemented for message processing.
 
-   `CbInitArg':
-     The term() that is going to be passed to `CbModule:init/2' as a
+   `cb_init_arg`:
+     The term() that is going to be passed to `cb_module.init/2' as a
      second argument when initializing the subscriber.
    @end
   """
@@ -277,7 +275,7 @@ defmodule BrodMimic.GroupSubscriber do
   end
 
   @doc """
-  Stop group subscriber, wait for pid `DOWN' before return.
+  Stop group subscriber, wait for pid `DOWN` before return.
   """
   @spec stop(pid()) :: :ok
   def stop(pid) do
@@ -306,7 +304,7 @@ defmodule BrodMimic.GroupSubscriber do
   Acknowledge an offset.
 
     This call may or may not commit group subscriber offset depending on
-    the value of `Commit' argument
+    the value of `commit` argument
   """
   @spec ack(pid(), Brod.topic(), Brod.partition(), Brod.offset(), boolean()) :: :ok
   def ack(pid, topic, partition, offset, commit) do
