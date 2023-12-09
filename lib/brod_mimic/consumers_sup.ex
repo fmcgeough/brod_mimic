@@ -1,5 +1,7 @@
 defmodule BrodMimic.ConsumersSup do
-  @moduledoc false
+  @moduledoc """
+  Consumers supervisor
+  """
 
   @behaviour BrodMimic.Supervisor3
 

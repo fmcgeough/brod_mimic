@@ -1,5 +1,31 @@
 defmodule BrodMimic.GroupMember do
-  @moduledoc false
+  @moduledoc """
+  Implement `brod_group_member' behaviour callbacks to allow a process to act as
+  a group member without having to deal with Kafka group protocol details. A
+  typical workflow:
+
+  1. Spawn a group coordinator by calling
+     `BrodMimic.GroupCoordinator:start_link/6`
+  2. Subscribe to partitions received in the assignments
+     from`assignments_received/4` callback.
+  3. Receive messages from the assigned partitions (delivered by the partition
+     workers (the pollers) implemented in `BrodMimic.Consumerr').
+  4. Unsubscribe from all previously subscribed partitions when
+     `assignments_revoked/1` is called.
+
+  For group members that commit offsets to Kafka, do:
+
+  1. Call `BrodMimic.GroupCoordinator:ack/5` to acknowledge successful
+     consumption of the messages. Group coordinator will commit the acknowledged
+     offsets at configured interval.
+  2. Call `BrodMimic.GroupCoordinator:commit_offsets/2` to force an immediate
+     offset commit if necessary.
+
+  For group members that manage offsets locally, do:
+
+  1. Implement the `get_committed_offsets/2` callback. This callback is
+     evaluated every time when new assignments are received.
+  """
 
   @optional_callbacks [assign_partitions: 3, user_data: 1]
 
