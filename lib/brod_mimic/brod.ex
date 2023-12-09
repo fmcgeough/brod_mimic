@@ -1,5 +1,7 @@
 defmodule BrodMimic.Brod do
-  @moduledoc false
+  @moduledoc """
+  Brod helpers and types
+  """
 
   use BrodMimic.Macros
 

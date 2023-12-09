@@ -88,13 +88,12 @@ defmodule BrodMimic.GroupSubscriber do
 
   @doc """
     This callback is called only when subscriber is to commit offsets locally
-    instead of kafka.
-    Return {ok, Offsets, cb_state()} where Offsets can be [],
-    or only the ones that are found in e.g. local storage or database.
-    For the topic-partitions which have no committed offset found,
-    the consumer will take 'begin_offset' in consumer config as the start point
-    of data stream. If 'begin_offset' is not found in consumer config, the
-    default value -1 (latest) is used.
+    instead of Kafka. Return `{:ok, offsets, cb_state()}` where offsets can be [],
+    or only the ones that are found in e.g. local storage or database. For the
+    topic-partitions which have no committed offset found, the consumer will
+    take 'begin_offset' in consumer config as the start point of data stream. If
+    'begin_offset' is not found in consumer config, the default value -1
+    (latest) is used.
 
     commented out as it's an optional callback
 
@@ -105,12 +104,17 @@ defmodule BrodMimic.GroupSubscriber do
       {:ok, [{{Brod.topic(), Brod.partition()}, Brod.offset()}], cb_state()}
   ```
    This function is called only when `partition_assignment_strategy` is
-   `callback_implemented` in group config.
-   The first element in the group member list is ensured to be the group leader.
-  commented out as it's an optional callback
+   `callback_implemented` in group config. The first element in the group member
+   list is ensured to be the group leader. commented out as it's an optional
+  callback
 
   ```
-    @callback assign_partitions([Brod.group_member()],[{Brod.topic(), Brod.partition()}], cb_state()) :: [{Brod.group_member_id(), [Brod.partition_assignment()]}]
+    @callback assign_partitions(
+      [Brod.group_member()],
+      [{Brod.topic(), Brod.partition()}],
+      cb_state()) ::
+      [{Brod.group_member_id(), [Brod.partition_assignment()]}]
+  ```
   """
   defrecord :kafka_message, extract(:kafka_message, from_lib: "brod/include/brod.hrl")
 

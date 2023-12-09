@@ -167,7 +167,7 @@ defmodule BrodMimic.Client do
             producers_sup: :undef | pid(),
             consumers_sup: :undef | pid(),
             config: :undef | config(),
-            workers_tab: :undef | :ets.tab()
+            workers_tab: :undef | :ets.table()
           )
 
   @typedoc """
@@ -932,7 +932,7 @@ defmodule BrodMimic.Client do
   @doc """
   Looks up the partition count in [ETS](https://erlang.org/doc/man/ets.html)
   """
-  @spec lookup_partitions_count_cache(:ets.tab(), :undef | topic()) ::
+  @spec lookup_partitions_count_cache(:ets.table(), :undef | topic()) ::
           {:ok, pos_integer()}
           | {:error, any()}
           | false

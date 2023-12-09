@@ -1,5 +1,7 @@
 defmodule BrodMimic.GroupCoordinator do
-  @moduledoc false
+  @moduledoc """
+  Kafka consumer group coordinator
+  """
 
   use BrodMimic.Macros
   use GenServer
@@ -11,6 +13,8 @@ defmodule BrodMimic.GroupCoordinator do
   alias BrodMimic.Utils, as: BrodUtils
 
   require Logger
+
+  @type protocol_name() :: String.t()
 
   @leaving_group "Leaving group, reason: ~p\n"
   @rejoining_group "re-joining group, reason:~p"
@@ -704,7 +708,7 @@ defmodule BrodMimic.GroupCoordinator do
     end)
   end
 
-  defp assign_partitions(state) when r_state(state, :leader_id) === r_state(state, :member_id) do
+  defp assign_partitions(state) when r_state(state, :leader_id) == r_state(state, :member_id) do
     r_state(
       client: client,
       members: members,

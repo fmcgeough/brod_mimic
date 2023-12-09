@@ -1,5 +1,21 @@
 defmodule BrodMimic.Consumer do
-  @moduledoc false
+  @moduledoc """
+  Kafka consumers work in poll mode. In brod, `brod_consumer' is the poller,
+  which is constantly asking for more data from the kafka node which is a leader
+  for the given partition.
+
+  By subscribing to `Consumer' a process should receive the polled message
+  sets (not individual messages) into its mailbox. Shape of the message is
+  documented at `BrodMimic.Brod.subscribe/5`.
+
+  Messages processed by the subscriber has to be acked by calling
+  `ack/2` (or `BrodMimic.Brod.consume_ack/4`) to notify the consumer
+  that all messages before the acknowledged offsets are processed,
+  hence more messages can be fetched and sent to the subscriber and the
+  subscriber won't be overwhelmed by it.
+
+  Each consumer can have only one subscriber.
+  """
 
   use BrodMimic.Macros
   use GenServer
@@ -30,6 +46,9 @@ defmodule BrodMimic.Consumer do
   @default_isolation_level :read_committed
   @default_avg_window 5
   @default_begin_offset 0
+
+  @type isolation_level() :: :kpro.isolation_level()
+  @type offset_reset_policy() :: :reset_by_subscriber | :reset_to_earliest | :reset_to_latest
 
   defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
   defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
