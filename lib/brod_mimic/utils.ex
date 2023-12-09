@@ -365,7 +365,7 @@ defmodule BrodMimic.Utils do
   end
 
   @doc """
-  Make a fetch function which should expand `max_bytes' when
+  Make a fetch function which should expand `max_bytes` when
   it is not big enough to fetch one single message.
   """
   @spec make_fetch_fun(pid(), topic(), partition(), Brod.fetch_opts()) :: fetch_fun()
