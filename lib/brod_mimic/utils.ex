@@ -57,7 +57,7 @@ defmodule BrodMimic.Utils do
           {:ok, Brod.topic_config()} | {:error, any()} | :ok
   def create_topics(hosts, topic_configs, request_configs, conn_cfg) do
     with_conn(:kpro.connect_controller(hosts, nolink(conn_cfg)), fn pid ->
-      request = :brod_kafka_request.create_topics(pid, topic_configs, request_configs)
+      request = BrodKafkaRequest.create_topics(pid, topic_configs, request_configs)
       request_sync(pid, request)
     end)
   end

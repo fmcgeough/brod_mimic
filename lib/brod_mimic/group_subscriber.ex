@@ -116,7 +116,7 @@ defmodule BrodMimic.GroupSubscriber do
       [{Brod.group_member_id(), [Brod.partition_assignment()]}]
   ```
   """
-  defrecord :kafka_message, extract(:kafka_message, from_lib: "brod/include/brod.hrl")
+  defrecord(:kafka_message, extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl"))
 
   defrecord(:consumer,
     topic_partition: {:undefined, :undefined},

@@ -89,11 +89,12 @@ defmodule BrodMimic.Supervisor3 do
   @optional_callbacks [post_init: 1]
 
   def start_link(mod, args) do
-    GenServer.start_link(BrodSupervisor3, {:self, mod, args}, [])
+    GenServer.start_link(BrodMimic.Supervisor3, {:self, mod, args}, [])
   end
 
   def start_link(sup_name, mod, args) do
-    :gen_server.start_link(sup_name, BrodSupervisor3, {sup_name, mod, args}, [])
+    :gen_server.start_link(sup_name, BrodMimic.Supervisor3, {sup_name, mod, args}, [])
+    |> IO.inspect(label: "start link")
   end
 
   def start_child(supervisor, child_spec) do

@@ -43,7 +43,7 @@ defmodule BrodMimic.Sup do
   @behaviour BrodMimic.Supervisor3
 
   alias BrodMimic.KafkaApis, as: BrodKafkaApis
-  alias BrodMimic.Supervisor3, as: BrodSupervisor3
+  alias BrodMimic.Supervisor3
   alias BrodMimic.Utils, as: BrodUtils
   require Record
 
@@ -104,13 +104,13 @@ defmodule BrodMimic.Sup do
   )
 
   def start_link do
-    BrodSupervisor3.start_link({:local, :brod_sup}, :brod_sup, :clients_sup)
+    Supervisor3.start_link({:local, BrodMimic.Sup}, BrodMimic.Sup, :clients_sup)
   end
 
   def start_client(endpoints, client_id, config) do
     client_spec = client_spec(endpoints, client_id, config)
 
-    case BrodSupervisor3.start_child(:brod_sup, client_spec) do
+    case Supervisor3.start_child(:brod_sup, client_spec) do
       {:ok, _pid} ->
         :ok
 
@@ -120,17 +120,18 @@ defmodule BrodMimic.Sup do
   end
 
   def stop_client(client_id) do
-    _ = BrodSupervisor3.terminate_child(:brod_sup, client_id)
-    BrodSupervisor3.delete_child(:brod_sup, client_id)
+    _ = Supervisor3.terminate_child(:brod_sup, client_id)
+    Supervisor3.delete_child(:brod_sup, client_id)
   end
 
   def find_client(client) do
-    BrodSupervisor3.find_child(:brod_sup, client)
+    Supervisor3.find_child(:brod_sup, client)
   end
 
+  @impl Supervisor3
   def init(:clients_sup) do
     {:ok, _} = BrodKafkaApis.start_link()
-    clients = :application.get_env(:brod, :clients, [])
+    clients = :application.get_env(:brod_mimic, :clients, [])
 
     client_specs =
       :lists.map(
@@ -144,6 +145,7 @@ defmodule BrodMimic.Sup do
     {:ok, {{:one_for_one, 0, 1}, client_specs}}
   end
 
+  @impl Supervisor3
   def post_init(_) do
     :ignore
   end
