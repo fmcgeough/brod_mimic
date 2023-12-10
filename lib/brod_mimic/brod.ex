@@ -6,6 +6,7 @@ defmodule BrodMimic.Brod do
   use BrodMimic.Macros
 
   import Bitwise
+  import Record, only: [defrecord: 3]
 
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.Consumer, as: BrodConsumer
@@ -15,6 +16,13 @@ defmodule BrodMimic.Brod do
   alias BrodMimic.Sup, as: BrodSup
   alias BrodMimic.TopicSubscriber, as: BrodTopicSubscriber
   alias BrodMimic.Utils, as: BrodUtils
+
+  defrecord(:kafka_message_set, :kafka_message_set,
+    topic: :undefined,
+    partition: :undefined,
+    high_wm_offset: :undefined,
+    messages: :undefined
+  )
 
   ### Types created for Elixir port ============================================
   @type ets_table_id() :: atom() | term()
@@ -65,21 +73,22 @@ defmodule BrodMimic.Brod do
   @type client() :: client_id() | pid()
   @type client_config() :: BrodMimic.Client.config()
   # default client config
-  @type bootstrap() ::
-          [endpoint()]
-          | {[endpoint()], client_config()}
+  @type bootstrap() :: [endpoint()] | {[endpoint()], client_config()}
   @type offset_time() :: integer() | :earliest | :latest
   @type message() :: :kpro.message()
-  # kafka_message_set{}
-  # @type message_set() ::
-  #         @type(error_code() :: :kpro.error_code())
-
+  @type message_set ::
+          record(:kafka_message_set,
+            topic: topic(),
+            partition: partition(),
+            high_wm_offset: integer(),
+            # the list of `t:message/0` is exposed to users of library
+            # the `incomplete_batch` is internal only
+            messages: [message()] | :kro.incomplete_batch()
+          )
   ## producers
-  @type produce_reply() :: BrodMimic.Records.ProduceReply.t()
   @type producer_config() :: BrodMimic.Producer.config()
-  # @type partition_fun() :: fun((topic(), pos_integer(), key(), value()) ::
-  #                                 {:ok, partition()})
-  # @type partitioner() :: partition_fun() | random | hash
+  @type partition_fun() :: (topic(), pos_integer(), key(), value() -> {:ok, partition()})
+  @type partitioner() :: partition_fun() | :random | :hash
   # @type produce_ack_cb() :: fun((partition(), offset()) -> _)
   @type compression() :: :no_compression | :gzip | :snappy
   @type call_ref() :: map()

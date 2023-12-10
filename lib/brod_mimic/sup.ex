@@ -1,5 +1,44 @@
 defmodule BrodMimic.Sup do
-  @moduledoc false
+  @moduledoc """
+  BrodMimic Supervisor
+
+  ```
+   Hierarchy:
+     BrodMimic.Sup (one_for_one)
+       |
+       +--BrodMimic.Client client_1
+       |    |
+       |    +-- BrodMimic.ProducersSup level 1
+       |    |     |
+       |    |     +-- BrodMimic.ProducersSup level 2 for topic 1
+       |    |     |     |
+       |    |     |     +-- partition_0_worker
+       |    |     |     |
+       |    |     |     +-- partition_1_worker
+       |    |     |     |...
+       |    |     |
+       |    |     +-- BrodMimic.ProducersSup level 2 for topic 2
+       |    |     |     |...
+       |    |     |...
+       |    |
+       |    +-- BrodMimic.ConsumersSup level 1
+       |          |
+       |          +-- BrodMimic.ConsumersSup level 2 for topic 1
+       |          |     |
+       |          |     +-- partition_0_worker
+       |          |     |
+       |          |     +-- partition_1_worker
+       |          |     |...
+       |          |
+       |          +-- BrodMimic.ConsumersSup level 2 for topic 2
+       |          |     |...
+       |          |...
+       |
+       +-- BrodMimic.Client client_2
+       |     |...
+       |...
+  ```
+  """
 
   @behaviour BrodMimic.Supervisor3
 

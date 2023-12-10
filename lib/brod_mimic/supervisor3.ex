@@ -1,5 +1,7 @@
 defmodule BrodMimic.Supervisor3 do
-  @moduledoc false
+  @moduledoc """
+  This is a general process supervisor built upon gen_server.erl
+  """
   use GenServer
 
   require Record

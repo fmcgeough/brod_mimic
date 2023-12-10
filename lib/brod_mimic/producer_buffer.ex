@@ -1,5 +1,7 @@
 defmodule BrodMimic.ProducerBuffer do
-  @moduledoc false
+  @moduledoc """
+  Buffers used to produce messages
+  """
 
   import Record, only: [defrecord: 3]
 

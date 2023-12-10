@@ -1,5 +1,7 @@
 defmodule BrodMimic.GroupSubscriberWorker do
-  @moduledoc false
+  @moduledoc """
+  Implements the `BrodMimic.TopicSubscriber` behaviour
+  """
 
   @behaviour BrodMimic.TopicSubscriber
 

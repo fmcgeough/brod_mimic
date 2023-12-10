@@ -1,5 +1,11 @@
 defmodule BrodMimic.TopicSubscriber do
-  @moduledoc false
+  @moduledoc """
+  A topic subscriber is a GenServer which subscribes to all or a given set
+  of partition consumers (pollers) of a given topic and calls the user-defined
+  callback functions for message processing.
+
+  Callbacks are documented in the source code of this module.
+  """
   use GenServer
 
   import Record, only: [defrecord: 2, defrecord: 3, extract: 2]

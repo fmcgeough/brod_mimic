@@ -1,8 +1,13 @@
 defmodule BrodMimic.Macros do
-  @moduledoc false
+  @moduledoc """
+  The original brod library has many Erlang macros and these were added to
+  this module using The Elixir macro approach.
+  """
 
   defmacro __using__(_) do
     quote do
+      alias BrodMimic.Brod
+
       def offset_earliest, do: :earliest
       def offset_latest, do: :latest
       def unknown_topic_cache_expire_seconds, do: 120

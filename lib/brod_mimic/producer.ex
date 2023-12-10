@@ -8,6 +8,7 @@ defmodule BrodMimic.Producer do
   import Kernel, except: [send: 2]
   import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
 
+  alias BrodMimic.Brod
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.KafkaApis, as: BrodKafkaApis
   alias BrodMimic.KafkaRequest, as: BrodKafkaRequest
@@ -16,6 +17,15 @@ defmodule BrodMimic.Producer do
 
   require Logger
   require Record
+
+  @type milli_sec() :: non_neg_integer()
+  @type delay_send_ref() :: :undef | {reference(), reference()}
+  @type topic() :: Brod.topic()
+  @type partition() :: Brod.partition()
+  @type offset() :: Brod.offset()
+  @type config() :: :proplists.proplist()
+  @type call_ref() :: Brod.call_ref()
+  @type conn() :: :kpro.connection()
 
   defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
 

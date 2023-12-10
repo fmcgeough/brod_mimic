@@ -1,5 +1,7 @@
 defmodule BrodMimic.ProducersSup do
-  @moduledoc false
+  @moduledoc """
+  Root producers supervisor
+  """
 
   @behaviour BrodMimic.Supervisor3
 

@@ -1,5 +1,11 @@
 defmodule BrodMimic.GroupSubscriberv2 do
-  @moduledoc false
+  @moduledoc """
+  This module implements an improved version of `BrodMimic.GroupSubscriber` behaviour.
+  The key difference is that each partition worker runs in a separate process, allowing
+  parallel message processing.
+
+  Callbacks are documented in the source code of this module.
+  """
 
   use GenServer
 
