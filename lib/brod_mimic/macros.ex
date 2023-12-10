@@ -1,8 +1,5 @@
 defmodule BrodMimic.Macros do
-  @moduledoc """
-  The original brod library has many Erlang macros and these were added to
-  this module using The Elixir macro approach.
-  """
+  @moduledoc false
 
   defmacro __using__(_) do
     quote do

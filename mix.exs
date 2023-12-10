@@ -10,7 +10,7 @@ defmodule BrodMimic.MixProject do
       deps: deps(),
       # Docs
       name: "brod-mimic",
-      source_url: "https://github.com/PagerDuty/brod_mimic",
+      source_url: "https://github.com/fmcgeough/brod_mimic",
       docs: [
         main: "readme",
         extras: ["README.md"],
