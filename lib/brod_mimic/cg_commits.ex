@@ -269,7 +269,7 @@ defmodule BrodMimic.CgCommits do
     case groupped do
       [] ->
         Logger.error(fn -> log_string(state, @topic_not_in_assignment, [my_topic]) end)
-        :erlang.exit({:bad_topic_assignment, groupped0})
+        Process.exit(self(), {:bad_topic_assignment, groupped0})
 
       [{^my_topic, partition_offset_list}] ->
         my_partitions = Enum.map(offsets_to_commit, &elem(&1, 0))
@@ -303,7 +303,7 @@ defmodule BrodMimic.CgCommits do
 
       {:error, reason} ->
         Logger.error(fn -> log_string(state, "Failed to commit, reason:\n~p", [reason]) end)
-        :erlang.exit(:commit_failed)
+        Process.exit(self(), :commit_failed)
     end
 
     {:noreply, set_done(state)}

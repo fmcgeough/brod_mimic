@@ -728,7 +728,7 @@ defmodule BrodMimic.Utils do
   end
 
   defp kill_fetcher({pid, mref}) do
-    :erlang.exit(pid, :kill)
+    Process.exit(pid, :kill)
 
     receive do
       {:DOWN, ^mref, :process, _, _} ->

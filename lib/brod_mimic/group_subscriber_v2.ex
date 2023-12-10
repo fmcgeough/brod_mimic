@@ -3,7 +3,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
 
   use GenServer
 
-  @behaviour :brod_group_member
+  @behaviour BrodMimic.GroupMember
 
   import Record, only: [defrecord: 3]
 
@@ -92,7 +92,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
   def stop(pid) do
     mref = :erlang.monitor(:process, pid)
     :erlang.unlink(pid)
-    :erlang.exit(pid, :shutdown)
+    Process.exit(pid, :shutdown)
 
     receive do
       {:DOWN, ^mref, :process, ^pid, _reason} ->

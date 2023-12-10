@@ -1,5 +1,7 @@
 defmodule BrodMimic.Producer do
-  @moduledoc false
+  @moduledoc """
+  Responsible for producing messages to a given partition of a given topic
+  """
 
   use GenServer
 
@@ -289,7 +291,7 @@ defmodule BrodMimic.Producer do
   end
 
   def make_bufcb(call_ref, ack_cb, partition) do
-    {&:brod_producer.do_bufcb/2, _extra_arg = {call_ref, ack_cb, partition}}
+    {&BrodMimic.Producer.do_bufcb/2, _extra_arg = {call_ref, ack_cb, partition}}
   end
 
   def do_bufcb({call_ref, ack_cb, partition}, arg) do

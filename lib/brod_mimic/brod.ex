@@ -9,6 +9,7 @@ defmodule BrodMimic.Brod do
 
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.Consumer, as: BrodConsumer
+  alias BrodMimic.GroupSubscriber, as: BrodGroupSubscriber
   alias BrodMimic.GroupSubscriberv2, as: BrodGroupSubscriberv2
   alias BrodMimic.Producer, as: BrodProducer
   alias BrodMimic.Sup, as: BrodSup
@@ -33,7 +34,7 @@ defmodule BrodMimic.Brod do
   @type topic_partition() :: {topic(), partition()}
   @type offset() :: :kpro.offset()
   @type key() :: :undefined | binary()
-  # %% no value, transformed to <<>>
+  #    no value, transformed to <<>>
   @type value() ::
           :undefined
           # single value
@@ -185,15 +186,24 @@ defmodule BrodMimic.Brod do
           | {:isolation_level, BrodConsumer.isolation_level()}
         ]
 
+  @doc """
+  Start the BrodMimic application
+  """
   def start do
-    {:ok, _apps} = :application.ensure_all_started(:brod)
+    {:ok, _apps} = Application.ensure_all_started(:brod_mimic)
     :ok
   end
 
+  @doc """
+  Stop the BrodMimic application
+  """
   def stop do
-    :application.stop(:brod)
+    :application.stop(:brod_mimic)
   end
 
+  @doc """
+  Application behaviour callback
+  """
   def start(_start_type, _start_args) do
     BrodSup.start_link()
   end
@@ -210,6 +220,61 @@ defmodule BrodMimic.Brod do
     start_client(bootstrap_endpoints, client_id, [])
   end
 
+  @doc """
+  Start a client
+
+   - `bootstrap_endpoints`: Kafka cluster endpoints, can be any of the brokers
+      in the cluster, which does not necessarily have to be the leader of any
+      partition, e.g. a load-balanced entrypoint to the remote Kafka cluster.
+   - `client_id`: Atom to identify the client process
+   - `config` is a proplist, possible values:
+      - `restart_delay_seconds` (optional, default=10).  How long to wait
+        between attempts to restart `BrodMimic.Client` process when it crashes
+     - `get_metadata_timeout_seconds` (optional, default=5) Return `{:error,
+       timeout}` from `BrodMimic.Client` `get_xxx` calls if responses for APIs such as
+       `metadata`, `find_coordinator` are not received in time.
+     - `reconnect_cool_down_seconds` (optional, default=1). Delay this
+        configured number of seconds before retrying to establish a new
+        connection to the kafka partition leader.
+     - `allow_topic_auto_creation` (optional, default=true). By default, brod
+       respects what is configured in the broker about topic auto-creation. i.e.
+       whether `auto.create.topics.enable` is set in the broker configuration.
+       However if `allow_topic_auto_creation` is set to `false` in client
+       config, BrodMimic will avoid sending metadata requests that may cause an
+       auto-creation of the topic regardless of what broker config is.
+     - `auto_start_producers` (optional, default=false).  If true, BrodMimic
+       client will spawn a producer automatically when user is trying to call
+       `produce` but did not call `BrodMimic.Brod.start_producer` explicitly. Can be
+       useful for applications which don't know beforehand which topics they
+       will be working with.
+     - `default_producer_config` (optional, default=`[]`).  Producer configuration
+       to use when `auto_start_producers` is true. See
+       `BrodMimic.Producer.start_link/4` for details about producer config
+       Connection options can be added to the same proplist. See
+       `kpro_connection.erl` in `kafka_protocol` for the details.
+     - `ssl` (optional, default=false). `true | false | ssl:ssl_option()` `true`
+       is translated to `[]` as `ssl:ssl_option()` i.e. all default.
+     - `sasl` (optional, default=`:undefined`).  Credentials for SASL/Plain
+       authentication. `{mechanism(), filename}` or `{mechanism(), user_name,
+       password}` where mechanism can be atoms: `:plain` (for "PLAIN"),
+       `:scram_sha_256` (for "SCRAM-SHA-256") or `:scram_sha_512` (for
+       SCRAM-SHA-512). `filename` should be a file consisting two lines, first
+       line is the username and the second line is the password. Both
+       `user_name` and `password` should be `String.t() | binary()`
+     - `connect_timeout` (optional, default=`5_000`). Timeout when trying to
+       connect to an endpoint.
+     - `request_timeout` (optional, default=`240_000`, constraint: >= `1_000`).
+       Timeout when waiting for a response, connection restart when timed out.
+     - `query_api_versions` (optional, default=true). Must be set to false to
+       work with kafka versions prior to 0.10, When set to `true', at connection
+       start, BrodMimic will send a query request to get the broker supported API
+       version ranges. When set to 'false`, BrodMimic will always use the lowest
+       supported API version when sending requests to Kafka. Supported API
+       version ranges can be found in:
+       `BrodMimic.KafkaApis.supported_versions/1`
+     - `extra_sock_opts` (optional, default=[]). Extra socket options to tune
+       socket performance. e.g. `[{Bitwise.bsl(sndbuf, 1, 20}]`. [More info](http://erlang.org/doc/man/gen_tcp.html#type-option).
+  """
   def start_client(bootstrap_endpoints, client_id, config) do
     case BrodSup.start_client(bootstrap_endpoints, client_id, config) do
       :ok ->
@@ -235,6 +300,9 @@ defmodule BrodMimic.Brod do
     BrodClient.start_link(bootstrap_endpoints, client_id, config)
   end
 
+  @doc """
+  Stop a client
+  """
   def stop_client(client) when is_atom(client) do
     case BrodSup.find_client(client) do
       [_pid] ->
@@ -249,6 +317,29 @@ defmodule BrodMimic.Brod do
     BrodClient.stop(client)
   end
 
+  @doc """
+   Dynamically start a per-topic producer and register it in the client.
+
+   You have to start a producer for each topic you want to produce messages
+   into, unless you have specified `auto_start_producers: true` when starting
+   the client (in that case you don't have to call this function at all).
+
+   After starting the producer, you can call `produce/5` and friends
+   for producing messages.
+
+   A client has to be already started before making this call (e.g. by calling
+   `BrodMimic.Brod.start_client/3`.
+
+   See `BrodMimic.Producer.start_link/4` for a list of available configuration
+   options.
+
+   Example:
+
+   ```
+   iex> BrodMimic.Brod.start_producer(:my_client, "my_topic", [{:max_retries, 5}])
+   :ok
+   ```
+  """
   def start_producer(client, topic_name, producer_config) do
     BrodClient.start_producer(client, topic_name, producer_config)
   end
@@ -308,7 +399,7 @@ defmodule BrodMimic.Brod do
   end
 
   def produce_cb(producer_pid, key, value, ack_cb) do
-    :brod_producer.produce_cb(producer_pid, key, value, ack_cb)
+    BrodProducer.produce_cb(producer_pid, key, value, ack_cb)
   end
 
   def produce_cb(client, topic, part, key, value, ack_cb)
@@ -322,14 +413,14 @@ defmodule BrodMimic.Brod do
     end
   end
 
-  def produce_cb(client, topic, partitioner, key, value, ackCb) do
+  def produce_cb(client, topic, partitioner, key, value, ack_cb) do
     part_fun = BrodUtils.make_part_fun(partitioner)
 
     case BrodClient.get_partitions_count(client, topic) do
       {:ok, partitions_count} ->
         {:ok, partition} = part_fun.(topic, partitions_count, key, value)
 
-        case produce_cb(client, topic, partition, key, value, ackCb) do
+        case produce_cb(client, topic, partition, key, value, ack_cb) do
           :ok ->
             {:ok, partition}
 
@@ -423,13 +514,13 @@ defmodule BrodMimic.Brod do
   end
 
   def sync_produce_request_offset(call_ref, timeout) do
-    :brod_producer.sync_produce_request(call_ref, timeout)
+    BrodProducer.sync_produce_request(call_ref, timeout)
   end
 
-  def subscribe(client, subscriberPid, topic, partition, options) do
+  def subscribe(client, subscriber_pid, topic, partition, options) do
     case BrodClient.get_consumer(client, topic, partition) do
       {:ok, consumer_pid} ->
-        case subscribe(consumer_pid, subscriberPid, options) do
+        case subscribe(consumer_pid, subscriber_pid, options) do
           :ok ->
             {:ok, consumer_pid}
 
@@ -442,18 +533,18 @@ defmodule BrodMimic.Brod do
     end
   end
 
-  def subscribe(consumer_pid, subscriberPid, options) do
-    BrodConsumer.subscribe(consumer_pid, subscriberPid, options)
+  def subscribe(consumer_pid, subscriber_pid, options) do
+    BrodConsumer.subscribe(consumer_pid, subscriber_pid, options)
   end
 
   def unsubscribe(client, topic, partition) do
     unsubscribe(client, topic, partition, self())
   end
 
-  def unsubscribe(client, topic, partition, subscriberPid) do
+  def unsubscribe(client, topic, partition, subscriber_pid) do
     case BrodClient.get_consumer(client, topic, partition) do
       {:ok, consumer_pid} ->
-        unsubscribe(consumer_pid, subscriberPid)
+        unsubscribe(consumer_pid, subscriber_pid)
 
       error ->
         error
@@ -464,8 +555,8 @@ defmodule BrodMimic.Brod do
     unsubscribe(consumer_pid, self())
   end
 
-  def unsubscribe(consumer_pid, subscriberPid) do
-    BrodConsumer.unsubscribe(consumer_pid, subscriberPid)
+  def unsubscribe(consumer_pid, subscriber_pid) do
+    BrodConsumer.unsubscribe(consumer_pid, subscriber_pid)
   end
 
   def consume_ack(client, topic, partition, offset) do
@@ -489,16 +580,16 @@ defmodule BrodMimic.Brod do
         group_config,
         consumer_config,
         cbModule,
-        cbInitArg
+        cb_init_arg
       ) do
-    :brod_group_subscriber.start_link(
+    BrodGroupSubscriber.start_link(
       client,
       group_id,
       topics,
       group_config,
       consumer_config,
       cbModule,
-      cbInitArg
+      cb_init_arg
     )
   end
 
@@ -512,35 +603,42 @@ defmodule BrodMimic.Brod do
         topics,
         group_config,
         consumer_config,
-        messageType,
-        cbModule,
-        cbInitArg
+        message_type,
+        cb_module,
+        cb_init_arg
       ) do
-    :brod_group_subscriber.start_link(
+    BrodGroupSubscriber.start_link(
       client,
       group_id,
       topics,
       group_config,
       consumer_config,
-      messageType,
-      cbModule,
-      cbInitArg
+      message_type,
+      cb_module,
+      cb_init_arg
     )
   end
 
-  def start_link_topic_subscriber(client, topic, consumer_config, cbModule, cbInitArg) do
-    start_link_topic_subscriber(client, topic, :all, consumer_config, cbModule, cbInitArg)
+  def start_link_topic_subscriber(client, topic, consumer_config, cb_module, cb_init_arg) do
+    start_link_topic_subscriber(client, topic, :all, consumer_config, cb_module, cb_init_arg)
   end
 
-  def start_link_topic_subscriber(client, topic, partitions, consumer_config, cbModule, cbInitArg) do
+  def start_link_topic_subscriber(
+        client,
+        topic,
+        partitions,
+        consumer_config,
+        cb_module,
+        cb_init_arg
+      ) do
     start_link_topic_subscriber(
       client,
       topic,
       partitions,
       consumer_config,
       :message,
-      cbModule,
-      cbInitArg
+      cb_module,
+      cb_init_arg
     )
   end
 
@@ -550,8 +648,8 @@ defmodule BrodMimic.Brod do
         partitions,
         consumer_config,
         messageType,
-        cbModule,
-        cbInitArg
+        cb_module,
+        cb_init_arg
       ) do
     BrodTopicSubscriber.start_link(
       client,
@@ -559,8 +657,8 @@ defmodule BrodMimic.Brod do
       partitions,
       consumer_config,
       messageType,
-      cbModule,
-      cbInitArg
+      cb_module,
+      cb_init_arg
     )
   end
 
@@ -568,12 +666,12 @@ defmodule BrodMimic.Brod do
     BrodTopicSubscriber.start_link(config)
   end
 
-  def create_topics(hosts, topicConfigs, requestConfigs) do
-    BrodUtils.create_topics(hosts, topicConfigs, requestConfigs)
+  def create_topics(hosts, topicConfigs, request_configs) do
+    BrodUtils.create_topics(hosts, topicConfigs, request_configs)
   end
 
-  def create_topics(hosts, topicConfigs, requestConfigs, options) do
-    BrodUtils.create_topics(hosts, topicConfigs, requestConfigs, options)
+  def create_topics(hosts, topicConfigs, request_configs, options) do
+    BrodUtils.create_topics(hosts, topicConfigs, request_configs, options)
   end
 
   def delete_topics(hosts, topics, timeout) do

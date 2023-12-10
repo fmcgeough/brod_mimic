@@ -157,7 +157,7 @@ defmodule BrodMimic.Consumer do
       :ok
 
     :exit, {:timeout, _} ->
-      :erlang.exit(pid, :kill)
+      Process.exit(pid, :kill)
       :ok
   end
 

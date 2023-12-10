@@ -1210,7 +1210,7 @@ defmodule BrodMimic.Supervisor3 do
   defp shutdown(pid, :brutal_kill) do
     case monitor_child(pid) do
       :ok ->
-        :erlang.exit(pid, :kill)
+        Process.exit(pid, :kill)
 
         receive do
           {:DOWN, _mref, :process, ^pid, :killed} ->
@@ -1228,7 +1228,7 @@ defmodule BrodMimic.Supervisor3 do
   defp shutdown(pid, time) do
     case monitor_child(pid) do
       :ok ->
-        :erlang.exit(pid, :shutdown)
+        Process.exit(pid, :shutdown)
 
         receive do
           {:DOWN, _mref, :process, ^pid, :shutdown} ->
@@ -1238,7 +1238,7 @@ defmodule BrodMimic.Supervisor3 do
             {:error, otherreason}
         after
           time ->
-            :erlang.exit(pid, :kill)
+            Process.exit(pid, :kill)
 
             receive do
               {:DOWN, _mref, :process, ^pid, otherreason} ->
@@ -1281,7 +1281,7 @@ defmodule BrodMimic.Supervisor3 do
         :brutal_kill ->
           :sets.fold(
             fn p, _ ->
-              :erlang.exit(p, :kill)
+              Process.exit(p, :kill)
             end,
             :ok,
             pids
@@ -1292,7 +1292,7 @@ defmodule BrodMimic.Supervisor3 do
         :infinity ->
           :sets.fold(
             fn p, _ ->
-              :erlang.exit(p, :shutdown)
+              Process.exit(p, :shutdown)
             end,
             :ok,
             pids
@@ -1303,7 +1303,7 @@ defmodule BrodMimic.Supervisor3 do
         time ->
           :sets.fold(
             fn p, _ ->
-              :erlang.exit(p, :shutdown)
+              Process.exit(p, :shutdown)
             end,
             :ok,
             pids
@@ -1428,7 +1428,7 @@ defmodule BrodMimic.Supervisor3 do
       {:timeout, ^t_ref, :kill} ->
         :sets.fold(
           fn p, _ ->
-            :erlang.exit(p, :kill)
+            Process.exit(p, :kill)
           end,
           :ok,
           pids

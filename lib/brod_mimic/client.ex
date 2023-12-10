@@ -794,7 +794,7 @@ defmodule BrodMimic.Client do
     pid =
       case :kpro.connect_any(endpoints, conn_config) do
         {:ok, pid_x} -> pid_x
-        {:error, reason} -> :erlang.exit(reason)
+        {:error, reason} -> Process.exit(self(), reason)
       end
 
     r_state(state, meta_conn: pid)
