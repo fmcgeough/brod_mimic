@@ -90,24 +90,6 @@ defmodule BrodMimic.Consumer do
     result: :undefined
   )
 
-  defrecord(:r_brod_cg, :brod_cg,
-    id: :undefined,
-    protocol_type: :undefined
-  )
-
-  defrecord(:r_socket, :socket,
-    pid: :undefined,
-    host: :undefined,
-    port: :undefined,
-    node_id: :undefined
-  )
-
-  defrecord(:r_cbm_init_data, :cbm_init_data,
-    committed_offsets: :undefined,
-    cb_fun: :undefined,
-    cb_data: :undefined
-  )
-
   defrecord(:r_pending_acks, :pending_acks, count: 0, bytes: 0, queue: :queue.new())
 
   defrecord(:r_state, :state,
