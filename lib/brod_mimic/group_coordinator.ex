@@ -6,7 +6,7 @@ defmodule BrodMimic.GroupCoordinator do
   use BrodMimic.Macros
   use GenServer
 
-  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
+  import Record, only: [defrecord: 2, extract: 2]
 
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.KafkaRequest, as: BrodKafkaRequest
@@ -25,63 +25,19 @@ defmodule BrodMimic.GroupCoordinator do
 
   defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
 
-  defrecord(:r_kafka_message_set, :kafka_message_set,
-    topic: :undefined,
-    partition: :undefined,
-    high_wm_offset: :undefined,
-    messages: :undefined
-  )
-
-  defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
-    topic: :undefined,
-    partition: :undefined,
-    error_code: :undefined,
-    error_desc: ''
-  )
-
-  defrecord(:r_brod_call_ref, :brod_call_ref,
-    caller: :undefined,
-    callee: :undefined,
-    ref: :undefined
-  )
-
-  defrecord(:r_brod_produce_reply, :brod_produce_reply,
-    call_ref: :undefined,
-    base_offset: :undefined,
-    result: :undefined
-  )
-
-  defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
+  defrecord(:kafka_group_member_metadata,
     version: :undefined,
     topics: :undefined,
     user_data: :undefined
   )
 
-  defrecord(:r_brod_received_assignment, :brod_received_assignment,
+  defrecord(:brod_received_assignment,
     topic: :undefined,
     partition: :undefined,
     begin_offset: :undefined
   )
 
-  defrecord(:r_brod_cg, :brod_cg,
-    id: :undefined,
-    protocol_type: :undefined
-  )
-
-  defrecord(:r_socket, :socket,
-    pid: :undefined,
-    host: :undefined,
-    port: :undefined,
-    node_id: :undefined
-  )
-
-  defrecord(:r_cbm_init_data, :cbm_init_data,
-    committed_offsets: :undefined,
-    cb_fun: :undefined,
-    cb_data: :undefined
-  )
-
-  defrecord(:r_state, :state,
+  defrecord(:state,
     client: :undefined,
     group_id: :undefined,
     member_id: "",
@@ -175,7 +131,7 @@ defmodule BrodMimic.GroupCoordinator do
     :ok = start_heartbeat_timer(hb_rate_sec)
 
     state =
-      r_state(
+      state(
         client: client,
         group_id: group_id,
         topics: topics,
@@ -200,7 +156,7 @@ defmodule BrodMimic.GroupCoordinator do
     {:noreply, handle_ack(state, generation_id, topic, partition, offset)}
   end
 
-  def handle_info(:lo_cmd_commit_offsets, r_state(is_in_group: true) = state) do
+  def handle_info(:lo_cmd_commit_offsets, state(is_in_group: true) = state) do
     {:ok, new_state} =
       try do
         do_commit_offsets(state)
@@ -213,9 +169,9 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   def handle_call({:commit_offsets, extra_offsets}, from, state) do
-    offsets = merge_acked_offsets(r_state(state, :acked_offsets), extra_offsets)
+    offsets = merge_acked_offsets(state(state, :acked_offsets), extra_offsets)
 
-    {:ok, new_state} = do_commit_offsets(r_state(state, acked_offsets: offsets))
+    {:ok, new_state} = do_commit_offsets(state(state, acked_offsets: offsets))
     {:reply, :ok, new_state}
   catch
     reason ->
@@ -229,22 +185,22 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   def handle_cast({:update_topics, topics}, state) do
-    new_state0 = r_state(state, topics: topics)
+    new_state0 = state(state, topics: topics)
     {:ok, new_state} = stabilize(new_state0, 0, :topics)
     {:noreply, new_state}
   end
 
-  def handle_cast(_cast, r_state() = state) do
+  def handle_cast(_cast, state() = state) do
     {:noreply, state}
   end
 
-  def code_change(_old_vsn, r_state() = state, _extra) do
+  def code_change(_old_vsn, state() = state, _extra) do
     {:ok, state}
   end
 
   def terminate(
         reason,
-        r_state(connection: connection, group_id: group_id, member_id: member_id) = state
+        state(connection: connection, group_id: group_id, member_id: member_id) = state
       ) do
     Logger.info(fn -> log_string(state, @leaving_group, [reason]) end)
     body = [{:group_id, group_id}, {:member_id, member_id}]
@@ -261,7 +217,7 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   def discover_coordinator(
-        r_state(client: client, connection: connection0, group_id: group_id) = state
+        state(client: client, connection: connection0, group_id: group_id) = state
       ) do
     {endpoint, conn_config0} =
       (fn ->
@@ -297,15 +253,15 @@ defmodule BrodMimic.GroupCoordinator do
              end
            end).()
 
-        {:ok, r_state(state, connection: connection)}
+        {:ok, state(state, connection: connection)}
     end
   end
 
-  defp is_already_connected(r_state(connection: conn), _) when not is_pid(conn) do
+  defp is_already_connected(state(connection: conn), _) when not is_pid(conn) do
     false
   end
 
-  defp is_already_connected(r_state(connection: conn), {host, port}) do
+  defp is_already_connected(state(connection: conn), {host, port}) do
     {host0, port0} =
       (fn ->
          case :kpro_connection.get_endpoint(conn) do
@@ -332,7 +288,7 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   def stabilize(
-        r_state(
+        state(
           rejoin_delay_seconds: rejoin_delay_seconds,
           member_module: member_module,
           member_pid: member_pid,
@@ -372,7 +328,7 @@ defmodule BrodMimic.GroupCoordinator do
           state1
       end
 
-    state3 = r_state(state2, is_in_group: false)
+    state3 = state(state2, is_in_group: false)
 
     # 4. Clean up state based on the last failure reason
     state = maybe_reset_member_id(state3, reason)
@@ -413,7 +369,7 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   defp do_stabilize([f | rest], retry_fun, state) do
-    {:ok, r_state() = new_state} = f.(state)
+    {:ok, state() = new_state} = f.(state)
     do_stabilize(rest, retry_fun, new_state)
   catch
     reason ->
@@ -423,7 +379,7 @@ defmodule BrodMimic.GroupCoordinator do
   defp maybe_reset_member_id(state, reason) do
     case should_reset_member_id(reason) do
       true ->
-        r_state(state, member_id: <<>>)
+        state(state, member_id: <<>>)
 
       false ->
         state
@@ -443,7 +399,7 @@ defmodule BrodMimic.GroupCoordinator do
   def should_reset_member_id(_), do: false
 
   defp join_group(
-         r_state(
+         state(
            group_id: group_id,
            member_id: member_id0,
            topics: topics,
@@ -489,7 +445,7 @@ defmodule BrodMimic.GroupCoordinator do
     is_group_leader = leader_id === member_id
 
     state =
-      r_state(state0,
+      state(state0,
         member_id: member_id,
         leader_id: leader_id,
         generation_id: generation_id,
@@ -501,7 +457,7 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   defp sync_group(
-         r_state(
+         state(
            group_id: group_id,
            generation_id: generation_id,
            member_id: member_id,
@@ -531,7 +487,7 @@ defmodule BrodMimic.GroupCoordinator do
     :ok =
       member_module.assignments_received(member_pid, member_id, generation_id, topic_assignments)
 
-    new_state = r_state(state, is_in_group: true)
+    new_state = state(state, is_in_group: true)
 
     Logger.info(fn ->
       log_string(new_state, @assignments_received, [format_assignments(topic_assignments)])
@@ -541,19 +497,19 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   defp handle_ack(state, generation_id, _topic, _partition, _offset)
-       when generation_id < r_state(state, :generation_id) do
+       when generation_id < state(state, :generation_id) do
     state
   end
 
   defp handle_ack(
-         r_state(acked_offsets: acked_offsets) = state,
+         state(acked_offsets: acked_offsets) = state,
          _GenerationId,
          topic,
          partition,
          offset
        ) do
     new_acked_offsets = merge_acked_offsets(acked_offsets, [{{topic, partition}, offset}])
-    r_state(state, acked_offsets: new_acked_offsets)
+    state(state, acked_offsets: new_acked_offsets)
   end
 
   defp merge_acked_offsets(acked_offsets, offsets_to_ack) do
@@ -567,11 +523,7 @@ defmodule BrodMimic.GroupCoordinator do
   defp format_assignments(assignments) do
     groupped =
       BrodUtils.group_per_key(
-        fn r_brod_received_assignment(
-             topic: topic,
-             partition: partition,
-             begin_offset: offset
-           ) ->
+        fn brod_received_assignment(topic: topic, partition: partition, begin_offset: offset) ->
           {topic, {partition, offset}}
         end,
         assignments
@@ -596,8 +548,8 @@ defmodule BrodMimic.GroupCoordinator do
     ]
   end
 
-  defp try_commit_offsets(r_state() = state) do
-    {:ok, r_state()} = do_commit_offsets(state)
+  defp try_commit_offsets(state() = state) do
+    {:ok, state()} = do_commit_offsets(state)
   catch
     _, _ ->
       {:ok, state}
@@ -608,16 +560,16 @@ defmodule BrodMimic.GroupCoordinator do
     start_offset_commit_timer(new_state)
   end
 
-  defp do_commit_offsets_(r_state(acked_offsets: []) = state) do
+  defp do_commit_offsets_(state(acked_offsets: []) = state) do
     {:ok, state}
   end
 
-  defp do_commit_offsets_(r_state(offset_commit_policy: :consumer_managed) = state) do
+  defp do_commit_offsets_(state(offset_commit_policy: :consumer_managed) = state) do
     {:ok, state}
   end
 
   defp do_commit_offsets_(
-         r_state(
+         state(
            group_id: group_id,
            member_id: member_id,
            generation_id: generation_id,
@@ -676,7 +628,7 @@ defmodule BrodMimic.GroupCoordinator do
     rsp_body = send_sync(connection, req)
     topics = :kpro.find(:topics, rsp_body)
     :ok = assert_commit_response(topics)
-    new_state = r_state(state, acked_offsets: [])
+    new_state = state(state, acked_offsets: [])
     {:ok, new_state}
   end
 
@@ -708,54 +660,50 @@ defmodule BrodMimic.GroupCoordinator do
     end)
   end
 
-  defp assign_partitions(state) when r_state(state, :leader_id) == r_state(state, :member_id) do
-    r_state(
-      client: client,
-      members: members,
-      partition_assignment_strategy: strategy,
-      member_pid: member_pid,
-      member_module: member_module
-    ) = state
+  defp assign_partitions(state) do
+    # only leader can assign partitions to members
+    if state.member_id == state.leader_id do
+      []
+    else
+      all_topics = all_topics(state.members)
 
-    all_topics = all_topics(members)
+      all_partitions =
+        for topic <- all_topics, partition <- get_partitions(state.client, topic) do
+          {topic, partition}
+        end
 
-    all_partitions =
-      for topic <- all_topics, partition <- get_partitions(client, topic) do
-        {topic, partition}
-      end
+      assignments =
+        case state.strategy == :callback_implemented do
+          true ->
+            state.member_module.assign_partitions(state.member_pid, state.members, all_partitions)
 
-    assignments =
-      case strategy === :callback_implemented do
-        true ->
-          member_module.assign_partitions(member_pid, members, all_partitions)
+          false ->
+            do_assign_partitions(
+              state.partition_assignment_strategy,
+              state.members,
+              all_partitions
+            )
+        end
 
-        false ->
-          do_assign_partitions(strategy, members, all_partitions)
-      end
+      :lists.map(
+        fn {member_id, topics_} ->
+          partition_assignments =
+            :lists.map(
+              fn {topic, partitions} ->
+                [{:topic, topic}, {:partitions, partitions}]
+              end,
+              topics_
+            )
 
-    :lists.map(
-      fn {member_id, topics_} ->
-        partition_assignments =
-          :lists.map(
-            fn {topic, partitions} ->
-              [{:topic, topic}, {:partitions, partitions}]
-            end,
-            topics_
-          )
-
-        [
-          {:member_id, member_id},
-          {:assignment,
-           [{:version, 0}, {:topic_partitions, partition_assignments}, {:user_data, <<>>}]}
-        ]
-      end,
-      assignments
-    )
-  end
-
-  # only leader can assign partitions to members
-  defp assign_partitions(r_state()) do
-    []
+          [
+            {:member_id, member_id},
+            {:assignment,
+             [{:version, 0}, {:topic_partitions, partition_assignments}, {:user_data, <<>>}]}
+          ]
+        end,
+        assignments
+      )
+    end
   end
 
   defp ensure_leader_at_hd(leader_id, members) do
@@ -777,7 +725,7 @@ defmodule BrodMimic.GroupCoordinator do
       user_data = :kpro.find(:user_data, meta)
 
       member_data =
-        r_kafka_group_member_metadata(version: version, topics: topics, user_data: user_data)
+        kafka_group_member_metadata(version: version, topics: topics, user_data: user_data)
 
       {member_id, member_data}
     end)
@@ -788,7 +736,7 @@ defmodule BrodMimic.GroupCoordinator do
       :lists.append(
         :lists.map(
           fn {_member_id, m} ->
-            r_kafka_group_member_metadata(m, :topics)
+            kafka_group_member_metadata(m, :topics)
           end,
           members
         )
@@ -813,7 +761,7 @@ defmodule BrodMimic.GroupCoordinator do
 
   defp do_assign_partitions(:roundrobin_v2, members, all_partitions) do
     f = fn {member_id, m} ->
-      subscribed_topics = r_kafka_group_member_metadata(m, :topics)
+      subscribed_topics = kafka_group_member_metadata(m, :topics)
 
       is_valid_assignment = fn topic, _partition ->
         :lists.member(topic, subscribed_topics)
@@ -878,12 +826,12 @@ defmodule BrodMimic.GroupCoordinator do
 
     topic_partitions = :lists.append(topic_partitions0)
     committed_offsets = get_committed_offsets(state, :topic_partitions)
-    is_consumer_managed = r_state(offset_commit_policy: :consumer_managed)
+    is_consumer_managed = state(offset_commit_policy: :consumer_managed)
     resolve_begin_offsets(topic_partitions, committed_offsets, is_consumer_managed)
   end
 
   def get_committed_offsets(
-        r_state(
+        state(
           offset_commit_policy: :consumer_managed,
           member_pid: member_pid,
           member_module: member_module
@@ -895,7 +843,7 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   def get_committed_offsets(
-        r_state(offset_commit_policy: :commit_to_kafka_v2, group_id: group_id, connection: conn),
+        state(offset_commit_policy: :commit_to_kafka_v2, group_id: group_id, connection: conn),
         topic_partitions
       ) do
     groupped_partitions = BrodUtils.group_per_key(topic_partitions)
@@ -959,7 +907,7 @@ defmodule BrodMimic.GroupCoordinator do
       end
 
     assignment =
-      r_brod_received_assignment(topic: topic, partition: partition, begin_offset: begin_offset)
+      brod_received_assignment(topic: topic, partition: partition, begin_offset: begin_offset)
 
     [assignment | resolve_begin_offsets(rest, committed_offsets, is_consumer_managed)]
   end
@@ -977,8 +925,8 @@ defmodule BrodMimic.GroupCoordinator do
     :ok
   end
 
-  defp start_offset_commit_timer(r_state(offset_commit_timer: old_timer) = state) do
-    r_state(
+  defp start_offset_commit_timer(state(offset_commit_timer: old_timer) = state) do
+    state(
       offset_commit_policy: policy,
       offset_commit_interval_seconds: seconds
     ) = state
@@ -1000,12 +948,12 @@ defmodule BrodMimic.GroupCoordinator do
 
         timeout = :timer.seconds(seconds)
         timer = Process.send_after(self(), :lo_cmd_commit_offsets, timeout)
-        {:ok, r_state(state, offset_commit_timer: timer)}
+        {:ok, state(state, offset_commit_timer: timer)}
     end
   end
 
   def maybe_send_heartbeat(
-        r_state(
+        state(
           is_in_group: true,
           group_id: group_id,
           member_id: member_id,
@@ -1016,12 +964,12 @@ defmodule BrodMimic.GroupCoordinator do
     req_body = [{:group_id, group_id}, {:generation_id, generation_id}, {:member_id, member_id}]
     req = :kpro.make_request(:heartbeat, 0, req_body)
     :ok = :kpro.request_async(connection, req)
-    new_state = r_state(state, hb_ref: {kpro_req(req, :ref), :os.timestamp()})
+    new_state = state(state, hb_ref: {kpro_req(req, :ref), :os.timestamp()})
     {:ok, new_state}
   end
 
-  def maybe_send_heartbeat(r_state() = state) do
-    {:ok, r_state(state, hb_ref: :undefined)}
+  def maybe_send_heartbeat(state() = state) do
+    {:ok, state(state, hb_ref: :undefined)}
   end
 
   defp send_sync(connection, request) do
@@ -1109,7 +1057,7 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   defp log_string(
-         r_state(group_id: group_id, generation_id: generation_id, member_pid: member_pid),
+         state(group_id: group_id, generation_id: generation_id, member_pid: member_pid),
          format_string,
          args
        ) do

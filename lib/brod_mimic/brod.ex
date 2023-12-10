@@ -2,7 +2,6 @@ defmodule BrodMimic.Brod do
   @moduledoc """
   Brod helpers and types
   """
-
   use BrodMimic.Macros
 
   import Bitwise
@@ -22,6 +21,18 @@ defmodule BrodMimic.Brod do
     partition: :undefined,
     high_wm_offset: :undefined,
     messages: :undefined
+  )
+
+  defrecord(:brod_received_assignment, :brod_received_assignment,
+    topic: :undefined,
+    partition: :undefined,
+    begin_offset: :undefined
+  )
+
+  defrecord(:kafka_group_member_metadata, :kafka_group_member_metadata,
+    version: :undefined,
+    topics: :undefined,
+    user_data: :undefined
   )
 
   ### Types created for Elixir port ============================================
@@ -85,6 +96,21 @@ defmodule BrodMimic.Brod do
             # the `incomplete_batch` is internal only
             messages: [message()] | :kro.incomplete_batch()
           )
+
+  @type brod_received_assignment ::
+          record(:brod_received_assignment,
+            topic: topic(),
+            partition: partition(),
+            begin_offset: :undefined | offset() | {:begin_offset, offset_time()}
+          )
+
+  @type kafka_group_member_metadata ::
+          record(:kafka_group_member_metadata,
+            version: non_neg_integer(),
+            topics: [topic()],
+            user_data: binary()
+          )
+
   ## producers
   @type producer_config() :: BrodMimic.Producer.config()
   @type partition_fun() :: (topic(), pos_integer(), key(), value() -> {:ok, partition()})
@@ -112,27 +138,19 @@ defmodule BrodMimic.Brod do
   ## consumer groups
   @type group_id() :: :kpro.group_id()
   @type group_member_id() :: binary()
-  @type group_member() :: {group_member_id(), BrodMimic.Records.GroupMemberMetada.t()}
+  @type group_member() :: {group_member_id(), kafka_group_member_metadata()}
   @type group_generation_id() :: non_neg_integer()
   @type group_config() :: keyword()
   @type partition_assignment() :: {topic(), [partition()]}
-  @type received_assignments() :: [BrodMimic.Records.ReceivedAssignment.t()]
-  # brod_cg{}
-  @type cg() :: BrodMimic.Records.ConsumerGroup.t()
+  @type received_assignments() :: [brod_received_assignment()]
   @type cg_protocol_type() :: binary()
   @type fetch_opts() :: :kpro.fetch_opts()
   @type fold_acc() :: term()
-  # @type fold_fun(acc) :: fun((message(), acc) -> {:ok, acc} | {:error, any()})
-  ## `fold' always returns when reaches the high watermark offset `fold'
-  ## also returns when any of the limits is hit
-  @type fold_limits() :: BrodMimic.Records.FoldLimits.t()
   @type fold_stop_reason() ::
           :reached_end_of_partition
           | :reached_message_count_limit
           | :reached_target_offset
           | {:error, any()}
-  ## OffsetToContinue: begin offset for the next fold call
-  # @type fold_result() :: brod_fold_ret(fold_acc(), offset_to_continue :: offset(), fold_stop_reason())
 
   @typedoc """
   Consumer configuration
