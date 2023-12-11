@@ -2,8 +2,10 @@ defmodule BrodMimic.ConsumersSup do
   @moduledoc """
   Consumers supervisor
   """
-
   @behaviour BrodMimic.Supervisor3
+
+  alias BrodMimic.Client, as: BrodClient
+  alias BrodMimic.Supervisor3, as: BrodSupervisor3
 
   @topics_sup :brod_consumers_sup
   @partitions_sup :brod_consumers_sup2
@@ -13,9 +15,6 @@ defmodule BrodMimic.ConsumersSup do
 
   # By default, restart partition consumer worker process after a 2-seconds delay
   @default_consumer_restart_delay 2
-
-  alias BrodMimic.Client, as: BrodClient
-  alias BrodMimic.Supervisor3, as: BrodSupervisor3
 
   # APIs =====================================================================
 

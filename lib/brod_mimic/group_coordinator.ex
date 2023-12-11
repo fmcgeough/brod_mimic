@@ -14,14 +14,14 @@ defmodule BrodMimic.GroupCoordinator do
 
   require Logger
 
-  @type protocol_name() :: String.t()
-
   @leaving_group "Leaving group, reason: ~p\n"
   @rejoining_group "re-joining group, reason:~p"
   @failed_to_join_group "failed to join group\nreason: ~p"
   @elected "elected=~p"
   @assignments_received "assignments received:~s"
   @group_member_info "Group member (~s,coor=~p,cb=~p,generation=~p):\n"
+
+  @type protocol_name() :: String.t()
 
   defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
 

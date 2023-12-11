@@ -27,12 +27,13 @@ defmodule BrodMimic.Client do
   use BrodMimic.Macros
   use GenServer
 
-  require Logger
   import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
 
   alias BrodMimic.ConsumersSup, as: BrodConsumersSup
   alias BrodMimic.KafkaRequest
   alias BrodMimic.ProducersSup, as: BrodProducersSup
+
+  require Logger
 
   @producer_supervisor_down "client ~p producers supervisor down~nreason: ~p"
   @consumer_supervisor_down "client ~p consumers supervisor down~nreason: ~p"

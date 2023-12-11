@@ -6,10 +6,9 @@ defmodule BrodMimic.GroupSubscriberv2 do
 
   Callbacks are documented in the source code of this module.
   """
+  @behaviour BrodMimic.GroupMember
 
   use GenServer
-
-  @behaviour BrodMimic.GroupMember
 
   import Record, only: [defrecord: 3]
 

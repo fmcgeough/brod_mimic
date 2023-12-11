@@ -5,10 +5,10 @@ defmodule BrodMimic.ProducersSup do
 
   @behaviour BrodMimic.Supervisor3
 
-  require Record
-
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.Supervisor3, as: BrodSupervisor3
+
+  require Record
 
   Record.defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,

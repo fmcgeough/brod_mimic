@@ -24,98 +24,15 @@ defmodule BrodMimic.GroupSubscriber do
   alias BrodMimic.GroupCoordinator, as: BrodGroupCoordinator
   alias BrodMimic.Utils, as: BrodUtils
 
-  # -behaviour(brod_group_member).
+  require Logger
 
-  # -export([ ack/4
-  #         , ack/5
-  #         , commit/1
-  #         , commit/4
-  #         , start_link/7
-  #         , start_link/8
-  #         , stop/1
-  #         ]).
-
-  # %% callbacks for brod_group_coordinator
-  # -export([ get_committed_offsets/2
-  #         , assignments_received/4
-  #         , assignments_revoked/1
-  #         , assign_partitions/3
-  #         , user_data/1
-  #         ]).
-
-  # -export([ code_change/3
-  #         , handle_call/3
-  #         , handle_cast/2
-  #         , handle_info/2
-  #         , init/1
-  #         , terminate/2
-  #         ]).
+  # delay 2 seconds retry the failed subscription to partition consumer process
+  @resubcribe_delay 2000
+  @lo_cmd_subscribe_partitions '$subscribe_partitions'
 
   @type cb_state() :: term()
   @type member_id() :: Brod.group_member_id()
 
-  # Initialize the callback module s state.
-  @callback init(Brod.group_id(), term()) :: {:ok, cb_state()}
-
-  @doc """
-    Handle a message. Return one of:
-
-     * `{:ok, new_callback_state}`:
-       The subscriber has received the message for processing async-ly.
-       It should call brod_group_subscriber:ack/4 to acknowledge later.
-
-     * `{:ok, ack, new_callback_state}`
-       The subscriber has completed processing the message.
-
-     * `{:ok, :ack_no_commit, new_callback_state}`
-       The subscriber has completed processing the message, but it
-       is not ready to commit offset yet. It should call
-       brod_group_subscriber:commit/4 later.
-
-     While this callback function is being evaluated, the fetch-ahead
-     partition-consumers are fetching more messages behind the scene
-     unless prefetch_count and prefetch_bytes are set to 0 in consumer config.
-  """
-  @callback handle_message(
-              Brod.topic(),
-              Brod.partition(),
-              Brod.message() | Brod.message_set(),
-              cb_state()
-            ) ::
-              {:ok, cb_state()}
-              | {:ok, :ack, cb_state()}
-              | {:ok, :ack_no_commit, cb_state()}
-
-  @doc """
-    This callback is called only when subscriber is to commit offsets locally
-    instead of Kafka. Return `{:ok, offsets, cb_state()}` where offsets can be [],
-    or only the ones that are found in e.g. local storage or database. For the
-    topic-partitions which have no committed offset found, the consumer will
-    take 'begin_offset' in consumer config as the start point of data stream. If
-    'begin_offset' is not found in consumer config, the default value -1
-    (latest) is used.
-
-    commented out as it's an optional callback
-
-  ```
-    @callback get_committed_offsets(
-      Brod.group_id(),
-      [{Brod.topic(), Brod.partition()}], cb_state()) ::
-      {:ok, [{{Brod.topic(), Brod.partition()}, Brod.offset()}], cb_state()}
-  ```
-   This function is called only when `partition_assignment_strategy` is
-   `callback_implemented` in group config. The first element in the group member
-   list is ensured to be the group leader. commented out as it's an optional
-  callback
-
-  ```
-    @callback assign_partitions(
-      [Brod.group_member()],
-      [{Brod.topic(), Brod.partition()}],
-      cb_state()) ::
-      [{Brod.group_member_id(), [Brod.partition_assignment()]}]
-  ```
-  """
   defrecord(:kafka_message, extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl"))
 
   defrecord(:consumer,
@@ -193,11 +110,68 @@ defmodule BrodMimic.GroupSubscriber do
             message_type: :message | :message_set
           )
 
-  require Logger
+  # Initialize the callback module s state.
+  @callback init(Brod.group_id(), term()) :: {:ok, cb_state()}
 
-  # delay 2 seconds retry the failed subscription to partition consumer process
-  @resubcribe_delay 2000
-  @lo_cmd_subscribe_partitions '$subscribe_partitions'
+  @doc """
+    Handle a message. Return one of:
+
+     * `{:ok, new_callback_state}`:
+       The subscriber has received the message for processing async-ly.
+       It should call brod_group_subscriber:ack/4 to acknowledge later.
+
+     * `{:ok, ack, new_callback_state}`
+       The subscriber has completed processing the message.
+
+     * `{:ok, :ack_no_commit, new_callback_state}`
+       The subscriber has completed processing the message, but it
+       is not ready to commit offset yet. It should call
+       brod_group_subscriber:commit/4 later.
+
+     While this callback function is being evaluated, the fetch-ahead
+     partition-consumers are fetching more messages behind the scene
+     unless prefetch_count and prefetch_bytes are set to 0 in consumer config.
+  """
+  @callback handle_message(
+              Brod.topic(),
+              Brod.partition(),
+              Brod.message() | Brod.message_set(),
+              cb_state()
+            ) ::
+              {:ok, cb_state()}
+              | {:ok, :ack, cb_state()}
+              | {:ok, :ack_no_commit, cb_state()}
+
+  @doc """
+    This callback is called only when subscriber is to commit offsets locally
+    instead of Kafka. Return `{:ok, offsets, cb_state()}` where offsets can be [],
+    or only the ones that are found in e.g. local storage or database. For the
+    topic-partitions which have no committed offset found, the consumer will
+    take 'begin_offset' in consumer config as the start point of data stream. If
+    'begin_offset' is not found in consumer config, the default value -1
+    (latest) is used.
+
+    commented out as it's an optional callback
+
+  ```
+    @callback get_committed_offsets(
+      Brod.group_id(),
+      [{Brod.topic(), Brod.partition()}], cb_state()) ::
+      {:ok, [{{Brod.topic(), Brod.partition()}, Brod.offset()}], cb_state()}
+  ```
+   This function is called only when `partition_assignment_strategy` is
+   `callback_implemented` in group config. The first element in the group member
+   list is ensured to be the group leader. commented out as it's an optional
+  callback
+
+  ```
+    @callback assign_partitions(
+      [Brod.group_member()],
+      [{Brod.topic(), Brod.partition()}],
+      cb_state()) ::
+      [{Brod.group_member_id(), [Brod.partition_assignment()]}]
+  ```
+  """
 
   @spec start_link(
           Brod.client(),

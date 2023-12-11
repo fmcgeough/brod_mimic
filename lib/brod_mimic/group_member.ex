@@ -27,8 +27,6 @@ defmodule BrodMimic.GroupMember do
      evaluated every time when new assignments are received.
   """
 
-  @optional_callbacks [assign_partitions: 3, user_data: 1]
-
   @doc """
   Call the callback module to initialize assignments.
 
@@ -80,4 +78,6 @@ defmodule BrodMimic.GroupMember do
   so that leader can make smarter decisions when assigning partitions to it.
   """
   @callback user_data(pid()) :: binary()
+
+  @optional_callbacks [assign_partitions: 3, user_data: 1]
 end

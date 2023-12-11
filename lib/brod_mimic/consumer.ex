@@ -16,10 +16,10 @@ defmodule BrodMimic.Consumer do
 
   Each consumer can have only one subscriber.
   """
-  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
-
   use BrodMimic.Macros
   use GenServer
+
+  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
 
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.KafkaRequest, as: BrodKafkaRequest

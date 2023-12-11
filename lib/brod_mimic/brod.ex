@@ -2,6 +2,8 @@ defmodule BrodMimic.Brod do
   @moduledoc """
   Brod helpers and types
   """
+  @behaviour Application
+
   use BrodMimic.Macros
 
   import Bitwise
@@ -231,10 +233,15 @@ defmodule BrodMimic.Brod do
   @doc """
   Application behaviour callback
   """
+  @impl Application
   def start(_start_type, _start_args) do
     BrodSup.start_link()
   end
 
+  @doc """
+  Application behaviour callback
+  """
+  @impl Application
   def stop(_state) do
     :ok
   end

@@ -15,6 +15,7 @@ defmodule BrodMimic.KafkaRequest do
             , sync_group/2
             ]).
   """
+  alias BrodMimic.KafkaApis, as: BrodKafkaApis
 
   @type api() :: KafkaApis.api()
   @type vsn() :: KafkaApis.vsn()
@@ -27,8 +28,6 @@ defmodule BrodMimic.KafkaRequest do
           optional(:timeout) => :kpro.int32(),
           optional(:validate_only) => boolean()
         }
-  alias BrodMimic.KafkaApis, as: BrodKafkaApis
-
   @doc """
   Make a produce request, If the first arg is a connection pid, call
   `KafkaApis.pick_version/2` to resolve version

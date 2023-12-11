@@ -24,7 +24,7 @@ defmodule BrodMimic.MixProject do
   def application do
     [
       extra_applications: [:logger],
-      mod: {BrodMimic.Application, []}
+      mod: {BrodMimic.Brod, []}
     ]
   end
 

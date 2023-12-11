@@ -2,11 +2,11 @@ defmodule BrodMimic.CgCommits do
   @moduledoc """
   This is a utility module to help force commit offsets to Kafka
   """
+  @behaviour BrodMimic.GroupMember
+
   use GenServer
 
   import Record, only: [defrecord: 3]
-
-  @behaviour BrodMimic.GroupMember
 
   alias BrodMimic.Brod
   alias BrodMimic.GroupCoordinator, as: BrodGroupCoordinator

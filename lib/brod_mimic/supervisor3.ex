@@ -94,7 +94,6 @@ defmodule BrodMimic.Supervisor3 do
 
   def start_link(sup_name, mod, args) do
     :gen_server.start_link(sup_name, BrodMimic.Supervisor3, {sup_name, mod, args}, [])
-    |> IO.inspect(label: "start link")
   end
 
   def start_child(supervisor, child_spec) do
