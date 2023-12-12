@@ -1201,7 +1201,7 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp do_terminate(r_child(pid: {:delayed_restart, t_ref}) = child, _sup_name) do
-    :erlang.cancel_timer(t_ref)
+    Process.cancel_timer(t_ref)
     r_child(child, pid: :undefined)
   end
 
@@ -1377,7 +1377,7 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp wait_dynamic_children(_child, _pids, 0, t_ref, e_stack) do
-    :erlang.cancel_timer(t_ref)
+    Process.cancel_timer(t_ref)
 
     receive do
       {:timeout, ^t_ref, :kill} ->

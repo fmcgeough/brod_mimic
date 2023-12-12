@@ -455,7 +455,7 @@ defmodule BrodMimic.Producer do
   end
 
   defp cancel_delay_send_timer({tref, _Msg}) do
-    _ = :erlang.cancel_timer(tref)
+    _ = Process.cancel_timer(tref)
   end
 
   defp maybe_demonitor(:undefined) do

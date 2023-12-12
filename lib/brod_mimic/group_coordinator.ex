@@ -297,7 +297,7 @@ defmodule BrodMimic.GroupCoordinator do
         attempt_num,
         reason
       ) do
-    is_reference(offset_commit_timer) and :erlang.cancel_timer(offset_commit_timer)
+    is_reference(offset_commit_timer) and Process.cancel_timer(offset_commit_timer)
 
     if reason != :undef do
       Logger.info(fn -> log_string(state0, @rejoining_group, [reason]) end)
@@ -936,7 +936,7 @@ defmodule BrodMimic.GroupCoordinator do
         {:ok, state}
 
       :commit_to_kafka_v2 ->
-        is_reference(old_timer) and :erlang.cancel_timer(old_timer)
+        is_reference(old_timer) and Process.cancel_timer(old_timer)
 
         receive do
           :lo_cmd_commit_offsets ->
