@@ -115,8 +115,7 @@ defmodule BrodMimic.Producer do
   end
 
   def produce_cb(pid, key, value, ack_cb) do
-    call_ref =
-      r_brod_call_ref(caller: self(), callee: pid, ref: mref = :erlang.monitor(:process, pid))
+    call_ref = r_brod_call_ref(caller: self(), callee: pid, ref: mref = Process.monitor(pid))
 
     batch = BrodUtils.make_batch_input(key, value)
     send(pid, {:produce, call_ref, batch, ack_cb})
@@ -144,7 +143,7 @@ defmodule BrodMimic.Producer do
   def sync_produce_request(call_ref, timeout) do
     r_brod_call_ref(caller: caller, callee: callee, ref: ref) = call_ref
     ^caller = self()
-    mref = :erlang.monitor(:process, callee)
+    mref = Process.monitor(callee)
 
     receive do
       r_brod_produce_reply(
@@ -368,7 +367,7 @@ defmodule BrodMimic.Producer do
 
       {:ok, connection} ->
         :ok = maybe_demonitor(old_conn_mref)
-        conn_mref = :erlang.monitor(:process, connection)
+        conn_mref = Process.monitor(connection)
 
         buffer = ProducerBuffer.nack_all(buffer0, :new_leader)
 

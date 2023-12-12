@@ -94,7 +94,7 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   def stop(pid) do
-    mref = :erlang.monitor(:process, pid)
+    mref = Process.monitor(pid)
     Process.exit(pid, :shutdown)
 
     receive do

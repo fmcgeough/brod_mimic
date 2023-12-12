@@ -194,7 +194,7 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   def stop(pid) do
-    mref = :erlang.monitor(:process, pid)
+    mref = Process.monitor(pid)
     :ok = GenServer.cast(pid, :stop)
 
     receive do
@@ -234,7 +234,7 @@ defmodule BrodMimic.TopicSubscriber do
     state =
       r_state(
         client: client,
-        client_mref: :erlang.monitor(:process, client),
+        client_mref: Process.monitor(client),
         topic: topic,
         cb_module: cb_module,
         cb_state: cb_state,
@@ -422,7 +422,7 @@ defmodule BrodMimic.TopicSubscriber do
 
         case Brod.subscribe(client, self(), topic, partition, options) do
           {:ok, consumer_pid} ->
-            mref = :erlang.monitor(:process, consumer_pid)
+            mref = Process.monitor(consumer_pid)
 
             r_consumer(consumer, consumer_pid: consumer_pid, consumer_mref: mref)
 

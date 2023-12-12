@@ -828,7 +828,7 @@ defmodule BrodMimic.Consumer do
           :erlang.demonitor(old_mref, [:flush])
         end
 
-        mref = :erlang.monitor(:process, pid)
+        mref = Process.monitor(pid)
 
         state2 =
           r_state(state1,
@@ -956,7 +956,7 @@ defmodule BrodMimic.Consumer do
         mref =
           case is_shared_conn(bootstrap) do
             true ->
-              :erlang.monitor(:process, connection)
+              Process.monitor(connection)
 
             false ->
               :undefined

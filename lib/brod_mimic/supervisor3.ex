@@ -1254,8 +1254,8 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp monitor_child(pid) do
-    :erlang.monitor(:process, pid)
-    :erlang.unlink(pid)
+    Process.monitor(pid)
+    Process.unlink(pid)
 
     receive do
       {:EXIT, ^pid, reason} ->

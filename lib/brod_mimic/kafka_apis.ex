@@ -149,7 +149,7 @@ defmodule BrodMimic.KafkaApis do
   end
 
   def handle_cast({:monitor_connection, conn}, state) do
-    :erlang.monitor(:process, conn)
+    Process.monitor(conn)
     {:noreply, state}
   end
 

@@ -95,8 +95,8 @@ defmodule BrodMimic.GroupSubscriberv2 do
   end
 
   def stop(pid) do
-    mref = :erlang.monitor(:process, pid)
-    :erlang.unlink(pid)
+    mref = Process.monitor(pid)
+    Process.unlink(pid)
     Process.exit(pid, :shutdown)
 
     receive do
