@@ -125,7 +125,7 @@ defmodule BrodMimic.Producer do
         call_ref: r_brod_call_ref(ref: ^mref),
         result: :brod_produce_req_buffered
       ) ->
-        :erlang.demonitor(mref, [:flush])
+        Process.demonitor(mref, [:flush])
 
         case ack_cb do
           :undefined ->
@@ -151,14 +151,14 @@ defmodule BrodMimic.Producer do
         base_offset: offset,
         result: :brod_produce_req_acked
       ) ->
-        :erlang.demonitor(mref, [:flush])
+        Process.demonitor(mref, [:flush])
         {:ok, offset}
 
       {:DOWN, ^mref, :process, _pid, reason} ->
         {:error, {:producer_down, reason}}
     after
       timeout ->
-        :erlang.demonitor(mref, [:flush])
+        Process.demonitor(mref, [:flush])
         {:error, :timeout}
     end
   end
@@ -463,7 +463,7 @@ defmodule BrodMimic.Producer do
   end
 
   defp maybe_demonitor(mref) do
-    true = :erlang.demonitor(mref, [:flush])
+    true = Process.demonitor(mref, [:flush])
     :ok
   end
 

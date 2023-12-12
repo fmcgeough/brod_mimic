@@ -311,7 +311,7 @@ defmodule BrodMimic.Consumer do
       ) do
     case subscriber_pid === current_subscriber do
       true ->
-        is_reference(mref) and :erlang.demonitor(mref, [:flush])
+        is_reference(mref) and Process.demonitor(mref, [:flush])
 
         new_state =
           r_state(state,
@@ -619,7 +619,7 @@ defmodule BrodMimic.Consumer do
           domain: [:brod]
         })
 
-        is_reference(mref) and :erlang.demonitor(mref)
+        is_reference(mref) and Process.demonitor(mref)
 
         new_state = r_state(state, connection: :undefined, connection_mref: :undefined)
 
@@ -825,7 +825,7 @@ defmodule BrodMimic.Consumer do
     case update_options(options, state0) do
       {:ok, state1} ->
         if is_reference(old_mref) do
-          :erlang.demonitor(old_mref, [:flush])
+          Process.demonitor(old_mref, [:flush])
         end
 
         mref = Process.monitor(pid)
