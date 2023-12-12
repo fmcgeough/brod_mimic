@@ -142,7 +142,7 @@ defmodule BrodMimic.Consumer do
   end
 
   def init({bootstrap, topic, partition, config}) do
-    :erlang.process_flag(:trap_exit, true)
+    Process.flag(:trap_exit, true)
 
     cfg = fn name, default ->
       :proplists.get_value(name, config, default)

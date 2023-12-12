@@ -168,7 +168,7 @@ defmodule BrodMimic.Producer do
   end
 
   def init({client_pid, topic, partition, config}) do
-    :erlang.process_flag(:trap_exit, true)
+    Process.flag(:trap_exit, true)
     buffer_limit = :proplists.get_value(:partition_buffer_limit, config, 512)
     on_wire_limit = :proplists.get_value(:partition_onwire_limit, config, 1)
     max_batch_size = :proplists.get_value(:max_batch_size, config, 1_048_576)

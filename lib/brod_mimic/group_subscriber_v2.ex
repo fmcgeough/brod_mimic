@@ -143,7 +143,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
 
   def init(config) do
     %{client: client, group_id: group_id, topics: topics, cb_module: cb_module} = config
-    :erlang.process_flag(:trap_exit, true)
+    Process.flag(:trap_exit, true)
     message_type = :maps.get(:message_type, config, :message_set)
     default_group_config = []
     group_config = :maps.get(:group_config, config, default_group_config)

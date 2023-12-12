@@ -104,7 +104,7 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   def init({client, group_id, topics, config, cb_module, member_pid}) do
-    :erlang.process_flag(:trap_exit, true)
+    Process.flag(:trap_exit, true)
 
     get_cfg = fn name, default ->
       :proplists.get_value(name, config, default)

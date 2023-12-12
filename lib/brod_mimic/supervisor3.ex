@@ -154,7 +154,7 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   def init({sup_name, mod, args}) do
-    :erlang.process_flag(:trap_exit, true)
+    Process.flag(:trap_exit, true)
 
     case mod.init(args) do
       {:ok, {sup_flags, start_spec}} ->
@@ -533,7 +533,7 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp count_if_alive(pid, alive, total) do
-    case is_pid(pid) and :erlang.is_process_alive(pid) do
+    case is_pid(pid) and Process.alive?(pid) do
       true ->
         {alive + 1, total + 1}
 
@@ -554,7 +554,7 @@ defmodule BrodMimic.Supervisor3 do
          r_child(pid: pid, child_type: :worker),
          {specs, active, supers, workers}
        ) do
-    case is_pid(pid) and :erlang.is_process_alive(pid) do
+    case is_pid(pid) and Process.alive?(pid) do
       true ->
         {specs + 1, active + 1, supers, workers + 1}
 
@@ -567,7 +567,7 @@ defmodule BrodMimic.Supervisor3 do
          r_child(pid: pid, child_type: :supervisor),
          {specs, active, supers, workers}
        ) do
-    case is_pid(pid) and :erlang.is_process_alive(pid) do
+    case is_pid(pid) and Process.alive?(pid) do
       true ->
         {specs + 1, active + 1, supers + 1, workers}
 

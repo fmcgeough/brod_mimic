@@ -610,7 +610,7 @@ defmodule BrodMimic.Client do
   def get_partition_worker(client_id, key) when is_atom(client_id) do
     case lookup_partition_worker(client_id, client_id, key) do
       {:ok, pid} ->
-        case :erlang.is_process_alive(pid) do
+        case Process.alive?(pid) do
           true ->
             {:ok, pid}
 
@@ -1212,7 +1212,7 @@ defmodule BrodMimic.Client do
   end
 
   def ensure_binary(client_id) when is_atom(client_id) do
-    ensure_binary(:erlang.atom_to_binary(client_id, :utf8))
+    Atom.to_string(client_id)
   end
 
   def ensure_binary(client_id) when is_binary(client_id) do
