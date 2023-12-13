@@ -28,6 +28,12 @@ defmodule BrodMimic.Consumer do
   require Logger
 
   @fetch_error "Fetch error ~s-~p: ~p"
+  @unexpected_info "~p ~p got unexpected info: ~p"
+  @unexpected_cast "~p ~p got unexpected cast: ~p"
+  @consumer_terminate "Consumer ~s-~w terminate reason: ~p"
+  @consumer_shutdown "Consumer ~s-~p shutdown\nreason: ~p"
+  @consumer_suspended "~p ~p consumer is suspended, waiting for subscriber ~p to resubscribe with new begin_offset"
+  @offset_out_of_range "~p ~p offset out of range, applying reset policy ~p"
 
   @default_min_bytes 0
   # 1 MB
@@ -260,23 +266,9 @@ defmodule BrodMimic.Consumer do
   end
 
   def handle_info(info, state) do
-    case :logger.allow(:warning, :brod_consumer) do
-      true ->
-        :erlang.apply(:logger, :macro_log, [
-          %{
-            mfa: {:brod_consumer, :handle_info, 2},
-            line: 368,
-            file: '../brod/src/brod_consumer.erl'
-          },
-          :warning,
-          '~p ~p got unexpected info: ~p',
-          [:brod_consumer, self(), info],
-          %{domain: [:brod]}
-        ])
-
-      false ->
-        :ok
-    end
+    Logger.warning(:io_lib.format(@unexpected_info, [:brod_consumer, self(), info]), %{
+      domain: [:brod]
+    })
 
     {:noreply, state}
   end
@@ -342,23 +334,9 @@ defmodule BrodMimic.Consumer do
   end
 
   def handle_cast(cast, state) do
-    case :logger.allow(:warning, :brod_consumer) do
-      true ->
-        :erlang.apply(:logger, :macro_log, [
-          %{
-            mfa: {:brod_consumer, :handle_cast, 2},
-            line: 417,
-            file: '../brod/src/brod_consumer.erl'
-          },
-          :warning,
-          '~p ~p got unexpected cast: ~p',
-          [:brod_consumer, self(), cast],
-          %{domain: [:brod]}
-        ])
-
-      false ->
-        :ok
-    end
+    Logger.warning(:io_lib.format(@unexpected_cast, [:brod_consumer, self(), cast]), %{
+      domain: [:brod]
+    })
 
     {:noreply, state}
   end
@@ -385,27 +363,11 @@ defmodule BrodMimic.Consumer do
         :ok
     end
 
-    is_normal or
-      case :logger.allow(
-             :error,
-             :brod_consumer
-           ) do
-        true ->
-          :erlang.apply(:logger, :macro_log, [
-            %{
-              mfa: {:brod_consumer, :terminate, 2},
-              line: 438,
-              file: '../brod/src/brod_consumer.erl'
-            },
-            :error,
-            'Consumer ~s-~w terminate reason: ~p',
-            [topic, partition, reason],
-            %{domain: [:brod]}
-          ])
-
-        false ->
-          :ok
-      end
+    if not is_normal do
+      Logger.error(:io_lib.format(@consumer_terminate, [topic, partition, reason]), %{
+        domain: [:brod]
+      })
+    end
 
     :ok
   end
@@ -631,17 +593,8 @@ defmodule BrodMimic.Consumer do
 
       :stop ->
         :ok = cast_to_subscriber(subscriber, error)
-
-        case :logger.allow(:error, :brod_consumer) do
-          true ->
-            "Consumer ~s-~p shutdown\nreason: ~p"
-            |> :io_lib.format([topic, partition, error_code])
-            |> to_string()
-            |> Logger.error(%{domain: [:brod]})
-
-          false ->
-            :ok
-        end
+        error_string = :io_lib.format(@consumer_shutdown, [topic, partition, error_code])
+        Logger.error(error_string, %{domain: [:brod]})
 
         {:stop, :normal, state}
 
@@ -663,48 +616,20 @@ defmodule BrodMimic.Consumer do
        ) do
     :ok = cast_to_subscriber(subscriber, error)
 
-    case :logger.allow(:info, :brod_consumer) do
-      true ->
-        :erlang.apply(:logger, :macro_log, [
-          %{
-            mfa: {:brod_consumer, :handle_reset_offset, 2},
-            line: 646,
-            file: '../brod/src/brod_consumer.erl'
-          },
-          :info,
-          '~p ~p consumer is suspended, waiting for subscriber ~p to resubscribe with new begin_offset',
-          [:brod_consumer, self(), subscriber],
-          %{domain: [:brod]}
-        ])
-
-      false ->
-        :ok
-    end
+    Logger.info(:io_lib.format(@consumer_suspended, [:brod_consumer, self(), subscriber]), %{
+      domain: [:brod]
+    })
 
     {:noreply, r_state(state, is_suspended: true)}
   end
 
   defp handle_reset_offset(
          r_state(offset_reset_policy: policy) = state,
-         _Error
+         _error
        ) do
-    case :logger.allow(:info, :brod_consumer) do
-      true ->
-        :erlang.apply(:logger, :macro_log, [
-          %{
-            mfa: {:brod_consumer, :handle_reset_offset, 2},
-            line: 651,
-            file: '../brod/src/brod_consumer.erl'
-          },
-          :info,
-          '~p ~p offset out of range, applying reset policy ~p',
-          [:brod_consumer, self(), policy],
-          %{domain: [:brod]}
-        ])
-
-      false ->
-        :ok
-    end
+    Logger.info(:io_lib.format(@offset_out_of_range, [:brod_consumer, self(), policy]), %{
+      domain: [:brod]
+    })
 
     begin_offset =
       case policy do

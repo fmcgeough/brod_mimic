@@ -18,6 +18,8 @@ defmodule BrodMimic.Producer do
   require Logger
   require Record
 
+  @failed_init_connection "Failed to (re)init connection, reason:\n~p"
+
   @type milli_sec() :: non_neg_integer()
   @type delay_send_ref() :: :undef | {reference(), reference()}
   @type topic() :: Brod.topic()
@@ -381,26 +383,8 @@ defmodule BrodMimic.Producer do
 
       {:error, reason} ->
         :ok = maybe_demonitor(old_conn_mref)
-
         buffer = ProducerBuffer.nack_all(buffer0, :no_leader_connection)
-
-        case :logger.allow(:warning, :brod_producer) do
-          true ->
-            :erlang.apply(:logger, :macro_log, [
-              %{
-                mfa: {:brod_producer, :maybe_reinit_connection, 1},
-                line: 519,
-                file: '../brod/src/brod_producer.erl'
-              },
-              :warning,
-              'Failed to (re)init connection, reason:\n~p',
-              [reason],
-              %{domain: [:brod]}
-            ])
-
-          false ->
-            :ok
-        end
+        Logger.warning(:io_lib.format(@failed_init_connection, [reason]), %{domain: [:brod]})
 
         {:ok, r_state(state, connection: :undefined, conn_mref: :undefined, buffer: buffer)}
     end

@@ -9,6 +9,11 @@ defmodule BrodMimic.GroupSubscriberWorker do
 
   alias BrodMimic.Utils, as: BrodUtils
 
+  require Logger
+
+  @starting_group_subscriber "Starting group_subscriber_worker: ~p~nOffset: ~p~nPid: ~p~n"
+  @discard_invalid_offset "Discarded invalid committed offset ~p for: ~s:~p~n"
+
   defrecord(
     :kafka_message,
     extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl")
@@ -92,23 +97,9 @@ defmodule BrodMimic.GroupSubscriberWorker do
         start_opts
       )
 
-    case :logger.allow(:info, __MODULE__) do
-      true ->
-        :erlang.apply(:logger, :macro_log, [
-          %{
-            mfa: {__MODULE__, :init, 2},
-            line: 60,
-            file: '../brod/src/brod_group_subscriber_worker.erl'
-          },
-          :info,
-          'Starting group_subscriber_worker: ~p~nOffset: ~p~nPid: ~p~n',
-          [init_info, begin_offset, self()],
-          %{domain: [:brod]}
-        ])
-
-      false ->
-        :ok
-    end
+    Logger.info(:io_lib.format(@starting_group_subscriber, [init_info, begin_offset, self()]), %{
+      domain: [:brod]
+    })
 
     {:ok, cb_state} = cb_module.init(init_info, cb_config)
 
@@ -173,23 +164,9 @@ defmodule BrodMimic.GroupSubscriberWorker do
   end
 
   defp resolve_committed_offsets(topic, partition, offset) do
-    case :logger.allow(:warning, __MODULE__) do
-      true ->
-        :erlang.apply(:logger, :macro_log, [
-          %{
-            mfa: {__MODULE__, :resolve_committed_offsets, 3},
-            line: 123,
-            file: '../brod/src/brod_group_subscriber_worker.erl'
-          },
-          :warning,
-          'Discarded invalid committed offset ~p for: ~s:~p~n',
-          [topic, partition, offset],
-          %{domain: [:brod]}
-        ])
-
-      false ->
-        :ok
-    end
+    Logger.warning(:io_lib.format(@discard_invalid_offset, [topic, partition, offset]), %{
+      domain: [:brod]
+    })
 
     []
   end

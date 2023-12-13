@@ -20,6 +20,9 @@ defmodule BrodMimic.GroupSubscriberv2 do
   require Record
 
   @worker_crashed "group_subscriber_v2 worker crashed.~n  group_id = ~s~n  topic = ~s~n  partition = ~p~n  pid = ~p~n  reason = ~p"
+  @shutting_down "Received EXIT:~p from ~p, shutting down"
+  @commit_flush_failed "group_subscriber_v2 ~s failed to flush commits before termination ~p"
+  @terminating_worker "Terminating worker pid=~p"
 
   defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
@@ -280,27 +283,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
         {:stop, :shutdown, state}
 
       _ ->
-        case :logger.allow(
-               :info,
-               :brod_group_subscriber_v2
-             ) do
-          true ->
-            :erlang.apply(:logger, :macro_log, [
-              %{
-                mfa: {:brod_group_subscriber_v2, :handle_info, 2},
-                line: 381,
-                file: '../brod/src/brod_group_subscriber_v2.erl'
-              },
-              :info,
-              'Received EXIT:~p from ~p, shutting down',
-              [reason, pid],
-              %{domain: [:brod]}
-            ])
-
-          false ->
-            :ok
-        end
-
+        Logger.info(:io_lib.format(@shutting_down, [reason, pid]), %{domain: [:brod]})
         {:stop, :shutdown, state}
     end
   end
@@ -321,26 +304,8 @@ defmodule BrodMimic.GroupSubscriberv2 do
         :ok
 
       {:error, reason} ->
-        case :logger.allow(
-               :error,
-               :brod_group_subscriber_v2
-             ) do
-          true ->
-            :erlang.apply(:logger, :macro_log, [
-              %{
-                mfa: {:brod_group_subscriber_v2, :flush_offset_commits, 2},
-                line: 412,
-                file: '../brod/src/brod_group_subscriber_v2.erl'
-              },
-              :error,
-              'group_subscriber_v2 ~s failed to flush commits before termination ~p',
-              [group_id, reason],
-              %{domain: [:brod]}
-            ])
-
-          false ->
-            :ok
-        end
+        Logger.error(:io_lib.format(@commit_flush_failed, [group_id, reason]), %{domain: [:brod]})
+        :ok
     end
   end
 
@@ -360,33 +325,10 @@ defmodule BrodMimic.GroupSubscriberv2 do
   end
 
   defp terminate_all_workers(workers) do
-    :maps.map(
-      fn _, worker ->
-        case :logger.allow(
-               :info,
-               :brod_group_subscriber_v2
-             ) do
-          true ->
-            :erlang.apply(:logger, :macro_log, [
-              %{
-                mfa: {:brod_group_subscriber_v2, :terminate_all_workers, 1},
-                line: 431,
-                file: '../brod/src/brod_group_subscriber_v2.erl'
-              },
-              :info,
-              'Terminating worker pid=~p',
-              [worker],
-              %{domain: [:brod]}
-            ])
-
-          false ->
-            :ok
-        end
-
-        terminate_worker(worker)
-      end,
-      workers
-    )
+    Enum.each(workers, fn worker ->
+      Logger.info(:io_lib.format(@terminating_worker, [worker]), %{domain: [:brod]})
+      terminate_worker(worker)
+    end)
 
     :ok
   end
