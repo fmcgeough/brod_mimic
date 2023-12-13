@@ -178,6 +178,9 @@ defmodule BrodMimic.Utils do
 
   @doc """
   Get now timestamp, and format as UTC string.
+
+  This should probably be changed to just:
+  `DateTime.utc_now() |> DateTime.to_iso8601(:extended, 0)`
   """
   @spec os_time_utc_str :: [any()]
   def os_time_utc_str do
