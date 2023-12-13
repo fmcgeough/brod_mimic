@@ -853,35 +853,7 @@ defmodule BrodMimic.GroupCoordinator do
     escalate_ec(:kpro.find(:error_code, rsp_body, :no_error))
     topic_offsets = :kpro.find(:topics, rsp_body)
 
-    committed_offsets0 =
-      :lists.map(
-        fn topic_offset ->
-          topic = :kpro.find(:name, topic_offset)
-          partition_offsets = :kpro.find(:partitions, topic_offset)
-
-          :lists.foldl(
-            fn partition_offset, acc ->
-              partition = :kpro.find(:partition_index, partition_offset)
-              offset0 = :kpro.find(:committed_offset, partition_offset)
-              metadata = :kpro.find(:metadata, partition_offset)
-              ec = :kpro.find(:error_code, partition_offset)
-              escalate_ec(ec)
-              # Offset -1 in offset_fetch_response is an indicator of 'no-value'
-              case offset0 === -1 do
-                true ->
-                  acc
-
-                false ->
-                  offset = maybe_upgrade_from_roundrobin_v1(offset0, metadata)
-                  [{{topic, partition}, offset} | acc]
-              end
-            end,
-            [],
-            partition_offsets
-          )
-        end,
-        topic_offsets
-      )
+    committed_offsets0 = committed_offsets_from_topic_offsets(topic_offsets)
 
     :lists.append(committed_offsets0)
   end
@@ -910,6 +882,40 @@ defmodule BrodMimic.GroupCoordinator do
       brod_received_assignment(topic: topic, partition: partition, begin_offset: begin_offset)
 
     [assignment | resolve_begin_offsets(rest, committed_offsets, is_consumer_managed)]
+  end
+
+  defp committed_offsets_from_topic_offsets(topic_offsets) do
+    :lists.map(
+      fn topic_offset ->
+        topic = :kpro.find(:name, topic_offset)
+        partition_offsets = :kpro.find(:partitions, topic_offset)
+        committed_offsets_from_partition_offsets(topic, partition_offsets)
+      end,
+      topic_offsets
+    )
+  end
+
+  defp committed_offsets_from_partition_offsets(topic, partition_offsets) do
+    :lists.foldl(
+      fn partition_offset, acc ->
+        partition = :kpro.find(:partition_index, partition_offset)
+        offset0 = :kpro.find(:committed_offset, partition_offset)
+        metadata = :kpro.find(:metadata, partition_offset)
+        ec = :kpro.find(:error_code, partition_offset)
+        escalate_ec(ec)
+        # Offset -1 in offset_fetch_response is an indicator of 'no-value'
+        case offset0 === -1 do
+          true ->
+            acc
+
+          false ->
+            offset = maybe_upgrade_from_roundrobin_v1(offset0, metadata)
+            [{{topic, partition}, offset} | acc]
+        end
+      end,
+      [],
+      partition_offsets
+    )
   end
 
   defp resolve_special_offset(0) do
