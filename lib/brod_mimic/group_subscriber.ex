@@ -409,7 +409,7 @@ defmodule BrodMimic.GroupSubscriber do
 
   def handle_info(@lo_cmd_subscribe_partitions, state) do
     new_state =
-      case state.is_blocked do
+      case state(state, :is_blocked) do
         true ->
           state
 

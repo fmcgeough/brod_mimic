@@ -21,6 +21,7 @@ defmodule BrodMimic.Consumer do
 
   import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
 
+  alias BrodMimic.Brod
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.KafkaRequest, as: BrodKafkaRequest
   alias BrodMimic.Utils, as: BrodUtils
@@ -54,6 +55,7 @@ defmodule BrodMimic.Consumer do
 
   @type isolation_level() :: :kpro.isolation_level()
   @type offset_reset_policy() :: :reset_by_subscriber | :reset_to_earliest | :reset_to_latest
+  @type bytes() :: non_neg_integer()
 
   defrecord(
     :kpro_req,
@@ -84,9 +86,9 @@ defmodule BrodMimic.Consumer do
     error_desc: ''
   )
 
-  defrecord(:r_pending_acks, :pending_acks, count: 0, bytes: 0, queue: :queue.new())
+  defrecord(:pending_acks, :pending_acks, count: 0, bytes: 0, queue: :queue.new())
 
-  defrecord(:r_state, :state,
+  defrecord(:state, :state,
     bootstrap: :undefined,
     connection: :undefined,
     topic: :undefined,
@@ -110,6 +112,34 @@ defmodule BrodMimic.Consumer do
     connection_mref: :undefined,
     isolation_level: :undefined
   )
+
+  @type pending_acks() :: record(:pending_acks, count: integer(), bytes: integer(), queue: any())
+
+  @type state() ::
+          record(:state,
+            bootstrap: pid() | Brod.bootstrap(),
+            connection: :undef | pid(),
+            topic: binary(),
+            partition: integer(),
+            begin_offset: Brod.offset_time(),
+            max_wait_time: integer(),
+            min_bytes: bytes(),
+            max_bytes_orig: bytes(),
+            sleep_timeout: integer(),
+            prefetch_count: integer(),
+            last_req_ref: :undef | reference(),
+            subscriber: :undef | pid(),
+            subscriber_mref: :undef | reference(),
+            pending_acks: pending_acks(),
+            is_suspended: boolean(),
+            offset_reset_policy: offset_reset_policy(),
+            avg_bytes: number(),
+            max_bytes: bytes(),
+            size_stat_window: non_neg_integer(),
+            prefetch_bytes: non_neg_integer(),
+            connection_mref: :undef | reference(),
+            isolation_level: isolation_level()
+          )
 
   def start_link(bootstrap, topic, partition, config) do
     start_link(bootstrap, topic, partition, config, [])
@@ -162,7 +192,7 @@ defmodule BrodMimic.Consumer do
     end
 
     {:ok,
-     r_state(
+     state(
        bootstrap: bootstrap,
        topic: topic,
        partition: partition,
@@ -174,7 +204,7 @@ defmodule BrodMimic.Consumer do
        prefetch_count: prefetch_count,
        prefetch_bytes: prefetch_bytes,
        connection: :undef,
-       pending_acks: r_pending_acks(),
+       pending_acks: pending_acks(),
        is_suspended: false,
        offset_reset_policy: offset_reset_policy,
        avg_bytes: 0,
@@ -215,7 +245,7 @@ defmodule BrodMimic.Consumer do
 
   def handle_info(
         :init_connection,
-        r_state(subscriber: subscriber) = state0
+        state(subscriber: subscriber) = state0
       ) do
     case BrodUtils.is_pid_alive(subscriber) and maybe_init_connection(state0) do
       false ->
@@ -240,16 +270,16 @@ defmodule BrodMimic.Consumer do
     {:noreply, state}
   end
 
-  def handle_info({:DOWN, _monitor_ref, :process, pid, _reason}, r_state(subscriber: pid) = state) do
-    new_state = reset_buffer(r_state(state, subscriber: :undefined, subscriber_mref: :undefined))
+  def handle_info({:DOWN, _monitor_ref, :process, pid, _reason}, state(subscriber: pid) = state) do
+    new_state = reset_buffer(state(state, subscriber: :undefined, subscriber_mref: :undefined))
     {:noreply, new_state}
   end
 
-  def handle_info({:DOWN, _monitor_ref, :process, pid, _reason}, r_state(connection: pid) = state) do
+  def handle_info({:DOWN, _monitor_ref, :process, pid, _reason}, state(connection: pid) = state) do
     {:noreply, handle_conn_down(state)}
   end
 
-  def handle_info({:EXIT, pid, _reason}, r_state(connection: pid) = state) do
+  def handle_info({:EXIT, pid, _reason}, state(connection: pid) = state) do
     {:noreply, handle_conn_down(state)}
   end
 
@@ -261,11 +291,11 @@ defmodule BrodMimic.Consumer do
     {:noreply, state}
   end
 
-  def handle_call(:get_connection, _from, r_state(connection: c) = state) do
+  def handle_call(:get_connection, _from, state(connection: c) = state) do
     {:reply, c, state}
   end
 
-  def handle_call({:subscribe, pid, options}, _from, r_state(subscriber: subscriber) = state0) do
+  def handle_call({:subscribe, pid, options}, _from, state(subscriber: subscriber) = state0) do
     case not BrodUtils.is_pid_alive(subscriber) or subscriber === pid do
       true ->
         case maybe_init_connection(state0) do
@@ -284,7 +314,7 @@ defmodule BrodMimic.Consumer do
   def handle_call(
         {:unsubscribe, subscriber_pid},
         _from,
-        r_state(
+        state(
           subscriber: current_subscriber,
           subscriber_mref: mref
         ) = state
@@ -292,12 +322,7 @@ defmodule BrodMimic.Consumer do
     case subscriber_pid === current_subscriber do
       true ->
         is_reference(mref) and Process.demonitor(mref, [:flush])
-
-        new_state =
-          r_state(state,
-            subscriber: :undefined,
-            subscriber_mref: :undefined
-          )
+        new_state = state(state, subscriber: :undefined, subscriber_mref: :undefined)
 
         {:reply, :ok, reset_buffer(new_state)}
 
@@ -314,9 +339,9 @@ defmodule BrodMimic.Consumer do
     {:reply, {:error, {:unknown_call, call}}, state}
   end
 
-  def handle_cast({:ack, offset}, r_state(pending_acks: pending_acks) = state0) do
+  def handle_cast({:ack, offset}, state(pending_acks: pending_acks) = state0) do
     new_pending_acks = handle_ack(pending_acks, offset)
-    state1 = r_state(state0, pending_acks: new_pending_acks)
+    state1 = state(state0, pending_acks: new_pending_acks)
     state = maybe_send_fetch_request(state1)
     {:noreply, state}
   end
@@ -331,7 +356,7 @@ defmodule BrodMimic.Consumer do
 
   def terminate(
         reason,
-        r_state(bootstrap: bootstrap, topic: topic, partition: partition, connection: connection)
+        state(bootstrap: bootstrap, topic: topic, partition: partition, connection: connection)
       ) do
     is_shared = is_shared_conn(bootstrap)
     is_normal = BrodUtils.is_normal_reason(reason)
@@ -365,12 +390,7 @@ defmodule BrodMimic.Consumer do
   end
 
   defp handle_conn_down(state0) do
-    state =
-      r_state(state0,
-        connection: :undefined,
-        connection_mref: :undefined
-      )
-
+    state = state(state0, connection: :undefined, connection_mref: :undefined)
     :ok = maybe_send_init_connection(state)
     state
   end
@@ -380,21 +400,21 @@ defmodule BrodMimic.Consumer do
     :ok
   end
 
-  defp handle_fetch_response(kpro_rsp(), r_state(subscriber: :undefined) = state0) do
-    state = r_state(state0, last_req_ref: :undefined)
+  defp handle_fetch_response(kpro_rsp(), state(subscriber: :undefined) = state0) do
+    state = state(state0, last_req_ref: :undefined)
     {:noreply, state}
   end
 
-  defp handle_fetch_response(kpro_rsp(ref: ref1), r_state(last_req_ref: ref2) = state)
+  defp handle_fetch_response(kpro_rsp(ref: ref1), state(last_req_ref: ref2) = state)
        when ref1 !== ref2 do
     {:noreply, state}
   end
 
   defp handle_fetch_response(
          kpro_rsp(ref: ref) = rsp,
-         r_state(topic: topic, partition: partition, last_req_ref: ref) = state0
+         state(topic: topic, partition: partition, last_req_ref: ref) = state0
        ) do
-    state = r_state(state0, last_req_ref: :undefined)
+    state = state(state0, last_req_ref: :undefined)
 
     case BrodUtils.parse_rsp(rsp) do
       {:ok, %{header: header, batches: batches}} ->
@@ -417,15 +437,15 @@ defmodule BrodMimic.Consumer do
     {:noreply, state}
   end
 
-  def handle_batches(_header, {:incomplete_batch, size}, r_state(max_bytes: max_bytes) = state0) do
+  def handle_batches(_header, {:incomplete_batch, size}, state(max_bytes: max_bytes) = state0) do
     # max_bytes is too small to fetch ONE complete batch
     true = size > max_bytes
-    state1 = r_state(state0, max_bytes: size)
+    state1 = state(state0, max_bytes: size)
     state = maybe_send_fetch_request(state1)
     {:noreply, state}
   end
 
-  def handle_batches(header, [], r_state(begin_offset: begin_offset) = state0) do
+  def handle_batches(header, [], state(begin_offset: begin_offset) = state0) do
     stable_offset = BrodUtils.get_stable_offset(header)
 
     state =
@@ -435,7 +455,7 @@ defmodule BrodMimic.Consumer do
           # when messages are deleted from a compacted topic.
           # Since there is no way to know how big the 'hole' is
           # we can only bump begin_offset with +1 and try again.
-          state1 = r_state(state0, begin_offset: begin_offset + 1)
+          state1 = state(state0, begin_offset: begin_offset + 1)
           maybe_send_fetch_request(state1)
 
         false ->
@@ -451,7 +471,7 @@ defmodule BrodMimic.Consumer do
   def handle_batches(
         header,
         batches,
-        r_state(
+        state(
           subscriber: subscriber,
           pending_acks: pending_acks,
           begin_offset: begin_offset,
@@ -461,7 +481,7 @@ defmodule BrodMimic.Consumer do
       ) do
     stable_offset = BrodUtils.get_stable_offset(header)
     {new_begin_offset, messages} = BrodUtils.flatten_batches(begin_offset, header, batches)
-    state1 = r_state(state0, begin_offset: new_begin_offset)
+    state1 = state(state0, begin_offset: new_begin_offset)
 
     state =
       case messages != [] do
@@ -480,7 +500,7 @@ defmodule BrodMimic.Consumer do
 
           :ok = cast_to_subscriber(subscriber, msg_set)
           new_pending_acks = add_pending_acks(pending_acks, messages)
-          state2 = r_state(state1, pending_acks: new_pending_acks)
+          state2 = state(state1, pending_acks: new_pending_acks)
           maybe_shrink_max_bytes(state2, messages)
       end
 
@@ -493,26 +513,26 @@ defmodule BrodMimic.Consumer do
 
   def add_pending_ack(
         kafka_message(offset: offset, key: key, value: value),
-        r_pending_acks(queue: queue, count: count, bytes: bytes) = pending_acks
+        pending_acks(queue: queue, count: count, bytes: bytes) = pending_acks
       ) do
     size = :erlang.size(key) + :erlang.size(value)
     new_queue = :queue.in({offset, size}, queue)
-    r_pending_acks(pending_acks, queue: new_queue, count: count + 1, bytes: bytes + size)
+    pending_acks(pending_acks, queue: new_queue, count: count + 1, bytes: bytes + size)
   end
 
   defp maybe_shrink_max_bytes(
-         r_state(
+         state(
            size_stat_window: w,
            max_bytes_orig: max_bytes_orig
          ) = state,
          _
        )
        when w < 1 do
-    r_state(state, max_bytes: max_bytes_orig)
+    state(state, max_bytes: max_bytes_orig)
   end
 
   defp maybe_shrink_max_bytes(state0, messages) do
-    r_state(
+    state(
       prefetch_count: prefetch_count,
       max_bytes_orig: max_bytes_orig,
       max_bytes: max_bytes,
@@ -527,15 +547,15 @@ defmodule BrodMimic.Consumer do
     estimated_set_size = :erlang.round(prefetch_count * avg_bytes)
     new_max_bytes = max(estimated_set_size, max_bytes_orig)
 
-    r_state(state, max_bytes: :erlang.min(new_max_bytes, max_bytes))
+    state(state, max_bytes: :erlang.min(new_max_bytes, max_bytes))
   end
 
-  def update_avg_size(r_state() = state, []) do
+  def update_avg_size(state() = state, []) do
     state
   end
 
   def update_avg_size(
-        r_state(
+        state(
           avg_bytes: avg_bytes,
           size_stat_window: window_size
         ) = state,
@@ -543,7 +563,7 @@ defmodule BrodMimic.Consumer do
       ) do
     msg_bytes = :erlang.size(key) + :erlang.size(value) + 40
     new_avg_bytes = ((window_size - 1) * avg_bytes + msg_bytes) / window_size
-    update_avg_size(r_state(state, avg_bytes: new_avg_bytes), rest)
+    update_avg_size(state(state, avg_bytes: new_avg_bytes), rest)
   end
 
   def err_op(:request_timed_out), do: :retry
@@ -556,7 +576,7 @@ defmodule BrodMimic.Consumer do
 
   defp handle_fetch_error(
          r_kafka_fetch_error(error_code: error_code) = error,
-         r_state(
+         state(
            topic: topic,
            partition: partition,
            subscriber: subscriber,
@@ -571,7 +591,7 @@ defmodule BrodMimic.Consumer do
 
         is_reference(mref) and Process.demonitor(mref)
 
-        new_state = r_state(state, connection: :undefined, connection_mref: :undefined)
+        new_state = state(state, connection: :undefined, connection_mref: :undefined)
 
         :ok = maybe_send_init_connection(new_state)
         {:noreply, new_state}
@@ -596,7 +616,7 @@ defmodule BrodMimic.Consumer do
   end
 
   defp handle_reset_offset(
-         r_state(
+         state(
            subscriber: subscriber,
            offset_reset_policy: :reset_by_subscriber
          ) = state,
@@ -608,11 +628,11 @@ defmodule BrodMimic.Consumer do
       domain: [:brod]
     })
 
-    {:noreply, r_state(state, is_suspended: true)}
+    {:noreply, state(state, is_suspended: true)}
   end
 
   defp handle_reset_offset(
-         r_state(offset_reset_policy: policy) = state,
+         state(offset_reset_policy: policy) = state,
          _error
        ) do
     Logger.info(:io_lib.format(@offset_out_of_range, [:brod_consumer, self(), policy]), %{
@@ -628,11 +648,7 @@ defmodule BrodMimic.Consumer do
           :latest
       end
 
-    state1 =
-      r_state(state,
-        begin_offset: begin_offset,
-        pending_acks: r_pending_acks()
-      )
+    state1 = state(state, begin_offset: begin_offset, pending_acks: pending_acks())
 
     {:ok, state2} = resolve_begin_offset(state1)
     new_state = maybe_send_fetch_request(state2)
@@ -640,13 +656,13 @@ defmodule BrodMimic.Consumer do
   end
 
   defp handle_ack(
-         r_pending_acks(queue: queue, bytes: bytes, count: count) = pending_acks,
+         pending_acks(queue: queue, bytes: bytes, count: count) = pending_acks,
          offset
        ) do
     case :queue.out(queue) do
       {{:value, {o, size}}, queue1} when o <= offset ->
         handle_ack(
-          r_pending_acks(pending_acks, queue: queue1, count: count - 1, bytes: bytes - size),
+          pending_acks(pending_acks, queue: queue1, count: count - 1, bytes: bytes - size),
           offset
         )
 
@@ -663,7 +679,7 @@ defmodule BrodMimic.Consumer do
       :ok
   end
 
-  defp maybe_delay_fetch_request(r_state(sleep_timeout: t) = state) when t > 0 do
+  defp maybe_delay_fetch_request(state(sleep_timeout: t) = state) when t > 0 do
     _ = Process.send_after(self(), :send_fetch_request, t)
     state
   end
@@ -672,25 +688,25 @@ defmodule BrodMimic.Consumer do
     maybe_send_fetch_request(state)
   end
 
-  defp maybe_send_fetch_request(r_state(subscriber: :undefined) = state) do
+  defp maybe_send_fetch_request(state(subscriber: :undefined) = state) do
     state
   end
 
-  defp maybe_send_fetch_request(r_state(connection: :undefined) = state) do
+  defp maybe_send_fetch_request(state(connection: :undefined) = state) do
     state
   end
 
-  defp maybe_send_fetch_request(r_state(is_suspended: true) = state) do
+  defp maybe_send_fetch_request(state(is_suspended: true) = state) do
     state
   end
 
-  defp maybe_send_fetch_request(r_state(last_req_ref: r) = state) when is_reference(r) do
+  defp maybe_send_fetch_request(state(last_req_ref: r) = state) when is_reference(r) do
     state
   end
 
   defp maybe_send_fetch_request(
-         r_state(
-           pending_acks: r_pending_acks(count: count, bytes: bytes),
+         state(
+           pending_acks: pending_acks(count: count, bytes: bytes),
            prefetch_count: prefetch_count,
            prefetch_bytes: prefetch_bytes
          ) = state
@@ -704,37 +720,34 @@ defmodule BrodMimic.Consumer do
     end
   end
 
-  defp send_fetch_request(
-         r_state(
-           begin_offset: begin_offset,
-           connection: connection
-         ) = state
-       ) do
-    (is_integer(begin_offset) and begin_offset >= 0) or
+  defp send_fetch_request(state() = state) do
+    begin_offset = state(state, :begin_offset)
+
+    is_integer(begin_offset and begin_offset >= 0) or
       :erlang.error({:bad_begin_offset, begin_offset})
 
     request =
       BrodKafkaRequest.fetch(
-        connection,
-        r_state(state, :topic),
-        r_state(state, :partition),
-        r_state(state, :begin_offset),
-        r_state(state, :max_wait_time),
-        r_state(state, :min_bytes),
-        r_state(state, :max_bytes),
-        r_state(state, :isolation_level)
+        state(state, :connection),
+        state(state, :topic),
+        state(state, :partition),
+        state(state, :begin_offset),
+        state(state, :max_wait_time),
+        state(state, :min_bytes),
+        state(state, :max_bytes),
+        state(state, :isolation_level)
       )
 
-    case :kpro.request_async(connection, request) do
+    case :kpro.request_async(state(state, :connection), request) do
       :ok ->
-        r_state(state, last_req_ref: kpro_req(request, :ref))
+        state(state, last_req_ref: kpro_req(request, :ref))
 
       {:error, {:connection_down, _reason}} ->
         state
     end
   end
 
-  defp handle_subscribe_call(pid, options, r_state(subscriber_mref: old_mref) = state0) do
+  defp handle_subscribe_call(pid, options, state(subscriber_mref: old_mref) = state0) do
     case update_options(options, state0) do
       {:ok, state1} ->
         if is_reference(old_mref) do
@@ -743,14 +756,10 @@ defmodule BrodMimic.Consumer do
 
         mref = Process.monitor(pid)
 
-        state2 =
-          r_state(state1,
-            subscriber: pid,
-            subscriber_mref: mref
-          )
+        state2 = state(state1, subscriber: pid, subscriber_mref: mref)
 
         state3 = reset_buffer(state2)
-        state4 = r_state(state3, is_suspended: false)
+        state4 = state(state3, is_suspended: false)
         state = maybe_send_fetch_request(state4)
         {:reply, :ok, state}
 
@@ -761,38 +770,33 @@ defmodule BrodMimic.Consumer do
 
   defp update_options(
          options,
-         r_state(begin_offset: old_begin_offset) = state
+         state(begin_offset: old_begin_offset) = state
        ) do
     f = fn name, default ->
       :proplists.get_value(name, options, default)
     end
 
     new_begin_offset = f.(:begin_offset, old_begin_offset)
-
-    offset_reset_policy =
-      f.(
-        :offset_reset_policy,
-        r_state(state, :offset_reset_policy)
-      )
+    offset_reset_policy = f.(:offset_reset_policy, state(state, :offset_reset_policy))
 
     state1 =
-      r_state(state,
+      state(state,
         begin_offset: new_begin_offset,
-        min_bytes: f.(:min_bytes, r_state(state, :min_bytes)),
-        max_bytes_orig: f.(:max_bytes, r_state(state, :max_bytes_orig)),
-        max_wait_time: f.(:max_wait_time, r_state(state, :max_wait_time)),
-        sleep_timeout: f.(:sleep_timeout, r_state(state, :sleep_timeout)),
-        prefetch_count: f.(:prefetch_count, r_state(state, :prefetch_count)),
-        prefetch_bytes: f.(:prefetch_bytes, r_state(state, :prefetch_bytes)),
+        min_bytes: f.(:min_bytes, state(state, :min_bytes)),
+        max_bytes_orig: f.(:max_bytes, state(state, :max_bytes_orig)),
+        max_wait_time: f.(:max_wait_time, state(state, :max_wait_time)),
+        sleep_timeout: f.(:sleep_timeout, state(state, :sleep_timeout)),
+        prefetch_count: f.(:prefetch_count, state(state, :prefetch_count)),
+        prefetch_bytes: f.(:prefetch_bytes, state(state, :prefetch_bytes)),
         offset_reset_policy: offset_reset_policy,
-        max_bytes: f.(:max_bytes, r_state(state, :max_bytes)),
-        size_stat_window: f.(:size_stat_window, r_state(state, :size_stat_window))
+        max_bytes: f.(:max_bytes, state(state, :max_bytes)),
+        size_stat_window: f.(:size_stat_window, state(state, :size_stat_window))
       )
 
     new_state =
       case new_begin_offset !== old_begin_offset do
         true ->
-          r_state(state1, pending_acks: r_pending_acks())
+          state(state1, pending_acks: pending_acks())
 
         false ->
           state1
@@ -802,7 +806,7 @@ defmodule BrodMimic.Consumer do
   end
 
   defp resolve_begin_offset(
-         r_state(
+         state(
            begin_offset: begin_offset,
            connection: connection,
            topic: topic,
@@ -813,7 +817,7 @@ defmodule BrodMimic.Consumer do
               begin_offset === -1 do
     case resolve_offset(connection, topic, partition, begin_offset) do
       {:ok, new_begin_offset} ->
-        {:ok, r_state(state, begin_offset: new_begin_offset)}
+        {:ok, state(state, begin_offset: new_begin_offset)}
 
       {:error, reason} ->
         {:error, reason}
@@ -832,10 +836,7 @@ defmodule BrodMimic.Consumer do
   end
 
   defp reset_buffer(
-         r_state(
-           pending_acks: r_pending_acks(queue: queue),
-           begin_offset: begin_offset0
-         ) = state
+         state(pending_acks: pending_acks(queue: queue), begin_offset: begin_offset0) = state
        ) do
     begin_offset =
       case :queue.peek(queue) do
@@ -846,9 +847,9 @@ defmodule BrodMimic.Consumer do
           begin_offset0
       end
 
-    r_state(state,
+    state(state,
       begin_offset: begin_offset,
-      pending_acks: r_pending_acks(),
+      pending_acks: pending_acks(),
       last_req_ref: :undefined
     )
   end
@@ -861,7 +862,7 @@ defmodule BrodMimic.Consumer do
   end
 
   defp maybe_init_connection(
-         r_state(bootstrap: bootstrap, topic: topic, partition: partition, connection: :undefined) =
+         state(bootstrap: bootstrap, topic: topic, partition: partition, connection: :undefined) =
            state0
        ) do
     case connect_leader(bootstrap, topic, partition) do
@@ -876,7 +877,7 @@ defmodule BrodMimic.Consumer do
           end
 
         state =
-          r_state(state0, last_req_ref: :undefined, connection: connection, connection_mref: mref)
+          state(state0, last_req_ref: :undefined, connection: connection, connection_mref: mref)
 
         {:ok, state}
 
@@ -903,7 +904,7 @@ defmodule BrodMimic.Consumer do
     :kpro.connect_partition_leader(endpoints, connCfg, topic, partition)
   end
 
-  defp maybe_send_init_connection(r_state(subscriber: subscriber)) do
+  defp maybe_send_init_connection(state(subscriber: subscriber)) do
     timeout = @connection_retry_delay_ms
 
     if BrodUtils.is_pid_alive(subscriber) do

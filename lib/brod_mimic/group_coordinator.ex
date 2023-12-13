@@ -473,11 +473,7 @@ defmodule BrodMimic.GroupCoordinator do
       {:assignments, assign_partitions(state)}
     ]
 
-    sync_req =
-      BrodKafkaRequest.sync_group(
-        connection,
-        req_body
-      )
+    sync_req = BrodKafkaRequest.sync_group(connection, req_body)
 
     rsp_body = send_sync(connection, sync_req)
     assignment = :kpro.find(:assignment, rsp_body)
@@ -503,7 +499,7 @@ defmodule BrodMimic.GroupCoordinator do
 
   defp handle_ack(
          state(acked_offsets: acked_offsets) = state,
-         _GenerationId,
+         _generation_id,
          topic,
          partition,
          offset
@@ -662,25 +658,31 @@ defmodule BrodMimic.GroupCoordinator do
 
   defp assign_partitions(state) do
     # only leader can assign partitions to members
-    if state.member_id == state.leader_id do
+    if state(state, :member_id) == state(state, :leader_id) do
       []
     else
-      all_topics = all_topics(state.members)
+      all_topics = all_topics(state(state, :members))
 
       all_partitions =
-        for topic <- all_topics, partition <- get_partitions(state.client, topic) do
+        for topic <- all_topics, partition <- get_partitions(state(state, :client), topic) do
           {topic, partition}
         end
 
       assignments =
-        case state.strategy == :callback_implemented do
+        case state(state, :partition_assignment_strategy) == :callback_implemented do
           true ->
-            state.member_module.assign_partitions(state.member_pid, state.members, all_partitions)
+            member_module = state(state, :member_module)
+
+            member_module.assign_partitions(
+              state(state, :member_pid),
+              state(state, :members),
+              all_partitions
+            )
 
           false ->
             do_assign_partitions(
-              state.partition_assignment_strategy,
-              state.members,
+              state(state, :partition_assignment_strategy),
+              state(state, :members),
               all_partitions
             )
         end

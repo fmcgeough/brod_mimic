@@ -1,19 +1,6 @@
 defmodule BrodMimic.KafkaRequest do
   @moduledoc """
-    The brod Erlang module exports the following functions
-
-    -export([ create_topics/3
-            , delete_topics/3
-            , fetch/7
-            , list_groups/1
-            , list_offsets/4
-            , join_group/2
-            , metadata/2
-            , offset_commit/2
-            , offset_fetch/3
-            , produce/7
-            , sync_group/2
-            ]).
+    Collection of Kafka requests
   """
   alias BrodMimic.KafkaApis, as: BrodKafkaApis
 
@@ -147,11 +134,11 @@ defmodule BrodMimic.KafkaRequest do
     :kpro.make_request(api, vsn, fields)
   end
 
+  @spec pick_version(api(), pid() | integer()) :: vsn()
   defp pick_version(_api, vsn) when is_integer(vsn) do
     vsn
   end
 
-  @spec pick_version(api(), pid() | integer()) :: vsn()
   defp pick_version(api, connection) when is_pid(connection) do
     BrodKafkaApis.pick_version(connection, api)
   end

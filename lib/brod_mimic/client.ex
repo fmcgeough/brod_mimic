@@ -2,27 +2,6 @@ defmodule BrodMimic.Client do
   @moduledoc """
   GenServer used to manage TCP connection to Kafka broker (mimics
   [brod_client](https://github.com/kafka4beam/brod/blob/master/src/brod_client.erl)).
-  The Erlang library makes the following functions public (using the
-  [export](https://erlang.org/doc/reference_manual/modules.html) keyword) in
-  it's module.
-
-  * `get_consumer/3`
-  * `get_connection/3`
-  * `get_group_coordinator/2`
-  * `get_leader_connection/3`
-  * `get_metadata/2`
-  * `get_partitions_count/2`
-  * `get_producer/3`
-  * `register_consumer/3`
-  * `register_producer/3`
-  * `deregister_consumer/3`
-  * `deregister_producer/3`
-  * `start_link/3`
-  * `start_producer/3`
-  * `start_consumer/3`
-  * `stop/1`
-  * `stop_producer/2`
-  * `stop_consumer/2`
   """
   use BrodMimic.Macros
   use GenServer
