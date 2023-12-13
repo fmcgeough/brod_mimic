@@ -12,6 +12,9 @@ Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_do
 
 ## Tasks
 
+- BrodMimic.Client starts up but an exception is raised on:
+  `BrodMimic.Brod.get_partitions_count(client_id, some_topic)`
+  with `{:unknown_vsn, [api: :metadata, vsn: :undefined, known_vsn_range: {0, 9}]}`
 - Dialyzer is reporting issues. Total errors: 22
 - Lots more types need to be defined
 - Records were originally defined with `r_` as prefix. Want to remove that.

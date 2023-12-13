@@ -227,7 +227,7 @@ defmodule BrodMimic.Brod do
   Stop the BrodMimic application
   """
   def stop do
-    :application.stop(:brod_mimic)
+    Application.stop(:brod_mimic)
   end
 
   @doc """

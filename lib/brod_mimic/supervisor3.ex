@@ -234,6 +234,7 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp do_start_child(sup_name, child) do
+    IO.inspect(child, label: "child")
     r_child(mfargs: {m, f, args}) = child
 
     case (try do

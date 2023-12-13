@@ -104,7 +104,7 @@ defmodule BrodMimic.Sup do
   )
 
   def start_link do
-    Supervisor3.start_link({:local, BrodMimic.Sup}, BrodMimic.Sup, :clients_sup)
+    Supervisor3.start_link({:local, :brod_sup}, BrodMimic.Sup, :clients_sup)
   end
 
   def start_client(endpoints, client_id, config) do
@@ -131,7 +131,7 @@ defmodule BrodMimic.Sup do
   @impl Supervisor3
   def init(:clients_sup) do
     {:ok, _} = BrodKafkaApis.start_link()
-    clients = :application.get_env(:brod_mimic, :clients, [])
+    clients = Application.get_env(:brod_mimic, :clients, [])
 
     client_specs =
       :lists.map(
@@ -176,8 +176,8 @@ defmodule BrodMimic.Sup do
     config = BrodUtils.init_sasl_opt(config1)
     start_args = [endpoints, client_id, config]
 
-    {_id = client_id, _start = {:brod_client, :start_link, start_args},
+    {_id = client_id, _start = {BrodMimic.Client, :start_link, start_args},
      _restart = {:permanent, delay_secs}, _shutdown = 5000, _type = :worker,
-     _module = [:brod_client]}
+     _module = [BrodMimic.Client]}
   end
 end
