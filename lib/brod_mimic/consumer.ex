@@ -84,18 +84,6 @@ defmodule BrodMimic.Consumer do
     error_desc: ''
   )
 
-  defrecord(:r_brod_call_ref, :brod_call_ref,
-    caller: :undefined,
-    callee: :undefined,
-    ref: :undefined
-  )
-
-  defrecord(:r_brod_produce_reply, :brod_produce_reply,
-    call_ref: :undefined,
-    base_offset: :undefined,
-    result: :undefined
-  )
-
   defrecord(:r_pending_acks, :pending_acks, count: 0, bytes: 0, queue: :queue.new())
 
   defrecord(:r_state, :state,
