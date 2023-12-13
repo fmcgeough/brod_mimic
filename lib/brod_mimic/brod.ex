@@ -96,7 +96,7 @@ defmodule BrodMimic.Brod do
             high_wm_offset: integer(),
             # the list of `t:message/0` is exposed to users of library
             # the `incomplete_batch` is internal only
-            messages: [message()] | :kro.incomplete_batch()
+            messages: [message()] | :kpro.incomplete_batch()
           )
 
   @type brod_received_assignment ::

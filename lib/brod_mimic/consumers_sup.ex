@@ -4,6 +4,7 @@ defmodule BrodMimic.ConsumersSup do
   """
   @behaviour BrodMimic.Supervisor3
 
+  alias BrodMimic.Brod
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.Supervisor3, as: BrodSupervisor3
 

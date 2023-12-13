@@ -2,10 +2,11 @@ defmodule BrodMimic.KafkaRequest do
   @moduledoc """
     Collection of Kafka requests
   """
+  alias BrodMimic.Brod
   alias BrodMimic.KafkaApis, as: BrodKafkaApis
 
-  @type api() :: KafkaApis.api()
-  @type vsn() :: KafkaApis.vsn()
+  @type api() :: BrodKafkaApis.api()
+  @type vsn() :: BrodKafkaApis.vsn()
   @type topic() :: Brod.topic()
   @type topic_config() :: :kpro.struct()
   @type partition() :: Brod.partition()

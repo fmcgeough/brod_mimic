@@ -26,6 +26,7 @@ defmodule BrodMimic.GroupMember do
   1. Implement the `get_committed_offsets/2` callback. This callback is
      evaluated every time when new assignments are received.
   """
+  alias BrodMimic.Brod
 
   @doc """
   Call the callback module to initialize assignments.
