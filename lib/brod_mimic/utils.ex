@@ -181,17 +181,11 @@ defmodule BrodMimic.Utils do
   """
   @spec os_time_utc_str :: [any()]
   def os_time_utc_str do
-    ts = :os.timestamp()
-    {{y, m, d}, {h, min, sec}} = :calendar.now_to_universal_time(ts)
-    {_, _, micro} = ts
-
-    s =
-      :io_lib.format(
-        "~4.4.0w-~2.2.0w-~2.2.0w:~2.2.0w:~2.2.0w:~2.2.0w.~6.6.0w",
-        [y, m, d, h, min, sec, micro]
-      )
-
-    :lists.flatten(s)
+    DateTime.utc_now()
+    |> DateTime.to_naive()
+    |> NaiveDateTime.to_string()
+    |> String.replace(" ", ":")
+    |> String.to_charlist()
   end
 
   @doc """
