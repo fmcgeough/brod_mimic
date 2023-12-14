@@ -66,7 +66,7 @@ defmodule BrodMimic.GroupCoordinator do
 
   def start_link(client, group_id, topics, config, cb_module, member_pid) do
     args = {client, group_id, topics, config, cb_module, member_pid}
-    GenServer.start_link(:brod_group_coordinator, args, [])
+    GenServer.start_link(BrodMimic.GroupCoordinator, args, [])
   end
 
   def ack(pid, generation_id, topic, partition, offset) do

@@ -190,7 +190,7 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   def start_link(config) do
-    GenServer.start_link(:brod_topic_subscriber, config, [])
+    GenServer.start_link(BrodMimic.TopicSubscriber, config, [])
   end
 
   def stop(pid) do
