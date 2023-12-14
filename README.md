@@ -8,9 +8,9 @@ This project was created for a couple of reasons.
 2. Elixir developer's lack of knowledge on how to read the Erlang `brod` code.
 
 I figured having an Elixir implementation would allow Elixir developers to examine
-this code and then have a clearer understanding of how brod works. To make this a
-reality I needed to convert the `brod` code file by file (so that a developer looking
-at the code could align what is in this library with the `brod` code).
+this code and then have a clearer understanding of how `brod` works. To make this a
+reality I needed to convert the `brod`code file by file (so that a developer looking
+at the code could align what is in this library with the`brod` code).
 
 There are cases where new functions were introduced. Generally, this is to deal with
 Erlang syntax that is extremely awkward and hard to read in Elixir. It was also done,
