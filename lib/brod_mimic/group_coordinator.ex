@@ -820,7 +820,7 @@ defmodule BrodMimic.GroupCoordinator do
     end
   end
 
-  def get_topic_assignments(_state, :kpro_cg_no_assignment), do: []
+  def get_topic_assignments(_state, :undefined), do: []
   def get_topic_assignments(_state, %{topic_partitions: []}), do: []
 
   def get_topic_assignments(state, assignment) do
