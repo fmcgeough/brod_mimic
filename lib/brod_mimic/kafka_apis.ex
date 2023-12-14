@@ -145,7 +145,7 @@ defmodule BrodMimic.KafkaApis do
         end
 
       [{_conn, vsns}] ->
-        Map.get(api, vsns, :none)
+        Map.get(vsns, api, :none)
     end
   end
 
