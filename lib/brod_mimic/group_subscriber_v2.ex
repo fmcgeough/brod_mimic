@@ -141,7 +141,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
         group_id,
         topics,
         group_config,
-        :brod_group_subscriber_v2,
+        __MODULE__,
         self()
       )
 
