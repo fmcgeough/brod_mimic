@@ -1,7 +1,11 @@
 defmodule BrodMimic.Client do
   @moduledoc """
-  GenServer used to manage TCP connection to Kafka broker (mimics
-  [brod_client](https://github.com/kafka4beam/brod/blob/master/src/brod_client.erl)).
+  GenServer responsible for establishing and maintaining tcp sockets connecting to Kafka brokers.
+  It also manages per-topic-partition producer and consumer processes under two-level supervision trees.
+
+  You can start clients automatically at application startup or on demand.
+
+  (mimics [brod_client](https://github.com/kafka4beam/brod/blob/master/src/brod_client.erl)).
   """
   use BrodMimic.Macros
   use GenServer
