@@ -12,6 +12,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
 
   import Record, only: [defrecord: 3]
 
+  alias BrodMimic.Brod
   alias BrodMimic.GroupCoordinator, as: BrodGroupCoordinator
   alias BrodMimic.TopicSubscriber, as: BrodTopicSubscriber
   alias BrodMimic.Utils, as: BrodUtils
@@ -41,6 +42,36 @@ defmodule BrodMimic.GroupSubscriberv2 do
     cb_config: :undefined,
     client: :undefined
   )
+
+  @type commit_fun() :: (Brod.offset() -> :ok)
+
+  @type init_info() :: %{
+          required(:group_id) => Brod.group_id(),
+          required(:topic) => Brod.topic(),
+          required(:partition) => Brod.partition(),
+          required(:commit_fun) => commit_fun()
+        }
+  @type cb_config() :: term()
+  @type state() :: term()
+  @type member_id() :: Brod.group_member_id()
+  @type reason() :: term()
+
+  # Callbacks
+  @callback init(init_info(), cb_config()) :: {:ok, state()}
+  @callback handle_message(Brod.message(), state()) ::
+              {:ok, :commit, state()} | {:ok, :ack, state()} | {:ok, state()}
+
+  # Get committed offset (in case it is managed by the subscriber):
+  @callback get_committed_offset(cb_config(), Brod.topic(), Brod.partition()) ::
+              {:ok, Brod.offset() | {:begin_offset, Brod.offset_time()}} | :undefined
+
+  # Assign partitions (in case `partition_assignment_strategy' is set
+  # for `callback_implemented' in group config).
+  @callback assign_partitions(cb_config(), [Brod.group_member()], [Brod.topic_partition()]) :: [
+              {member_id(), [Brod.partition_assignment()]}
+            ]
+  @callback terminate(reason(), state()) :: any()
+  @optional_callbacks assign_partitions: 3, get_committed_offset: 3, terminate: 2
 
   def start_link(config) do
     GenServer.start_link(:brod_group_subscriber_v2, config, [])
