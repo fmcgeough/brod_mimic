@@ -74,7 +74,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
   @optional_callbacks assign_partitions: 3, get_committed_offset: 3, terminate: 2
 
   def start_link(config) do
-    GenServer.start_link(:brod_group_subscriber_v2, config, [])
+    GenServer.start_link(BrodMimic.GroupSubscriberv2, config, [])
   end
 
   def stop(pid) do
