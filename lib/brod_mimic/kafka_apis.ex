@@ -24,36 +24,6 @@ defmodule BrodMimic.KafkaApis do
     delete_topics: {0, 0}
   }
 
-  Record.defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
-    version: :undefined,
-    topics: :undefined,
-    user_data: :undefined
-  )
-
-  Record.defrecord(:r_brod_received_assignment, :brod_received_assignment,
-    topic: :undefined,
-    partition: :undefined,
-    begin_offset: :undefined
-  )
-
-  Record.defrecord(:r_brod_cg, :brod_cg,
-    id: :undefined,
-    protocol_type: :undefined
-  )
-
-  Record.defrecord(:r_socket, :socket,
-    pid: :undefined,
-    host: :undefined,
-    port: :undefined,
-    node_id: :undefined
-  )
-
-  Record.defrecord(:r_cbm_init_data, :cbm_init_data,
-    committed_offsets: :undefined,
-    cb_fun: :undefined,
-    cb_data: :undefined
-  )
-
   Record.defrecord(:r_state, :state, [])
 
   @type vsn() :: :kpro.vsn()
