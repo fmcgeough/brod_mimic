@@ -24,6 +24,7 @@ defmodule BrodMimic.GroupCoordinator do
   @type protocol_name() :: String.t()
 
   defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
+  defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
 
   defrecord(:kafka_group_member_metadata,
     version: :undefined,
@@ -156,6 +157,18 @@ defmodule BrodMimic.GroupCoordinator do
     {:noreply, handle_ack(state, generation_id, topic, partition, offset)}
   end
 
+  def handle_info(:lo_cmd_commit_offsets, state(is_in_group: true) = state) do
+    {:ok, new_state} =
+      try do
+        do_commit_offsets(state)
+      catch
+        reason ->
+          stabilize(state, 0, reason)
+      end
+
+    {:noreply, new_state}
+  end
+
   def handle_info(
         {:lo_cmd_stabilize, attempt_count, _reason},
         state(max_rejoin_attempts: max) = state
@@ -169,16 +182,22 @@ defmodule BrodMimic.GroupCoordinator do
     {:noreply, new_state}
   end
 
-  def handle_info(:lo_cmd_commit_offsets, state(is_in_group: true) = state) do
-    {:ok, new_state} =
-      try do
-        do_commit_offsets(state)
-      catch
-        reason ->
-          stabilize(state, 0, reason)
-      end
+  def handle_info({:EXIT, pid, reason}, state(connection: pid) = state) do
+    {:ok, new_state} = stabilize(state, 0, {:connection_down, reason})
+    {:noreply, state(new_state, connection: :undefined)}
+  end
 
-    {:noreply, new_state}
+  def handle_info({:EXIT, pid, reason}, state(member_pid: pid) = state) do
+    case reason do
+      :shutdown -> {:stop, :shutdown, state}
+      {:shutdown, _} -> {:stop, :shutdown, state}
+      :normal -> {:stop, :normal, state}
+      _ -> {:stop, :member_down, state}
+    end
+  end
+
+  def handle_info({:EXIT, _pid, _reason}, state) do
+    {:stop, :shutdown, state}
   end
 
   def handle_info(
@@ -207,8 +226,33 @@ defmodule BrodMimic.GroupCoordinator do
     end
   end
 
-  def handle_call({:commit_offsets, extra_offsets}, from, state) do
-    offsets = merge_acked_offsets(state(state, :acked_offsets), extra_offsets)
+  def handle_info(
+        {:msg, _pid, kpro_rsp(api: :heartbeat, ref: hb_ref, msg: body)},
+        state(hb_ref: {hb_ref, _sent_time}) = state0
+      ) do
+    ec = :kpro.find(:error_code, body)
+    state = state(state0, hb_ref: :undefined)
+
+    case is_error(ec) do
+      true ->
+        {:ok, new_state} = stabilize(state, 0, ec)
+        {:noreply, new_state}
+
+      false ->
+        {:noreply, state}
+    end
+  end
+
+  def handle_info(_info, state() = state) do
+    {:noreply, state}
+  end
+
+  def handle_call(
+        {:commit_offsets, extra_offsets},
+        from,
+        state(acked_offsets: acked_offsets) = state
+      ) do
+    offsets = merge_acked_offsets(acked_offsets, extra_offsets)
 
     {:ok, new_state} = do_commit_offsets(state(state, acked_offsets: offsets))
     {:reply, :ok, new_state}
