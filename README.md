@@ -5,8 +5,7 @@ An Elixir project to explore the Erlang library brod by porting it to Elixir.
 This project was created for a couple of reasons.
 
 1. the widespread popularity of using the `brod` library to connect to Kafka
-2. Elixir developer's lack of knowledge on how to read the `brod` code that is
-   done in Erlang.
+2. Elixir developer's lack of knowledge on how to read the Erlang `brod` code.
 
 I figured having an Elixir implementation would allow Elixir developers to examine
 this code and then have a clearer understanding of how brod works. To make this a
