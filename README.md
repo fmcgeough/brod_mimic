@@ -12,8 +12,9 @@ Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_do
 
 ## Current State
 
-- no credo issues
-- code compiles
+- no credo issues (`mix credo --strict` reports no problems)
+- no dialyzer issues (`mix dialyzer` reports no problems)
+- code compiles with no warnings/errors
 - simple `iex` session can start a client
 - bringing up observer after starting simple `iex` session shows same processes started as
   the brod library
