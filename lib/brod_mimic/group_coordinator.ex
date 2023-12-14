@@ -156,6 +156,19 @@ defmodule BrodMimic.GroupCoordinator do
     {:noreply, handle_ack(state, generation_id, topic, partition, offset)}
   end
 
+  def handle_info(
+        {:lo_cmd_stabilize, attempt_count, _reason},
+        state(max_rejoin_attempts: max) = state
+      )
+      when attempt_count >= max do
+    {:stop, :max_rejoin_attempts, state}
+  end
+
+  def handle_info({:lo_cmd_stabilize, attempt_count, reason}, state) do
+    {:ok, new_state} = stabilize(state, attempt_count, reason)
+    {:noreply, new_state}
+  end
+
   def handle_info(:lo_cmd_commit_offsets, state(is_in_group: true) = state) do
     {:ok, new_state} =
       try do
