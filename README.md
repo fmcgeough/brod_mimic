@@ -21,13 +21,17 @@ In most cases the Elixir function has the same name so it's not too hard to comp
 the `brod` code with this converted code.
 
 The intention is to pull available doc from the `brod` code base and incorporate
-it into the library.
+it into this library. That should result in easier to read generated doc. The intention
+is to do `typedoc` as well so that the numerous `brod` types have good doc.
 
 The `brod` code base makes heavy use of `Record`. This is not something that is common
 in Elixir code bases. In Erlang declaring a record allows defining the record and
 specifying type information in a single statement. The Elixir approach requires a
 definition of the record itself (using `defrecord`) and then a separate definition of
 the record type information (see https://hexdocs.pm/elixir/1.12.3/Record.html#module-types).
+
+The `brod` code base uses its own `Supervisor` implementation. For now, this has been
+ported over to Elixir. It may be removed at some point.
 
 Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc).
 
