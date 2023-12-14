@@ -81,7 +81,7 @@ defmodule BrodMimic.KafkaRequest do
   end
 
   def metadata(connection, topics) when is_pid(connection) do
-    vsn = BrodKafkaApis.pick_version(connection, :metadata) |> IO.inspect(label: "version")
+    vsn = BrodKafkaApis.pick_version(connection, :metadata)
 
     metadata(vsn, topics)
   end

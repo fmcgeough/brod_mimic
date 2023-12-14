@@ -24,32 +24,6 @@ defmodule BrodMimic.KafkaApis do
     delete_topics: {0, 0}
   }
 
-  Record.defrecord(:r_kafka_message_set, :kafka_message_set,
-    topic: :undefined,
-    partition: :undefined,
-    high_wm_offset: :undefined,
-    messages: :undefined
-  )
-
-  Record.defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
-    topic: :undefined,
-    partition: :undefined,
-    error_code: :undefined,
-    error_desc: ''
-  )
-
-  Record.defrecord(:r_brod_call_ref, :brod_call_ref,
-    caller: :undefined,
-    callee: :undefined,
-    ref: :undefined
-  )
-
-  Record.defrecord(:r_brod_produce_reply, :brod_produce_reply,
-    call_ref: :undefined,
-    base_offset: :undefined,
-    result: :undefined
-  )
-
   Record.defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
     version: :undefined,
     topics: :undefined,
@@ -193,7 +167,7 @@ defmodule BrodMimic.KafkaApis do
           {:ok, versions} when is_map(versions) ->
             :ets.insert(:brod_kafka_apis, {conn, versions})
             :ok = monitor_connection(conn)
-            Map.get(api, versions, :none)
+            Map.get(versions, api, :none)
 
           {:error, _reason} ->
             # connection died, ignore
@@ -207,7 +181,10 @@ defmodule BrodMimic.KafkaApis do
 
   # Do not change range without verification.
   def supported_versions(api) do
-    Map.get(@supported_versions, api, :erlang.error({:unsupported_api, api}))
+    case Map.get(@supported_versions, api) do
+      nil -> :erlang.error({:unsupported_api, api})
+      val -> val
+    end
   end
 
   defp monitor_connection(conn) do

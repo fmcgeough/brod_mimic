@@ -706,7 +706,7 @@ defmodule BrodMimic.Client do
   Ensure there is at least one metadata connection
   """
   def ensure_metadata_connection(
-        r_state(bootstrap_endpoints: endpoints, meta_conn: :undef) = state
+        r_state(bootstrap_endpoints: endpoints, meta_conn: :undefined) = state
       ) do
     conn_config = conn_config(state)
 
@@ -1109,7 +1109,7 @@ defmodule BrodMimic.Client do
   defp update_partitions_count_cache(_ets, []), do: :ok
 
   defp update_partitions_count_cache(ets, [topic_metadata | rest]) do
-    topic = kf(:topic, topic_metadata)
+    topic = kf(:name, topic_metadata)
 
     case get_partitions_count_in_metadata(topic_metadata) do
       {:ok, cnt} ->
