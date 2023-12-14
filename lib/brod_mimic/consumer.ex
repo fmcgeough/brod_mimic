@@ -723,8 +723,10 @@ defmodule BrodMimic.Consumer do
   defp send_fetch_request(state() = state) do
     begin_offset = state(state, :begin_offset)
 
-    is_integer(begin_offset and begin_offset >= 0) or
+    # Raise an exception with stack trace if begin offset is invalid
+    if valid_begin_offset?(begin_offset) == false do
       :erlang.error({:bad_begin_offset, begin_offset})
+    end
 
     request =
       BrodKafkaRequest.fetch(
@@ -920,5 +922,9 @@ defmodule BrodMimic.Consumer do
 
   defp log_string(format_string, args) do
     :io_lib.format(format_string, args)
+  end
+
+  defp valid_begin_offset?(begin_offset) do
+    is_integer(begin_offset) and begin_offset >= 0
   end
 end

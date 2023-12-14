@@ -4,11 +4,19 @@ An Elixir project to explore the Erlang library brod by porting it to Elixir.
 
 Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc).
 
-## Notes
+## Notes on brod library in Elixir
 
-- (as of now) Will not convert the files: brod_cli.erl, brod_cli_pipe.erl
+- No plans (as of now) to convert the files: brod_cli.erl, brod_cli_pipe.erl. These are utility
+  command line tools. Personally, I've never used them so I didn't think it was worth including
+  that work.
+
+## Current State
+
 - no credo issues
 - code compiles
+- simple `iex` session can start a client
+- bringing up observer after starting simple `iex` session shows same processes started as
+  the brod library
 
 ## Sample Session
 
@@ -44,8 +52,8 @@ iex> BrodMimic.Brod.get_partitions_count(client_id, "my_test_topic")
 
 ## Tasks
 
-- Dialyzer is reporting issues. Total errors: 1`
 - Lots more types need to be defined
 - Records were originally defined with `r_` as prefix. Want to remove that.
   Types needed for all records.
-- No unit tests yet
+- Unit tests must be written
+- Need a docker-compose.yml file
