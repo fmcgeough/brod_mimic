@@ -181,6 +181,32 @@ defmodule BrodMimic.GroupCoordinator do
     {:noreply, new_state}
   end
 
+  def handle_info(
+        :lo_cmd_send_heartbeat,
+        state(hb_ref: hb_ref, session_timeout_seconds: session_timeout_seconds) = state
+      ) do
+    _ = start_heartbeat_timer(state(state, :heartbeat_rate_seconds))
+
+    case hb_ref do
+      :undefined ->
+        {:ok, new_state} = maybe_send_heartbeat(state)
+        {:noreply, new_state}
+
+      {_ref, sent_time} ->
+        elapsed = :timer.now_diff(:os.timestamp(), sent_time)
+
+        case elapsed < session_timeout_seconds * 1_000_000 do
+          true ->
+            # keep waiting for heartbeat response
+            {:noreply, state}
+
+          false ->
+            # try leave group and re-join when restarted by supervisor
+            {:stop, :hb_timeout, state}
+        end
+    end
+  end
+
   def handle_call({:commit_offsets, extra_offsets}, from, state) do
     offsets = merge_acked_offsets(state(state, :acked_offsets), extra_offsets)
 
