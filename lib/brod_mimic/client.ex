@@ -937,9 +937,7 @@ defmodule BrodMimic.Client do
   end
 
   defp ensure_partition_workers(topic_name, state, f) do
-    validate_topic_result = validate_topic_existence(topic_name, state, _is_retry = false)
-
-    with_ok_func = fn :ok, new_state ->
+    with_ok(validate_topic_existence(topic_name, state, _is_retry = false), fn :ok, new_state ->
       case f.() do
         {:ok, _pid} ->
           {:ok, new_state}
@@ -950,9 +948,7 @@ defmodule BrodMimic.Client do
         {:error, reason} ->
           {{:error, reason}, new_state}
       end
-    end
-
-    with_ok(validate_topic_result, with_ok_func)
+    end)
   end
 
   def conn_config(r_state(client_id: client_id, config: config)) do
