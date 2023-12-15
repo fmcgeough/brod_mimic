@@ -121,10 +121,13 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   def find_child(supervisor, name) do
-    for {name1, pid, _type, _modules} <- which_children(supervisor),
-        name1 === name do
-      pid
-    end
+    supervisor
+    |> which_children()
+    |> Enum.find_value([], fn {name1, pid, _, _} ->
+      if name == name1 do
+        [pid]
+      end
+    end)
   end
 
   defp call(supervisor, req) do

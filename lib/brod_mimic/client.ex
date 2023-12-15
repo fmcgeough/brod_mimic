@@ -356,6 +356,8 @@ defmodule BrodMimic.Client do
     ets_options = [:named_table, :protected, {:read_concurrency, true}]
     tab = :ets.new(client_id, ets_options)
 
+    send(self(), :init)
+
     {:ok,
      r_state(
        client_id: client_id,
@@ -592,7 +594,6 @@ defmodule BrodMimic.Client do
     case safe_gen_call(client, :get_producers_sup_pid, :infinity) do
       {:ok, sup_pid} ->
         BrodProducersSup.find_producer(sup_pid, topic, partition)
-        {sup_pid, topic, partition}
 
       {:error, reason} ->
         {:error, reason}
@@ -893,7 +894,7 @@ defmodule BrodMimic.Client do
   @spec maybe_start_producer(client(), topic(), partition(), {:error, any()}) ::
           :ok | {:error, any()}
   def maybe_start_producer(client, topic, partition, error) do
-    case safe_gen_call(:client, {:auto_start_producer, topic}, :infinity) do
+    case safe_gen_call(client, {:auto_start_producer, topic}, :infinity) do
       :ok ->
         producer_key = producer_key(topic, partition)
         get_partition_worker(client, producer_key)
