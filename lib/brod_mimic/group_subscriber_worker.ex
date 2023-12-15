@@ -42,11 +42,7 @@ defmodule BrodMimic.GroupSubscriberWorker do
       commit_fun: commit_fun
     } = start_opts
 
-    init_info =
-      :maps.with(
-        [:topic, :partition, :group_id, :commit_fun],
-        start_opts
-      )
+    init_info = Map.take(start_opts, [:topic, :partition, :group_id, :commit_fun])
 
     Logger.info(:io_lib.format(@starting_group_subscriber, [init_info, begin_offset, self()]), %{
       domain: [:brod]

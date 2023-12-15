@@ -180,7 +180,7 @@ defmodule BrodMimic.TopicSubscriber do
       message_type: message_type,
       consumer_config: consumer_config,
       partitions: partitions
-    } = :maps.merge(defaults, config)
+    } = Map.merge(defaults, config)
 
     {:ok, committed_offsets, cb_state} = cb_module.init(topic, init_data)
 

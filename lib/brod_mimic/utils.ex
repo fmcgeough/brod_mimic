@@ -348,8 +348,8 @@ defmodule BrodMimic.Utils do
   def fold(conn, topic, partition, offset, opts, acc, fun, limits) do
     fetch = make_fetch_fun(conn, topic, partition, opts)
     infinity = 1 <<< 64
-    end_offset = :maps.get(:reach_offset, limits, infinity)
-    count_limit = :maps.get(:message_count, limits, infinity)
+    end_offset = Map.get(limits, :reach_offset, infinity)
+    count_limit = Map.get(limits, :message_count, infinity)
     count_limit < 1 and :erlang.error(:bad_message_count)
 
     spawn = fn o ->
@@ -367,10 +367,10 @@ defmodule BrodMimic.Utils do
   """
   @spec make_fetch_fun(pid(), topic(), partition(), Brod.fetch_opts()) :: fetch_fun()
   def make_fetch_fun(conn, topic, partition, fetch_opts) do
-    wait_time = :maps.get(:max_wait_time, fetch_opts, 1000)
-    min_bytes = :maps.get(:min_bytes, fetch_opts, 1)
-    max_bytes = :maps.get(:max_bytes, fetch_opts, bsl(1, 20))
-    isolation_level = :maps.get(:isolation_level, fetch_opts, :kpro_read_committed)
+    wait_time = Map.get(fetch_opts, :max_wait_time, 1000)
+    min_bytes = Map.get(fetch_opts, :min_bytes, 1)
+    max_bytes = Map.get(fetch_opts, :max_bytes, bsl(1, 20))
+    isolation_level = Map.get(fetch_opts, :isolation_level, :kpro_read_committed)
     req_fun = make_req_fun(conn, topic, partition, wait_time, min_bytes, isolation_level)
     fn offset -> __MODULE__.fetch(conn, req_fun, offset, max_bytes) end
   end
@@ -404,7 +404,7 @@ defmodule BrodMimic.Utils do
   def fetch_committed_offsets(bootstrap_endpoints, conn_cfg, group_id, topics) do
     kpro_opts = kpro_connection_options(conn_cfg)
 
-    args = :maps.merge(kpro_opts, %{type: :group, id: group_id})
+    args = Map.merge(kpro_opts, %{type: :group, id: group_id})
 
     with_conn(
       :kpro.connect_coordinator(bootstrap_endpoints, nolink(conn_cfg), args),
@@ -551,7 +551,7 @@ defmodule BrodMimic.Utils do
             :erlang.size(k) + :erlang.size(v) + acc_h
           end,
           0,
-          :maps.get(:headers, msg, [])
+          Map.get(msg, :headers, [])
         )
 
       :erlang.size(key) + :erlang.size(value) + header_size + 8 + acc
@@ -643,7 +643,7 @@ defmodule BrodMimic.Utils do
           :proplists.get_value(:connect_timeout, list, :timer.seconds(5))
 
         map when is_map(map) ->
-          :maps.get(:connect_timeout, map, :timer.seconds(5))
+          Map.get(map, :connect_timeout, :timer.seconds(5))
       end
 
     %{timeout: timeout}
@@ -888,7 +888,7 @@ defmodule BrodMimic.Utils do
   end
 
   def with_conn(endpoints, conn_cfg, fun) when is_list(conn_cfg) do
-    with_conn(endpoints, :maps.from_list(conn_cfg), fun)
+    with_conn(endpoints, Map.new(conn_cfg), fun)
   end
 
   def with_conn(endpoints, conn_cfg, fun) do
@@ -1070,14 +1070,14 @@ defmodule BrodMimic.Utils do
 
   defp unify_msg(m) when is_map(m) do
     Map.merge(m, %{
-      key: bin(:maps.get(:key, m, <<>>)),
-      value: bin(:maps.get(:value, m, <<>>)),
+      key: bin(Map.get(m, :key, <<>>)),
+      value: bin(Map.get(m, :value, <<>>)),
       headers:
         :lists.map(
           fn {k, v} ->
             {bin(k), bin(v)}
           end,
-          :maps.get(:headers, m, [])
+          Map.get(m, :headers, [])
         )
     })
   end

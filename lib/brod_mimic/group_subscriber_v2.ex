@@ -127,10 +127,10 @@ defmodule BrodMimic.GroupSubscriberv2 do
   def init(config) do
     %{client: client, group_id: group_id, topics: topics, cb_module: cb_module} = config
     Process.flag(:trap_exit, true)
-    message_type = :maps.get(:message_type, config, :message_set)
+    message_type = Map.get(config, :message_type, :message_set)
     default_group_config = []
-    group_config = :maps.get(:group_config, config, default_group_config)
-    cb_config = :maps.get(:init_data, config, :undefined)
+    group_config = Map.get(config, :group_config, default_group_config)
+    cb_config = Map.get(config, :init_data, :undefined)
     :ok = BrodUtils.assert_client(client)
     :ok = BrodUtils.assert_group_id(group_id)
     :ok = BrodUtils.assert_topics(topics)
@@ -224,7 +224,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
         r_state(config: config) = state0
       ) do
     default_consumer_config = []
-    consumer_config = :maps.get(:consumer_config, config, default_consumer_config)
+    consumer_config = Map.get(config, :consumer_config, default_consumer_config)
     state1 = r_state(state0, generation_id: generation_id)
 
     state =
@@ -254,7 +254,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
   end
 
   def handle_info({:EXIT, pid, reason}, state) do
-    case (for {tp, pid1} <- :maps.to_list(r_state(state, :workers)),
+    case (for {tp, pid1} <- Map.to_list(r_state(state, :workers)),
               pid1 === pid do
             tp
           end) do

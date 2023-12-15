@@ -792,12 +792,7 @@ defmodule BrodMimic.Brod do
 
   def connect_group_coordinator(bootstrap_endpoints, conn_cfg, group_id) do
     kpro_options = BrodUtils.kpro_connection_options(conn_cfg)
-
-    args =
-      :maps.merge(
-        kpro_options,
-        %{type: :group, id: group_id}
-      )
+    args = Map.merge(kpro_options, %{type: :group, id: group_id})
 
     :kpro.connect_coordinator(bootstrap_endpoints, conn_cfg, args)
   end

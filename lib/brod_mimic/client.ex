@@ -953,7 +953,7 @@ defmodule BrodMimic.Client do
 
   def conn_config(r_state(client_id: client_id, config: config)) do
     cfg = conn_config(config, :kpro_connection.all_cfg_keys(), [])
-    :maps.from_list([{:client_id, ensure_binary(client_id)} | cfg])
+    Map.new([{:client_id, ensure_binary(client_id)} | cfg])
   end
 
   def conn_config([], _conn_cfg_keys, acc), do: acc
