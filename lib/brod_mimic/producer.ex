@@ -21,7 +21,7 @@ defmodule BrodMimic.Producer do
   @failed_init_connection "Failed to (re)init connection, reason:\n~p"
 
   @type milli_sec() :: non_neg_integer()
-  @type delay_send_ref() :: :undef | {reference(), reference()}
+  @type delay_send_ref() :: :undefined | {reference(), reference()}
   @type topic() :: Brod.topic()
   @type partition() :: Brod.partition()
   @type offset() :: Brod.offset()

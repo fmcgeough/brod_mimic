@@ -38,8 +38,6 @@ defmodule BrodMimic.Client do
   @default_reconnect_cool_down_seconds 1
   @default_get_metadata_timeout_seconds 5
 
-  # @unknown_topic_cache_expire_seconds 120
-
   @type endpoint() :: Brod.endpoint()
   @type client() :: Brod.client()
   @type client_id() :: Brod.client_id()
@@ -85,12 +83,12 @@ defmodule BrodMimic.Client do
           record(:r_state,
             client_id: client_id(),
             bootstrap_endpoints: [endpoint()],
-            meta_conn: :undef | connection(),
+            meta_conn: :undefined | connection(),
             payload_conns: [conn_state()],
-            producers_sup: :undef | pid(),
-            consumers_sup: :undef | pid(),
-            config: :undef | config(),
-            workers_tab: :undef | :ets.table()
+            producers_sup: :undefined | pid(),
+            consumers_sup: :undefined | pid(),
+            config: :undefined | config(),
+            workers_tab: :undefined | :ets.table()
           )
 
   @typedoc """
@@ -242,8 +240,9 @@ defmodule BrodMimic.Client do
   @doc """
   Get topic metadata, if topic is undefined (`:undef`) it will fetch ALL metadata
   """
-  @spec get_metadata(client(), :all | :undef | topic()) :: {:ok, :kpro.struct()} | {:error, any()}
-  def get_metadata(client, :undef) do
+  @spec get_metadata(client(), :all | :undefined | topic()) ::
+          {:ok, :kpro.struct()} | {:error, any()}
+  def get_metadata(client, :undefined) do
     get_metadata(client, :all)
   end
 
@@ -304,10 +303,9 @@ defmodule BrodMimic.Client do
   end
 
   @doc """
-  Register [self()](https://hexdocs.pm/elixir/1.12/Kernel.html#self/0) as a
-  partition producer. The pid is registered in an
-  [ETS](https://erlang.org/doc/man/ets.html) table, then the callers may lookup
-  a producer pid from the table and make produce requests to the producer
+  Register this process as a partition producer. The pid is registered in an
+  [ETS](https://erlang.org/doc/man/ets.html) table. This allows callers to
+  lookup a producer pid from the table and make produce requests to the producer
   process directly.
   """
   @spec register_producer(client(), topic(), partition()) :: :ok
@@ -329,10 +327,9 @@ defmodule BrodMimic.Client do
   end
 
   @doc """
-  Register [self()](https://hexdocs.pm/elixir/1.12/Kernel.html#self/0) as a
-  partition consumer. The pid is registered in an
-  [ETS](https://erlang.org/doc/man/ets.html) table, then the callers may lookup
-  a consumer pid from the table ane make subscribe calls to the process
+  Register this process as a partition consumer. The pid is registered in an
+  [ETS](https://erlang.org/doc/man/ets.html) table. This allows callers to
+  lookup a consumer pid from the table ane make subscribe calls to the process
   directly.
   """
   @spec register_consumer(client(), topic(), partition()) :: :ok
@@ -594,7 +591,7 @@ defmodule BrodMimic.Client do
   def find_producer(client, topic, partition) do
     case safe_gen_call(client, :get_producers_sup_pid, :infinity) do
       {:ok, sup_pid} ->
-        # MODIFY brod_producers_sup:find_producer(sup_id, topic, partition)
+        BrodProducersSup.find_producer(sup_pid, topic, partition)
         {sup_pid, topic, partition}
 
       {:error, reason} ->
@@ -855,7 +852,7 @@ defmodule BrodMimic.Client do
   @doc """
   Looks up the partition count in [ETS](https://erlang.org/doc/man/ets.html)
   """
-  @spec lookup_partitions_count_cache(:ets.table(), :undef | topic()) ::
+  @spec lookup_partitions_count_cache(:ets.table(), :undefined | topic()) ::
           {:ok, pos_integer()}
           | {:error, any()}
           | false
@@ -898,7 +895,8 @@ defmodule BrodMimic.Client do
   def maybe_start_producer(client, topic, partition, error) do
     case safe_gen_call(:client, {:auto_start_producer, topic}, :infinity) do
       :ok ->
-        get_partition_worker(client, producer_key(topic, partition))
+        producer_key = producer_key(topic, partition)
+        get_partition_worker(client, producer_key)
 
       {:error, :disabled} ->
         error
@@ -937,7 +935,7 @@ defmodule BrodMimic.Client do
     ensure_partition_workers(topic_name, state, f)
   end
 
-  def ensure_partition_workers(topic_name, state, f) do
+  defp ensure_partition_workers(topic_name, state, f) do
     validate_topic_result = validate_topic_existence(topic_name, state, _is_retry = false)
 
     with_ok_func = fn :ok, new_state ->
@@ -1054,7 +1052,7 @@ defmodule BrodMimic.Client do
   """
   def handle_connection_down(state, pid, reason) do
     if r_state(state, :meta_conn) == pid do
-      r_state(state, meta_conn: :undef)
+      r_state(state, meta_conn: :undefined)
     else
       conns = r_state(state, :payload_conns)
       client_id = r_state(state, :client_id)

@@ -382,7 +382,7 @@ defmodule BrodMimic.GroupCoordinator do
       ) do
     is_reference(offset_commit_timer) and Process.cancel_timer(offset_commit_timer)
 
-    if reason != :undef do
+    if reason != :undefined do
       Logger.info(fn -> log_string(state0, @rejoining_group, [reason]) end)
     end
 

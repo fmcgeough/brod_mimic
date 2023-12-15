@@ -118,7 +118,7 @@ defmodule BrodMimic.Consumer do
   @type state() ::
           record(:state,
             bootstrap: pid() | Brod.bootstrap(),
-            connection: :undef | pid(),
+            connection: :undefined | pid(),
             topic: binary(),
             partition: integer(),
             begin_offset: Brod.offset_time(),
@@ -127,9 +127,9 @@ defmodule BrodMimic.Consumer do
             max_bytes_orig: bytes(),
             sleep_timeout: integer(),
             prefetch_count: integer(),
-            last_req_ref: :undef | reference(),
-            subscriber: :undef | pid(),
-            subscriber_mref: :undef | reference(),
+            last_req_ref: :undefined | reference(),
+            subscriber: :undefined | pid(),
+            subscriber_mref: :undefined | reference(),
             pending_acks: pending_acks(),
             is_suspended: boolean(),
             offset_reset_policy: offset_reset_policy(),
@@ -137,7 +137,7 @@ defmodule BrodMimic.Consumer do
             max_bytes: bytes(),
             size_stat_window: non_neg_integer(),
             prefetch_bytes: non_neg_integer(),
-            connection_mref: :undef | reference(),
+            connection_mref: :undefined | reference(),
             isolation_level: isolation_level()
           )
 
@@ -203,14 +203,14 @@ defmodule BrodMimic.Consumer do
        sleep_timeout: sleep_timeout,
        prefetch_count: prefetch_count,
        prefetch_bytes: prefetch_bytes,
-       connection: :undef,
+       connection: :undefined,
        pending_acks: pending_acks(),
        is_suspended: false,
        offset_reset_policy: offset_reset_policy,
        avg_bytes: 0,
        max_bytes: max_bytes,
        size_stat_window: cfg.(:size_stat_window, @default_avg_window),
-       connection_mref: :undef,
+       connection_mref: :undefined,
        isolation_level: isolation_level
      )}
   end
@@ -426,7 +426,7 @@ defmodule BrodMimic.Consumer do
     end
   end
 
-  def handle_batches(:undef, [], state0) do
+  def handle_batches(:undefined, [], state0) do
     # It is only possible to end up here in a incremental
     # fetch session, empty fetch response implies no
     # new messages to fetch, and no changes in partition
