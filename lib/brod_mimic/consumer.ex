@@ -19,7 +19,7 @@ defmodule BrodMimic.Consumer do
   use BrodMimic.Macros
   use GenServer
 
-  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
+  import Record, only: [defrecord: 3]
 
   alias BrodMimic.Brod
   alias BrodMimic.Client, as: BrodClient
@@ -56,21 +56,6 @@ defmodule BrodMimic.Consumer do
   @type isolation_level() :: :kpro.isolation_level()
   @type offset_reset_policy() :: :reset_by_subscriber | :reset_to_earliest | :reset_to_latest
   @type bytes() :: non_neg_integer()
-
-  defrecord(
-    :kpro_req,
-    extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl")
-  )
-
-  defrecord(
-    :kpro_rsp,
-    extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl")
-  )
-
-  defrecord(
-    :kafka_message,
-    extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl")
-  )
 
   defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,

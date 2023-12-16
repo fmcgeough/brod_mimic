@@ -6,11 +6,8 @@ defmodule BrodMimic.Utils do
   use BrodMimic.Macros
 
   import Bitwise
-  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
+  import Record, only: [defrecord: 3]
 
-  defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
-  defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
-  defrecord(:kafka_message, extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl"))
   defrecord(:r_brod_cg, :brod_cg, id: :undefined, protocol_type: :undefined)
 
   alias BrodMimic.Brod

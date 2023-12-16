@@ -6,7 +6,7 @@ defmodule BrodMimic.GroupCoordinator do
   use BrodMimic.Macros
   use GenServer
 
-  import Record, only: [defrecord: 2, extract: 2]
+  import Record, only: [defrecord: 2]
 
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.KafkaRequest, as: BrodKafkaRequest
@@ -20,23 +20,6 @@ defmodule BrodMimic.GroupCoordinator do
   @elected "elected=~p"
   @assignments_received "assignments received:~s"
   @group_member_info "Group member (~s,coor=~p,cb=~p,generation=~p):\n"
-
-  @type protocol_name() :: String.t()
-
-  defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
-  defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
-
-  defrecord(:kafka_group_member_metadata,
-    version: :undefined,
-    topics: :undefined,
-    user_data: :undefined
-  )
-
-  defrecord(:brod_received_assignment,
-    topic: :undefined,
-    partition: :undefined,
-    begin_offset: :undefined
-  )
 
   defrecord(:state,
     client: :undefined,
@@ -65,6 +48,138 @@ defmodule BrodMimic.GroupCoordinator do
     protocol_name: :undefined
   )
 
+  @type protocol_name() :: String.t()
+  @type ts() :: :erlang.timestamp()
+  @typedoc """
+  default is :commit_to_kafka_v2
+  """
+  @type brod_offset_commit_policy() :: :commit_to_kafka_v2 | :consumer_managed
+  @type brod_partition_assignment_strategy() :: :roundrobin_v2 | :callback_implemented
+  @type partition_assignment_strategy() :: brod_partition_assignment_strategy()
+  @type offset_commit_policy() :: brod_offset_commit_policy()
+  @type member_id() :: Brod.group_member_id()
+
+  @typedoc """
+  GenServer state
+
+  - group_member_id -  Group member ID, which should be set to empty in the
+    first join group request, then a new member id is assigned by the group
+    coordinator and in join group response. This field may change if the member
+    has lost connection to the coordinator and received 'UnknownMemberId'
+    exception in response messages.
+  - leader_id - `member_id == leader_id` if elected as group leader by the coordinator.
+  - topics - A set of topic names where the group members consumes from
+  - connection - This socket is dedicated for group management requests for join
+    group, sync group, offset commit, and heartbeat. We can not use a payload
+    connection managed by `BrodMimic.Client` because connections in the Client
+    are shared resources, but the connection to group coordinator has to be
+    dedicated to one group member.
+  - hb_ref - heartbeat reference, to discard stale responses
+  - members - all group members received in the join group response
+  - is_in_group - Set to false before joining the group then set to true when
+    successfully joined the group. This is by far only used to prevent the
+    timer-triggered loopback command message sending a HeartbeatRequest to the
+    group coordinator broker.
+  - member_pid - The process which is responsible to subscribe/unsubscribe to all
+    assigned topic-partitions.
+  - member_module - The module which implements group member functionality
+  - acked_offsets - The offsets that has been acknowledged by the member i.e.
+    the offsets that are ready for commit. NOTE: this field is not used if
+    offset_commit_policy is `:consumer_managed`
+  - offset_commit_timer - The reference of the timer which triggers offset commit
+  """
+  @type state() ::
+          record(:state,
+            client: Brod.client(),
+            group_id: Brod.group_id(),
+            member_id: member_id(),
+            leader_id: :undefined | member_id(),
+            generation_id: integer(),
+            topics: [Brod.topic()],
+            connection: :undefined | :kpro.connection(),
+            hb_ref: :undefined | {reference(), ts()},
+            members: [Brod.group_member()],
+            is_in_group: boolean(),
+            member_pid: pid(),
+            member_module: module(),
+            acked_offsets: [{{Brod.topic(), Brod.partition()}, Brod.offset()}],
+            offset_commit_timer: :undefined | reference(),
+            partition_assignment_strategy: partition_assignment_strategy(),
+            session_timeout_seconds: pos_integer(),
+            rebalance_timeout_seconds: pos_integer(),
+            heartbeat_rate_seconds: pos_integer(),
+            max_rejoin_attempts: non_neg_integer(),
+            rejoin_delay_seconds: non_neg_integer(),
+            offset_retention_seconds: :undefined | integer(),
+            offset_commit_policy: offset_commit_policy(),
+            offset_commit_interval_seconds: pos_integer(),
+            protocol_name: protocol_name()
+          )
+
+  @doc """
+  Start a kafka consumer group coordinator.
+
+  ## Parameters
+
+  - client - `client_id` (or pid, but not recommended)
+  - group_id - Predefined globally unique (in a Kafka cluster) binary string
+  - topics - Predefined set of topic names to join the group
+  - config - The group coordinator configs in a proplist, possible values:
+    - `:partition_assignment_strategy` (optional, default = `:roundrobin_v2`)
+      - `:roundrobin_v2` Take all topic-offset (sorted `topic_partition()`
+        list), assign one to each member in a roundrobin fashion. Only
+        partitions in the subscription topic list are assigned
+      - `:callback_implemented` Call `cb_module.assign_partitions/2` to assign
+        partitions
+    - `:session_timeout_seconds` (optional, default = 30). Time in seconds for
+      the group coordinator broker to consider a member `:down` if no heartbeat
+      or any kind of requests received from a broker in the past N seconds. A
+      group member may also consider the coordinator broker `:down` if no
+      heartbeat response response received in the past N seconds.
+    - `:rebalance_timeout_seconds` (optional, default = 30). Time in seconds for
+      each worker to join the group once a rebalance has begun. If the timeout
+      is exceeded, then the worker will be removed from the group, which will
+      cause offset commit failures.
+    - `:heartbeat_rate_seconds` (optional, default = 5). Time in seconds for the
+      member to 'ping' the group coordinator. Care should be taken when picking
+      the number, on one hand, we do not want to flush the broker with requests
+      if we set it too low, on the other hand, if set it too high, it may take
+      too long for the members to realize status changes of the group such as
+      assignment rebalancing or group coordinator switchover etc.
+    - `:max_rejoin_attempts` (optional, default = 5). Maximum number of times
+      allowed for a member to re-join the group. The gen_server will stop if it
+      reached the maximum number of retries. 'let it crash' may not be the
+      optimal strategy here because the group member id is kept in the
+      gen_server looping state and it is reused when re-joining the group.
+    - `:rejoin_delay_seconds` (optional, default = 1). Delay in seconds before
+      re-joining the group.
+    - `:offset_commit_policy` (optional, default = `:commit_to_kafka_v2`).
+      How/where to commit offsets, possible values:
+      - `:commit_to_kafka_v2` Group coordinator will commit the offsets to Kafka
+        using version 2 `OffsetCommitRequest`.
+      - `:consumer_managed` The group member (e.g. BrodMimic.GroupSubscriber`)
+        is responsible for persisting offsets to a local or centralized storage.
+        And the callback `get_committed_offsets' should be implemented to allow
+        group coordinator to retrieve the committed offsets.
+    - `:offset_commit_interval_seconds` (optional, default = 5). The time
+      interval between two `OffsetCommitRequest` messages. This config is
+      irrelevant if `:offset_commit_policy` is `:consumer_managed`.
+    - `:offset_retention_seconds` (optional, default = -1). How long the time is
+      to be kept in Kafka before it is deleted. default special value -1
+      indicates that the consumer_offsets topic retention policy is used. This
+      config is irrelevant if `:offset_commit_policy` is `:consumer_managed`.
+    - `:protocol_name` (optional, default = `:roundrobin_v2`). This is the
+      protocol name used when join a group, if not given, by default
+      `partition_assignment_strategy' is used as the protocol name. Setting a
+      protocol name allows to interact with consumer group member designed in
+      other programming languages. For example, `range` is the most commonly
+      used protocol name for JAVA client. However, only roundrobin is supported
+      by the library. In order to mimic 'range` protocol one will have
+      to do it via `callback_implemented` assignment strategy.
+  - cb_module - The module which implements group coordinator callbacks
+  - member_pid - The member process pid
+
+  """
   def start_link(client, group_id, topics, config, cb_module, member_pid) do
     args = {client, group_id, topics, config, cb_module, member_pid}
     GenServer.start_link(BrodMimic.GroupCoordinator, args, [])
@@ -472,7 +587,7 @@ defmodule BrodMimic.GroupCoordinator do
   # we are likely kicked out from the group, rejoin with empty member id
   def should_reset_member_id(:unknown_member_id), do: true
 
-  # the coordinator have moved to another broker, set it to :undef to trigger a re-discover
+  # the coordinator have moved to another broker, set it to :undefined to trigger a re-discover
   def should_reset_member_id(:not_coordinator), do: true
 
   # old connection was down, new connection will lead

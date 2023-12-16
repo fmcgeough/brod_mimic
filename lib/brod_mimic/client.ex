@@ -10,7 +10,7 @@ defmodule BrodMimic.Client do
   use BrodMimic.Macros
   use GenServer
 
-  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
+  import Record, only: [defrecord: 3, defrecord: 2]
 
   alias BrodMimic.ConsumersSup, as: BrodConsumersSup
   alias BrodMimic.KafkaRequest
@@ -21,8 +21,6 @@ defmodule BrodMimic.Client do
   @producer_supervisor_down "client ~p producers supervisor down~nreason: ~p"
   @consumer_supervisor_down "client ~p consumers supervisor down~nreason: ~p"
   @unexpected_info "~p [~p] ~p got unexpected info: ~p"
-
-  defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
 
   defrecord(:r_state, :state,
     client_id: :undefined,

@@ -57,12 +57,6 @@ defmodule BrodMimic.Producer do
     result: :undefined
   )
 
-  defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
-    version: :undefined,
-    topics: :undefined,
-    user_data: :undefined
-  )
-
   defrecord(:r_brod_received_assignment, :brod_received_assignment,
     topic: :undefined,
     partition: :undefined,

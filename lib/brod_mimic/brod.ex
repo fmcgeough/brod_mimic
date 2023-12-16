@@ -25,18 +25,6 @@ defmodule BrodMimic.Brod do
     messages: :undefined
   )
 
-  defrecord(:brod_received_assignment, :brod_received_assignment,
-    topic: :undefined,
-    partition: :undefined,
-    begin_offset: :undefined
-  )
-
-  defrecord(:kafka_group_member_metadata, :kafka_group_member_metadata,
-    version: :undefined,
-    topics: :undefined,
-    user_data: :undefined
-  )
-
   ### Types created for Elixir port ============================================
   @type ets_table_id() :: atom() | term()
   @type ets_table() :: atom() | ets_table_id()
@@ -104,13 +92,6 @@ defmodule BrodMimic.Brod do
             topic: topic(),
             partition: partition(),
             begin_offset: :undefined | offset() | {:begin_offset, offset_time()}
-          )
-
-  @type kafka_group_member_metadata ::
-          record(:kafka_group_member_metadata,
-            version: non_neg_integer(),
-            topics: [topic()],
-            user_data: binary()
           )
 
   ## producers

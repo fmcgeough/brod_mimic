@@ -3,7 +3,36 @@ defmodule BrodMimic.Macros do
 
   defmacro __using__(_) do
     quote do
+      import Record, only: [defrecord: 2, extract: 2]
+
       alias BrodMimic.Brod
+
+      defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
+      defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
+
+      defrecord(
+        :kafka_message,
+        extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl")
+      )
+
+      defrecord(:kafka_group_member_metadata,
+        version: :undefined,
+        topics: :undefined,
+        user_data: :undefined
+      )
+
+      defrecord(:brod_received_assignment,
+        topic: :undefined,
+        partition: :undefined,
+        begin_offset: :undefined
+      )
+
+      @type kafka_group_member_metadata ::
+              record(:kafka_group_member_metadata,
+                version: non_neg_integer(),
+                topics: [Brod.topic()],
+                user_data: binary()
+              )
 
       defp offset_earliest, do: :earliest
       defp offset_latest, do: :latest

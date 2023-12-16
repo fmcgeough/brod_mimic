@@ -73,12 +73,6 @@ defmodule BrodMimic.Sup do
     result: :undefined
   )
 
-  Record.defrecord(:r_kafka_group_member_metadata, :kafka_group_member_metadata,
-    version: :undefined,
-    topics: :undefined,
-    user_data: :undefined
-  )
-
   Record.defrecord(:r_brod_received_assignment, :brod_received_assignment,
     topic: :undefined,
     partition: :undefined,
