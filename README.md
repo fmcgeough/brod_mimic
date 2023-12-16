@@ -1,6 +1,7 @@
 # BrodMimic
 
-An Elixir project to explore the Erlang library `brod` by porting it to Elixir.
+An Elixir project to explore the Erlang library
+[brod](https://github.com/kafka4beam/brod/tree/master) by porting it to Elixir.
 
 This project was created for a couple of reasons.
 
@@ -15,11 +16,14 @@ This project was created for a couple of reasons.
    that a developer looking at the code could align what is in this library with
    the`brod` code).
 
-The `brod` library has an Apache 2.0 license. The same license is set for this repo.
+Developers should not use this library in lieu of `brod`. It's not nearly production
+ready and the `brod` library has been used for years by all sorts of companies. This
+project is meant to be educational.
 
-## Notice
+## License/Notice
 
-The `brod` library includes the following notice:
+The `brod` library has an Apache 2.0 license. The same license is set for this
+repo. The `brod` library includes the following notice:
 
 ```
 Kafka client library in Erlang
