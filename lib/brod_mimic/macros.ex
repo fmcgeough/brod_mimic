@@ -34,6 +34,16 @@ defmodule BrodMimic.Macros do
                 user_data: binary()
               )
 
+      @typedoc """
+      Received consumer assignment for a topic/partition
+      """
+      @type brod_received_assignment ::
+              record(:brod_received_assignment,
+                topic: Brod.topic(),
+                partition: Brod.partition(),
+                begin_offset: :undefined | Brod.offset() | {:begin_offset, Brod.offset_time()}
+              )
+
       defp offset_earliest, do: :earliest
       defp offset_latest, do: :latest
       defp unknown_topic_cache_expire_seconds, do: 120

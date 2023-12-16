@@ -87,13 +87,6 @@ defmodule BrodMimic.Brod do
             messages: [message()] | :kpro.incomplete_batch()
           )
 
-  @type brod_received_assignment ::
-          record(:brod_received_assignment,
-            topic: topic(),
-            partition: partition(),
-            begin_offset: :undefined | offset() | {:begin_offset, offset_time()}
-          )
-
   ## producers
   @type producer_config() :: BrodMimic.Producer.config()
   @type partition_fun() :: (topic(), pos_integer(), key(), value() -> {:ok, partition()})

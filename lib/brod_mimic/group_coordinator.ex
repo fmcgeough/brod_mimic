@@ -51,9 +51,13 @@ defmodule BrodMimic.GroupCoordinator do
   @type protocol_name() :: String.t()
   @type ts() :: :erlang.timestamp()
   @typedoc """
-  default is :commit_to_kafka_v2
+  How commits to Kafka are handled. Default is `:commit_to_kafka_v2`
   """
   @type brod_offset_commit_policy() :: :commit_to_kafka_v2 | :consumer_managed
+
+  @typedoc """
+  How to assign partitions. Default is `:roundrobin_v2`.
+  """
   @type brod_partition_assignment_strategy() :: :roundrobin_v2 | :callback_implemented
   @type partition_assignment_strategy() :: brod_partition_assignment_strategy()
   @type offset_commit_policy() :: brod_offset_commit_policy()
@@ -125,7 +129,8 @@ defmodule BrodMimic.GroupCoordinator do
   - group_id - Predefined globally unique (in a Kafka cluster) binary string
   - topics - Predefined set of topic names to join the group
   - config - The group coordinator configs in a proplist, possible values:
-    - `:partition_assignment_strategy` (optional, default = `:roundrobin_v2`)
+    - `:partition_assignment_strategy` (optional, default = `:roundrobin_v2`).
+      Possible values:
       - `:roundrobin_v2` Take all topic-offset (sorted `topic_partition()`
         list), assign one to each member in a roundrobin fashion. Only
         partitions in the subscription topic list are assigned
