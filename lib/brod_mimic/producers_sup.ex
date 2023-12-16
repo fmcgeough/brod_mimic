@@ -100,7 +100,7 @@ defmodule BrodMimic.ProducersSup do
 
   defp producers_sup_spec(client_pid, topic_name, config0) do
     {config, delay_secs} = take_delay_secs(config0, :topic_restart_delay_seconds, 10)
-    args = [:brod_producers_sup, {:brod_producers_sup2, client_pid, topic_name, config}]
+    args = [BrodMimic.ProducersSup, {:brod_producers_sup2, client_pid, topic_name, config}]
 
     {
       _id = topic_name,
