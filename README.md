@@ -15,6 +15,20 @@ This project was created for a couple of reasons.
    that a developer looking at the code could align what is in this library with
    the`brod` code).
 
+The `brod` library has an Apache 2.0 license. The same license is set for this repo.
+
+## Notice
+
+The `brod` library includes the following notice:
+
+```
+Kafka client library in Erlang
+Copyright 2014-2021 Klarna Bank AB (publ)
+
+This product includes software developed by
+Klarna Bank AB (publ) (https://www.klarna.com)
+```
+
 ## Porting Notes
 
 There are cases where new functions in the Elixir version. Generally, this is to deal with
