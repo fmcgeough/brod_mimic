@@ -62,6 +62,7 @@ defmodule BrodMimic.GroupCoordinator do
   @type partition_assignment_strategy() :: brod_partition_assignment_strategy()
   @type offset_commit_policy() :: brod_offset_commit_policy()
   @type member_id() :: Brod.group_member_id()
+  @type topic_partition_offset() :: {Brod.topic(), Brod.partition(), Brod.offset()}
 
   @typedoc """
   GenServer state
@@ -190,30 +191,49 @@ defmodule BrodMimic.GroupCoordinator do
     GenServer.start_link(BrodMimic.GroupCoordinator, args, [])
   end
 
+  @doc """
+  For group member to call to acknowledge a consumed message offset
+  """
+  @spec ack(pid(), integer(), Brod.topic(), Brod.partition(), Brod.offset()) :: :ok
   def ack(pid, generation_id, topic, partition, offset) do
     send(pid, {:ack, generation_id, topic, partition, offset})
     :ok
   end
 
+  @doc """
+  Force commit collected (acked) offsets immediately
+  """
+  @spec commit_offsets(pid()) :: :ok | {:error, any()}
   def commit_offsets(coordinator_pid) do
     commit_offsets(coordinator_pid, _offsets = [])
   end
 
+  @doc """
+  Force commit collected (acked) offsets plus the given extra offsets
+  immediately
+  """
+  @spec commit_offsets(pid(), [topic_partition_offset()]) :: :ok | {:error, any()}
   def commit_offsets(coordinator_pid, offsets0) do
     offsets = :lists.ukeysort(1, offsets0)
-
-    try do
-      GenServer.call(coordinator_pid, {:commit_offsets, offsets}, 5000)
-    catch
-      :exit, {:timeout, _} ->
-        {:error, :timeout}
-    end
+    GenServer.call(coordinator_pid, {:commit_offsets, offsets}, 5000)
+  catch
+    :exit, {:timeout, _} ->
+      {:error, :timeout}
   end
 
+  @doc """
+  Update the list of topics the `BrodMimic.GroupCoordinator` follow which
+  triggers a join group rebalance
+  """
+  @spec update_topics(pid(), [Brod.topic()]) :: :ok
   def update_topics(coordinator_pid, topics) do
     GenServer.cast(coordinator_pid, {:update_topics, topics})
   end
 
+  @doc """
+  Stop group coordinator, wait for pid `DOWN` before return
+  """
+  @spec stop(pid()) :: :ok
   def stop(pid) do
     mref = Process.monitor(pid)
     Process.exit(pid, :shutdown)
@@ -224,6 +244,7 @@ defmodule BrodMimic.GroupCoordinator do
     end
   end
 
+  @impl GenServer
   def init({client, group_id, topics, config, cb_module, member_pid}) do
     Process.flag(:trap_exit, true)
 
@@ -273,6 +294,7 @@ defmodule BrodMimic.GroupCoordinator do
     {:ok, state}
   end
 
+  @impl GenServer
   def handle_info({:ack, generation_id, topic, partition, offset}, state) do
     {:noreply, handle_ack(state, generation_id, topic, partition, offset)}
   end
@@ -367,6 +389,7 @@ defmodule BrodMimic.GroupCoordinator do
     {:noreply, state}
   end
 
+  @impl GenServer
   def handle_call(
         {:commit_offsets, extra_offsets},
         from,
@@ -387,6 +410,7 @@ defmodule BrodMimic.GroupCoordinator do
     {:reply, {:error, {:unknown_call, call}}, state}
   end
 
+  @impl GenServer
   def handle_cast({:update_topics, topics}, state) do
     new_state0 = state(state, topics: topics)
     {:ok, new_state} = stabilize(new_state0, 0, :topics)
@@ -397,10 +421,12 @@ defmodule BrodMimic.GroupCoordinator do
     {:noreply, state}
   end
 
+  @impl GenServer
   def code_change(_old_vsn, state() = state, _extra) do
     {:ok, state}
   end
 
+  @impl GenServer
   def terminate(
         reason,
         state(connection: connection, group_id: group_id, member_id: member_id) = state
