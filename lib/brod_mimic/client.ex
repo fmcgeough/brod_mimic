@@ -90,9 +90,7 @@ defmodule BrodMimic.Client do
           )
 
   @typedoc """
-  FM - Question on both `get_producer_error` and `get_consumer_error`: is
-  `:client_down` ever returned standalone? It looks like it comes back as
-  `{:error, :client_down}`
+  Possible error codes returned when attempting to retrieve a producer.
   """
   @type get_producer_error ::
           :client_down
