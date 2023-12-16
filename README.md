@@ -1,18 +1,23 @@
 # BrodMimic
 
-An Elixir project to explore the Erlang library brod by porting it to Elixir.
+An Elixir project to explore the Erlang library `brod` by porting it to Elixir.
 
 This project was created for a couple of reasons.
 
-1. the widespread popularity of using the `brod` library to connect to Kafka
-2. Elixir developer's lack of knowledge on how to read the Erlang `brod` code.
+1. The `brod` library is the most popular means in Elixir to interface with Kafka.
+2. Elixir developers generally lack knowledge on how to read the Erlang code.
+   The `brod` code is complex and the end result is that Elixir developers may try
+   and use the library as a black-box and that falls apart if problems occur
+   that require some knowledge of how the library is talking to Kafka.
+3. I figured having an Elixir implementation would allow Elixir developers to
+   examine this code and then have a clearer understanding of how `brod` works.
+   To make this a reality I needed to convert the `brod` code file by file (so
+   that a developer looking at the code could align what is in this library with
+   the`brod` code).
 
-I figured having an Elixir implementation would allow Elixir developers to examine
-this code and then have a clearer understanding of how `brod` works. To make this a
-reality I needed to convert the `brod`code file by file (so that a developer looking
-at the code could align what is in this library with the`brod` code).
+## Porting Notes
 
-There are cases where new functions were introduced. Generally, this is to deal with
+There are cases where new functions in the Elixir version. Generally, this is to deal with
 Erlang syntax that is extremely awkward and hard to read in Elixir. It was also done,
 at times, to resolve credo issues (function too complex, etc).
 
@@ -21,8 +26,9 @@ In most cases the Elixir function has the same name so it's not too hard to comp
 the `brod` code with this converted code.
 
 The intention is to pull available doc from the `brod` code base and incorporate
-it into this library. That should result in easier to read generated doc. The intention
-is to do `typedoc` as well so that the numerous `brod` types have good doc.
+it into this library. When the doc is moved over its edited to align with Elixir naming
+and general standards. The goal is to make the doc as accessible as possible for Elixir
+developers.
 
 The `brod` code base makes heavy use of `Record`. This is not something that is common
 in Elixir code bases. In Erlang declaring a record allows defining the record and
@@ -30,8 +36,8 @@ specifying type information in a single statement. The Elixir approach requires 
 definition of the record itself (using `defrecord`) and then a separate definition of
 the record type information (see https://hexdocs.pm/elixir/1.12.3/Record.html#module-types).
 
-The `brod` code base uses its own `Supervisor` implementation. For now, this has been
-ported over to Elixir. It may be removed at some point.
+The `brod` code base uses its own `Supervisor` implementation. This has been
+ported over to Elixir.
 
 Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc).
 
