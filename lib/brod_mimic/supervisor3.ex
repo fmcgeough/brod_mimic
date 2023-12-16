@@ -104,6 +104,7 @@ defmodule BrodMimic.Supervisor3 do
     call(supervisor, {:restart_child, name})
   end
 
+  @spec delete_child(sup_ref(), child_id()) :: :ok | {:error, any()}
   def delete_child(supervisor, name) do
     call(supervisor, {:delete_child, name})
   end

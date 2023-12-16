@@ -5,75 +5,49 @@ defmodule BrodMimic.ProducersSup do
 
   @behaviour BrodMimic.Supervisor3
 
+  alias BrodMimic.Brod
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.Supervisor3, as: BrodSupervisor3
 
-  require Record
+  @type find_producer_error() ::
+          {:producer_not_found, Brod.topic()}
+          | {:producer_not_found, Brod.topic(), Brod.partition()}
+          | {:producer_down, any()}
 
-  Record.defrecord(:r_kafka_message_set, :kafka_message_set,
-    topic: :undefined,
-    partition: :undefined,
-    high_wm_offset: :undefined,
-    messages: :undefined
-  )
+  @doc """
+  Start a root producers supervisor
 
-  Record.defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
-    topic: :undefined,
-    partition: :undefined,
-    error_code: :undefined,
-    error_desc: ''
-  )
-
-  Record.defrecord(:r_brod_call_ref, :brod_call_ref,
-    caller: :undefined,
-    callee: :undefined,
-    ref: :undefined
-  )
-
-  Record.defrecord(:r_brod_produce_reply, :brod_produce_reply,
-    call_ref: :undefined,
-    base_offset: :undefined,
-    result: :undefined
-  )
-
-  Record.defrecord(:r_brod_received_assignment, :brod_received_assignment,
-    topic: :undefined,
-    partition: :undefined,
-    begin_offset: :undefined
-  )
-
-  Record.defrecord(:r_brod_cg, :brod_cg,
-    id: :undefined,
-    protocol_type: :undefined
-  )
-
-  Record.defrecord(:r_socket, :socket,
-    pid: :undefined,
-    host: :undefined,
-    port: :undefined,
-    node_id: :undefined
-  )
-
-  Record.defrecord(:r_cbm_init_data, :cbm_init_data,
-    committed_offsets: :undefined,
-    cb_fun: :undefined,
-    cb_data: :undefined
-  )
-
+  For more details: `BrodMimic.Producer.start_link/4`
+  """
+  @spec start_link() :: {:ok, pid()}
   def start_link do
     BrodSupervisor3.start_link(__MODULE__, __MODULE__)
   end
 
+  @doc """
+  Dynamically start a per-topic supervisor
+  """
+  @spec start_producer(pid(), pid(), Brod.topic(), Brod.producer_config()) ::
+          {:ok, pid()} | {:error, any()}
   def start_producer(sup_pid, client_pid, topic_name, config) do
     spec = producers_sup_spec(client_pid, topic_name, config)
     BrodSupervisor3.start_child(sup_pid, spec)
   end
 
+  @doc """
+  Dynamically stop a per-topic supervisor
+  """
+  @spec stop_producer(pid(), Brod.topic()) :: :ok
   def stop_producer(sup_pid, topic_name) do
     BrodSupervisor3.terminate_child(sup_pid, topic_name)
     BrodSupervisor3.delete_child(sup_pid, topic_name)
   end
 
+  @doc """
+  Find a brod_producer process pid running under the partitions supervisor
+  """
+  @spec find_producer(pid(), Brod.topic(), Brod.partition()) ::
+          {:ok, pid()} | {:error, find_producer_error()}
   def find_producer(sup_pid, topic, partition) do
     case BrodSupervisor3.find_child(sup_pid, topic) do
       [] ->
@@ -110,14 +84,13 @@ defmodule BrodMimic.ProducersSup do
     case BrodClient.get_partitions_count(client_pid, topic) do
       {:ok, partitions_cnt} ->
         children =
-          for partition <-
-                :lists.seq(
-                  0,
-                  partitions_cnt - 1
-                ) do
-            producer_spec(client_pid, topic, partition, config)
-          end
+          Enum.map(0..(partitions_cnt - 1), &producer_spec(client_pid, topic, &1, config))
 
+        # Producer may crash in case of exception in case of network failure,
+        # or error code received in produce response (e.g. leader transition)
+        # In any case, restart right away will very likely fail again.
+        # Hence set MaxR=0 here to cool-down for a configurable N-seconds
+        # before supervisor tries to restart it.
         {:ok, {{:one_for_one, 0, 1}, children}}
 
       {:error, reason} ->
@@ -129,18 +102,28 @@ defmodule BrodMimic.ProducersSup do
     {config, delay_secs} = take_delay_secs(config0, :topic_restart_delay_seconds, 10)
     args = [:brod_producers_sup, {:brod_producers_sup2, client_pid, topic_name, config}]
 
-    {_id = topic_name, _start = {BrodSupervisor3, :start_link, args},
-     _restart = {:permanent, delay_secs}, _shutdown = :infinity, _type = :supervisor,
-     _module = [:brod_producers_sup]}
+    {
+      _id = topic_name,
+      _start = {BrodSupervisor3, :start_link, args},
+      _restart = {:permanent, delay_secs},
+      _shutdown = :infinity,
+      _type = :supervisor,
+      _module = [__MODULE__]
+    }
   end
 
   defp producer_spec(client_pid, topic, partition, config0) do
     {config, delay_secs} = take_delay_secs(config0, :partition_restart_delay_seconds, 5)
     args = [client_pid, topic, partition, config]
 
-    {_id = partition, _start = {:brod_producer, :start_link, args},
-     _restart = {:permanent, delay_secs}, _shutdown = 5000, _type = :worker,
-     _module = [:brod_producer]}
+    {
+      _id = partition,
+      _start = {:brod_producer, :start_link, args},
+      _restart = {:permanent, delay_secs},
+      _shutdown = 5000,
+      _type = :worker,
+      _module = [BrodMimic.Producer]
+    }
   end
 
   defp take_delay_secs(config, name, default_value) do
