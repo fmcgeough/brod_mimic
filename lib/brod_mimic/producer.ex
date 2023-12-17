@@ -2,11 +2,11 @@ defmodule BrodMimic.Producer do
   @moduledoc """
   Responsible for producing messages to a given partition of a given topic
   """
-
+  use BrodMimic.Macros
   use GenServer
 
   import Kernel, except: [send: 2]
-  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
+  import Record, only: [defrecord: 3]
 
   alias BrodMimic.Brod
   alias BrodMimic.Client, as: BrodClient
@@ -18,6 +18,14 @@ defmodule BrodMimic.Producer do
   require Logger
   require Record
 
+  @retriable_errors [
+    :unknown_topic_or_partition,
+    :leader_not_available,
+    :not_leader_for_partition,
+    :request_timed_out,
+    :not_enough_replicas,
+    :not_enough_replicas_after_append
+  ]
   @failed_init_connection "Failed to (re)init connection, reason:\n~p"
 
   @type milli_sec() :: non_neg_integer()
@@ -28,8 +36,6 @@ defmodule BrodMimic.Producer do
   @type config() :: :proplists.proplist()
   @type call_ref() :: Brod.call_ref()
   @type conn() :: :kpro.connection()
-
-  defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
 
   defrecord(:r_brod_call_ref, :brod_call_ref,
     caller: :undefined,
@@ -190,6 +196,7 @@ defmodule BrodMimic.Producer do
     :ok = GenServer.call(pid, :stop)
   end
 
+  @impl GenServer
   def init({client_pid, topic, partition, config}) do
     Process.flag(:trap_exit, true)
     buffer_limit = :proplists.get_value(:partition_buffer_limit, config, 512)
@@ -241,6 +248,93 @@ defmodule BrodMimic.Producer do
     {:ok, state}
   end
 
+  @impl GenServer
+  def handle_info({:delayed_send, msg_ref}, r_state(delay_send_ref: {_tref, msg_ref}) = state0) do
+    state1 = r_state(state0, delay_send_ref: :undefined)
+    {:ok, state} = maybe_produce(state1)
+    {:noreply, state}
+  end
+
+  def handle_info({:delayed_send, _ref}, r_state() = state) do
+    # stale delay-send timer expiration, discard
+    {:noreply, state}
+  end
+
+  def handle_info(:retry, r_state() = state0) do
+    state1 = r_state(state0, retry_tref: :undefined)
+    {:ok, state2} = maybe_reinit_connection(state1)
+    # For retry-interval deterministic, produce regardless of connection state.
+    # In case it has failed to find a new connection in maybe_reinit_connection/1
+    # the produce call should fail immediately with {error, no_leader_connection}
+    # and a new retry should be scheduled (if not reached max_retries yet)
+    {:ok, state} = maybe_produce(state2)
+    {:noreply, state}
+  end
+
+  def handle_info(
+        {:DOWN, _monitor_ref, :process, pid, reason},
+        r_state(connection: pid, buffer: buffer0) = state
+      ) do
+    case BrodMimic.ProducerBuffer.is_empty(buffer0) do
+      true ->
+        # no connection restart in case of empty request buffer
+        {:noreply, r_state(state, connection: :undefined, conn_mref: :undefined)}
+
+      false ->
+        # put sent requests back to buffer immediately after connection down
+        # to fail fast if retry is not allowed (reaching max_retries).
+        buffer = BrodMimic.ProducerBuffer.nack_all(buffer0, reason)
+        {:ok, new_state} = schedule_retry(r_state(state, buffer: buffer))
+        {:noreply, r_state(new_state, connection: :undefined, conn_mref: :undefined)}
+    end
+  end
+
+  def handle_info({:produce, call_ref, batch, ack_cb}, r_state(partition: partition) = state) do
+    buf_cb = make_bufcb(call_ref, ack_cb, partition)
+    handle_produce(buf_cb, batch, state)
+  end
+
+  def handle_info(
+        {:msg, pid, kpro_rsp(api: :produce, ref: ref, msg: rsp)},
+        r_state(connection: pid, buffer: buffer) = state
+      ) do
+    [topic_rsp] = :kpro.find(:responses, rsp)
+    topic = :kpro.find(:topic, topic_rsp)
+    [partition_rsp] = :kpro.find(:partition_responses, topic_rsp)
+    partition = :kpro.find(:partition, partition_rsp)
+    error_code = :kpro.find(:error_code, partition_rsp)
+    offset = :kpro.find(:base_offset, partition_rsp)
+    # assert
+    # topic = r_state(state, :topic)
+    # assert
+    # partition = r_state(state, :partition)
+
+    {:ok, new_state} =
+      case is_error(error_code) do
+        true ->
+          _ = log_error_code(Topic, Partition, Offset, error_code)
+          error = {:produce_response_error, topic, partition, offset, error_code}
+
+          if not is_retriable(error_code) do
+            exit({:not_retriable, error})
+          end
+
+          new_buffer = BrodMimic.ProducerBuffer.nack(buffer, ref, error)
+          schedule_retry(r_state(state, buffer: new_buffer))
+
+        false ->
+          new_buffer = BrodMimic.ProducerBuffer.ack(buffer, ref, offset)
+          maybe_produce(r_state(state, buffer: new_buffer))
+      end
+
+    {:noreply, new_state}
+  end
+
+  def handle_info(_info, r_state() = state) do
+    {:noreply, state}
+  end
+
+  @impl GenServer
   def handle_call(:stop, _from, r_state() = state) do
     {:stop, :normal, :ok, state}
   end
@@ -249,14 +343,17 @@ defmodule BrodMimic.Producer do
     {:reply, {:error, {:unsupported_call, call}}, state}
   end
 
+  @impl GenServer
   def handle_cast(_cast, r_state() = state) do
     {:noreply, state}
   end
 
+  @impl GenServer
   def code_change(_old_vsn, r_state() = state, _extra) do
     {:ok, state}
   end
 
+  @impl GenServer
   def terminate(
         reason,
         r_state(client_pid: client_pid, topic: topic, partition: partition)
@@ -272,6 +369,7 @@ defmodule BrodMimic.Producer do
     :ok
   end
 
+  @impl GenServer
   def format_status(:normal, [_pdict, state = r_state()]) do
     [{:data, [{'State', state}]}]
   end
@@ -484,6 +582,14 @@ defmodule BrodMimic.Producer do
 
   defp schedule_retry(state) do
     {:ok, state}
+  end
+
+  defp is_retriable(ec) when ec in @retriable_errors do
+    true
+  end
+
+  defp is_retriable(_) do
+    false
   end
 
   defp send(:undefined, _kafka_req) do
