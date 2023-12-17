@@ -118,7 +118,7 @@ defmodule BrodMimic.ProducersSup do
 
     {
       _id = partition,
-      _start = {:brod_producer, :start_link, args},
+      _start = {BrodMimic.Producer, :start_link, args},
       _restart = {:permanent, delay_secs},
       _shutdown = 5000,
       _type = :worker,

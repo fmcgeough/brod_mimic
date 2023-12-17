@@ -31,20 +31,6 @@ defmodule BrodMimic.Producer do
 
   defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
 
-  defrecord(:r_kafka_message_set, :kafka_message_set,
-    topic: :undefined,
-    partition: :undefined,
-    high_wm_offset: :undefined,
-    messages: :undefined
-  )
-
-  defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
-    topic: :undefined,
-    partition: :undefined,
-    error_code: :undefined,
-    error_desc: ''
-  )
-
   defrecord(:r_brod_call_ref, :brod_call_ref,
     caller: :undefined,
     callee: :undefined,
@@ -55,30 +41,6 @@ defmodule BrodMimic.Producer do
     call_ref: :undefined,
     base_offset: :undefined,
     result: :undefined
-  )
-
-  defrecord(:r_brod_received_assignment, :brod_received_assignment,
-    topic: :undefined,
-    partition: :undefined,
-    begin_offset: :undefined
-  )
-
-  defrecord(:r_brod_cg, :brod_cg,
-    id: :undefined,
-    protocol_type: :undefined
-  )
-
-  defrecord(:r_socket, :socket,
-    pid: :undefined,
-    host: :undefined,
-    port: :undefined,
-    node_id: :undefined
-  )
-
-  defrecord(:r_cbm_init_data, :cbm_init_data,
-    committed_offsets: :undefined,
-    cb_fun: :undefined,
-    cb_data: :undefined
   )
 
   defrecord(:r_state, :state,
@@ -94,6 +56,71 @@ defmodule BrodMimic.Producer do
     produce_req_vsn: :undefined
   )
 
+  @doc """
+  Start (link) a partition producer
+
+  Possible configs (passed as a proplist):
+
+  - `:required_acks` (optional, default = -1). How many acknowledgements the
+    Kafka broker should receive from the clustered replicas before acking
+    producer.
+    - 0: the broker will not send any response (this is the only case where the
+      broker will not reply to a request)
+    - 1: the leader will wait the data is written to the local log before
+      sending a response
+    - -1: If it is -1 the broker will block until the message is committed by
+      all in sync replicas before acking
+  - `:ack_timeout` (optional, default = 10000 ms). Maximum time in milliseconds
+    the broker can await the receipt of the number of acknowledgements in
+    `:required_acks`. The timeout is not an exact limit on the request time for
+    a few reasons: (1) it does not include network latency, (2) the timer begins
+    at the beginning of the processing of this request so if many requests are
+    queued due to broker overload that wait time will not be included, (3) Kafka
+    leader will not terminate a local write so if the local write time exceeds
+    this timeout it will not be respected.
+  - `:partition_buffer_limit` (optional, default = 256). How many requests
+    (per-partition) can be buffered without blocking the caller. The callers are
+    released (by receiving the `brod_produce_req_buffered` reply) once the
+    request is taken into buffer and after the request has been put on wire,
+    then the caller may expect a reply `brod_produce_req_acked` when the request
+    is accepted by Kafka.
+  - `:partition_onwire_limit` (optional, default = 1). How many message sets
+    (per-partition) can be sent to Kafka broker asynchronously before receiving
+    ACKs from broker. NOTE: setting a number greater than 1 may cause messages
+    being persisted in an order different from the order they were produced.
+  - `:max_batch_size` (in bytes, optional, default = 1M). In case callers are
+    producing faster than brokers can handle (or congestion on wire), try to
+    accumulate small requests into batches as much as possible but not exceeding
+    max_batch_size. OBS: If compression is enabled, care should be taken when
+    picking the max batch size, because a compressed batch will be produced as
+    one message and this message might be larger than `max.message.bytes` in
+    Kafka config (or topic config)
+  - `:max_retries` (optional, default = 3). If `{max_retries, n}` is given, the
+    producer retry produce request for n times before crashing in case of
+    failures like connection being shutdown by remote or exceptions received in
+    produce response from Kafka. The special value -1 means "retry indefinitely"
+  - `:retry_backoff_ms` (optional, default = 500). Time in milliseconds to sleep
+    before retry the failed produce request.
+  - `compression` (optional, default = `:no_compression`). `gzip` or `snappy` to
+    enable compression.
+  - `:max_linger_ms` (optional, default = 0). Messages are allowed to 'linger'
+    in buffer for this amount of milliseconds before being sent. Definition of
+    'linger': A message is in "linger" state when it is allowed to be sent
+    on-wire, but chosen not to (for better batching). The default value is 0 for 2 reasons:
+      - Backward compatibility (for 2.x releases)
+      - Not to surprise `BrodMimic.Brod` `produce_sync` callers
+  - `:max_linger_count` (optional, default = 0). At most this amount (count not
+    size) of messages are allowed to "linger" in buffer. Messages will be sent
+    regardless of "linger" age when this threshold is hit. NOTE: It does not make sense to have this value set larger than
+    the value of `:partition_buffer_limit`.
+  - `:produce_req_vsn` (optional, default = `:undefined`). User determined
+    produce API version to use, discard the API version range received from
+    Kafka. This is to be used when a topic in newer version Kafka is configured
+    to store older version message format. e.g. When a topic in Kafka 0.11 is
+    configured to have message format 0.10, sending message with headers would
+    result in `:unknown_server_error` error code.
+  """
+  @spec start_link(pid(), Brod.topic(), Brod.partition(), config()) :: {:ok, pid()}
   def start_link(client_pid, topic, partition, config) do
     GenServer.start_link(__MODULE__, {client_pid, topic, partition, config}, [])
   end
