@@ -139,7 +139,7 @@ defmodule BrodMimic.Producer do
     call_ref = r_brod_call_ref(caller: :undefined)
     ack_cb = &__MODULE__.do_no_ack/2
     batch = BrodUtils.make_batch_input(key, value)
-    send(pid, {:produce, call_ref, batch, ack_cb})
+    Process.send(pid, {:produce, call_ref, batch, ack_cb}, [:noconnect])
     :ok
   end
 
@@ -147,7 +147,7 @@ defmodule BrodMimic.Producer do
     call_ref = r_brod_call_ref(caller: self(), callee: pid, ref: mref = Process.monitor(pid))
 
     batch = BrodUtils.make_batch_input(key, value)
-    send(pid, {:produce, call_ref, batch, ack_cb})
+    Process.send(pid, {:produce, call_ref, batch, ack_cb}, [:noconnect])
 
     receive do
       r_brod_produce_reply(
@@ -430,7 +430,7 @@ defmodule BrodMimic.Producer do
     case arg do
       :brod_produce_req_buffered when is_pid(pid) ->
         reply = r_brod_produce_reply(call_ref: call_ref, result: :brod_produce_req_buffered)
-        send(pid, reply)
+        Process.send(pid, reply, [:noconnect])
 
       :brod_produce_req_buffered ->
         :ok
@@ -443,7 +443,7 @@ defmodule BrodMimic.Producer do
             result: :brod_produce_req_acked
           )
 
-        send(pid, reply)
+        Process.send(pid, reply, [:noconnect])
 
       {:brod_produce_req_acked, base_offset} when is_function(ack_cb, 2) ->
         ack_cb.(partition, base_offset)
