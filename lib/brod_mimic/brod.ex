@@ -312,14 +312,24 @@ defmodule BrodMimic.Brod do
     end
   end
 
+  @doc """
+  The equivalent of `start_link_client(bootstrap_endpoints, :brod_default_client)`
+  """
+  @spec start_link_client([endpoint()]) :: {:ok, pid()} | {:error, any()}
   def start_link_client(bootstrap_endpoints) do
     start_link_client(bootstrap_endpoints, :brod_default_client)
   end
 
+  @doc """
+  The equivalent of `start_link_client(bootstrap_endpoints, client_id, [])`
+  """
+  @spec start_link_client([endpoint()], client_id()) :: {:ok, pid()} | {:error, any()}
   def start_link_client(bootstrap_endpoints, client_id) do
     start_link_client(bootstrap_endpoints, client_id, [])
   end
 
+  @spec start_link_client([endpoint()], client_id(), client_config()) ::
+          {:ok, pid()} | {:error, any()}
   def start_link_client(bootstrap_endpoints, client_id, config) do
     BrodClient.start_link(bootstrap_endpoints, client_id, config)
   end

@@ -17,7 +17,7 @@ This project was created for a couple of reasons.
      align what is in this library with the`brod` code). So, for example, in the `brod`
      library there is a `src/brod_consumers_sup.erl` file. In this library there is a
      `lib/brod_mimic/consumers_sup.ex` file.
-   - modify doc so that the information aligns with usage from Elixir (the `brod`` documentation
+   - modify doc so that the information aligns with usage from Elixir (the `brod` documentation
      is written from an Erlang perspective)
    - add documentation that clarifies some of the more complicated aspects of the code
 

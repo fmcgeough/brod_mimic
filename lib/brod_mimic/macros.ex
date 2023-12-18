@@ -1,5 +1,7 @@
 defmodule BrodMimic.Macros do
-  @moduledoc false
+  @moduledoc """
+  Macros in Elixir as substitute for Erlang macros used in brod
+  """
 
   defmacro __using__(_) do
     quote do
