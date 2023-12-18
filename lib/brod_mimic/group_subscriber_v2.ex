@@ -8,6 +8,8 @@ defmodule BrodMimic.GroupSubscriberv2 do
   """
   @behaviour BrodMimic.GroupMember
 
+  use BrodMimic.Macros
+
   use GenServer
 
   import Record, only: [defrecord: 3]
@@ -43,12 +45,12 @@ defmodule BrodMimic.GroupSubscriberv2 do
     client: :undefined
   )
 
-  @type commit_fun() :: (Brod.offset() -> :ok)
+  @type commit_fun() :: (offset() -> :ok)
 
   @type subscriber_config() :: %{
           required(:client) => Brod.client(),
           required(:group_id) => Brod.group_id(),
-          required(:topics) => [Brod.topic()],
+          required(:topics) => [topic()],
           required(:cb_module) => module(),
           required(:init_data) => term(),
           required(:message_type) => :message | :message_set,
@@ -58,8 +60,8 @@ defmodule BrodMimic.GroupSubscriberv2 do
 
   @type init_info() :: %{
           required(:group_id) => Brod.group_id(),
-          required(:topic) => Brod.topic(),
-          required(:partition) => Brod.partition(),
+          required(:topic) => topic(),
+          required(:partition) => partition(),
           required(:commit_fun) => commit_fun()
         }
 
@@ -74,8 +76,8 @@ defmodule BrodMimic.GroupSubscriberv2 do
               {:ok, :commit, state()} | {:ok, :ack, state()} | {:ok, state()}
 
   # Get committed offset (in case it is managed by the subscriber):
-  @callback get_committed_offset(cb_config(), Brod.topic(), Brod.partition()) ::
-              {:ok, Brod.offset() | {:begin_offset, Brod.offset_time()}} | :undefined
+  @callback get_committed_offset(cb_config(), topic(), partition()) ::
+              {:ok, offset() | {:begin_offset, Brod.offset_time()}} | :undefined
 
   # Assign partitions (in case `partition_assignment_strategy' is set
   # for `callback_implemented' in group config).

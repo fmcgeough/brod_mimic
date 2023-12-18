@@ -17,14 +17,12 @@ defmodule BrodMimic.Utils do
   @type kpro_rsp :: kpro_rsp()
   @type kpro_req :: kpro_req()
 
-  @type req_fun() :: (Brod.offset(), :kpro.count() -> :kpro.req())
+  @type req_fun() :: (offset(), :kpro.count() -> :kpro.req())
   @type fetch_fun() ::
-          (Brod.offset() -> {:ok, {Brod.offset(), [Brod.message()]}} | {:error, any()})
+          (offset() -> {:ok, {offset(), [Brod.message()]}} | {:error, any()})
   @type connection() :: Brod.connection()
   @type conn_config() :: Brod.conn_config()
-  @type topic() :: Brod.topic()
   @type topic_config() :: Brod.topic_config()
-  @type partition() :: Brod.partition()
   @type endpoint() :: Brod.endpoint()
   @type offset_time() :: Brod.offset_time()
   @type group_id() :: Brod.group_id()
@@ -121,7 +119,7 @@ defmodule BrodMimic.Utils do
   for `kpro:connect_partition_leader/5`.
   """
   @spec resolve_offset([endpoint()], topic(), partition(), offset_time(), conn_config()) ::
-          {:ok, Brod.offset()} | {:error, any()}
+          {:ok, offset()} | {:error, any()}
   def resolve_offset(hosts, topic, partition, time, conn_cfg) do
     timeout = :proplists.get_value(:connect_timeout, conn_cfg, brod_default_timeout())
     opts = %{timeout: timeout}
@@ -132,7 +130,7 @@ defmodule BrodMimic.Utils do
   Resolve timestamp to real offset.
   """
   @spec resolve_offset([endpoint()], topic(), partition(), offset_time(), conn_config(), any()) ::
-          {:ok, Brod.offset()} | {:error, any()}
+          {:ok, offset()} | {:error, any()}
   def resolve_offset(hosts, topic, partition, time, conn_cfg, opts) do
     with_conn(
       :kpro.connect_partition_leader(hosts, nolink(conn_cfg), topic, partition, opts),
@@ -145,7 +143,7 @@ defmodule BrodMimic.Utils do
   The give pid should be the connection to partition leader broker.
   """
   @spec resolve_offset(pid(), topic(), partition(), offset_time()) ::
-          {:ok, Brod.offset()} | {:error, any()}
+          {:ok, offset()} | {:error, any()}
   def resolve_offset(pid, topic, partition, time) do
     req = BrodKafkaRequest.list_offsets(pid, topic, partition, time)
 

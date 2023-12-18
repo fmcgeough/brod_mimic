@@ -26,6 +26,8 @@ defmodule BrodMimic.GroupMember do
   1. Implement the `get_committed_offsets/2` callback. This callback is
      evaluated every time when new assignments are received.
   """
+  use BrodMimic.Macros
+
   alias BrodMimic.Brod
 
   @doc """
@@ -38,8 +40,8 @@ defmodule BrodMimic.GroupMember do
   NOTE: The committed offsets should be the offsets for successfully processed
   (acknowledged) messages, not the begin-offset to start fetching from.
   """
-  @callback get_committed_offsets(pid(), [{Brod.topic(), Brod.partition()}]) ::
-              {:ok, [{{Brod.topic(), Brod.partition()}, Brod.offset()}]}
+  @callback get_committed_offsets(pid(), [{topic(), partition()}]) ::
+              {:ok, [{{topic(), partition()}, offset()}]}
 
   @doc """
   Called when the member is elected as the consumer group leader.
@@ -51,7 +53,7 @@ defmodule BrodMimic.GroupMember do
 
   see brod_group_coordinator:start_link/6. for more group config details.
   """
-  @callback assign_partitions(pid(), [Brod.group_member()], [{Brod.topic(), Brod.partition()}]) ::
+  @callback assign_partitions(pid(), [Brod.group_member()], [{topic(), partition()}]) ::
               [{Brod.group_member_id(), [Brod.partition_assignment()]}]
 
   @doc """

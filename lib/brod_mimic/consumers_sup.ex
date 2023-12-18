@@ -4,6 +4,8 @@ defmodule BrodMimic.ConsumersSup do
   """
   @behaviour BrodMimic.Supervisor3
 
+  use BrodMimic.Macros
+
   alias BrodMimic.Brod
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.Supervisor3, as: BrodSupervisor3
@@ -30,7 +32,7 @@ defmodule BrodMimic.ConsumersSup do
   @doc """
   Dynamically start a per-topic supervisor.
   """
-  @spec start_consumer(pid(), pid(), Brod.topic(), Brod.consumer_config()) ::
+  @spec start_consumer(pid(), pid(), topic(), Brod.consumer_config()) ::
           {:ok, pid()} | {:error, any()}
   def start_consumer(sup_pid, client_pid, topic_name, config) do
     spec = consumers_sup_spec(client_pid, topic_name, config)
@@ -40,7 +42,7 @@ defmodule BrodMimic.ConsumersSup do
   @doc """
   Dynamically stop a per-topic supervisor.
   """
-  @spec stop_consumer(pid(), Brod.topic()) :: :ok | {:error, any()}
+  @spec stop_consumer(pid(), topic()) :: :ok | {:error, any()}
   def stop_consumer(sup_pid, topic_name) do
     BrodSupervisor3.terminate_child(sup_pid, topic_name)
     BrodSupervisor3.delete_child(sup_pid, topic_name)
@@ -49,7 +51,7 @@ defmodule BrodMimic.ConsumersSup do
   @doc """
   Find a brod_consumer process pid running under the partition's supervisor
   """
-  @spec find_consumer(pid(), Brod.topic(), Brod.partition()) :: {:ok, pid()} | {:error, any()}
+  @spec find_consumer(pid(), topic(), Brod.partition()) :: {:ok, pid()} | {:error, any()}
   def find_consumer(sup_pid, topic, partition) do
     case BrodSupervisor3.find_child(sup_pid, topic) do
       [] ->

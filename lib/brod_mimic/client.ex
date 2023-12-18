@@ -12,6 +12,7 @@ defmodule BrodMimic.Client do
 
   import Record, only: [defrecord: 2]
 
+  alias BrodMimic.Brod
   alias BrodMimic.ConsumersSup, as: BrodConsumersSup
   alias BrodMimic.KafkaRequest
   alias BrodMimic.ProducersSup, as: BrodProducersSup
@@ -39,8 +40,6 @@ defmodule BrodMimic.Client do
   @type endpoint() :: Brod.endpoint()
   @type client() :: Brod.client()
   @type client_id() :: Brod.client_id()
-  @type topic() :: Brod.topic()
-  @type partition() :: Brod.partition()
   @type config() :: :proplists.proplist()
   @type group_id() :: Brod.group_id()
 

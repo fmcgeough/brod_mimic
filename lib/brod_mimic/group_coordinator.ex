@@ -8,6 +8,7 @@ defmodule BrodMimic.GroupCoordinator do
 
   import Record, only: [defrecord: 2]
 
+  alias BrodMimic.Brod
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.KafkaRequest, as: BrodKafkaRequest
   alias BrodMimic.Utils, as: BrodUtils
@@ -62,7 +63,7 @@ defmodule BrodMimic.GroupCoordinator do
   @type partition_assignment_strategy() :: brod_partition_assignment_strategy()
   @type offset_commit_policy() :: brod_offset_commit_policy()
   @type member_id() :: Brod.group_member_id()
-  @type topic_partition_offset() :: {Brod.topic(), Brod.partition(), Brod.offset()}
+  @type topic_partition_offset() :: {topic(), partition(), offset()}
   @type topic_partition_list() :: [Brod.topic_partition()]
 
   @typedoc """
@@ -101,14 +102,14 @@ defmodule BrodMimic.GroupCoordinator do
             member_id: member_id(),
             leader_id: :undefined | member_id(),
             generation_id: integer(),
-            topics: [Brod.topic()],
+            topics: [topic()],
             connection: :undefined | :kpro.connection(),
             hb_ref: :undefined | {reference(), ts()},
             members: [Brod.group_member()],
             is_in_group: boolean(),
             member_pid: pid(),
             member_module: module(),
-            acked_offsets: [{{Brod.topic(), Brod.partition()}, Brod.offset()}],
+            acked_offsets: [{{topic(), partition()}, offset()}],
             offset_commit_timer: :undefined | reference(),
             partition_assignment_strategy: partition_assignment_strategy(),
             session_timeout_seconds: pos_integer(),
@@ -195,7 +196,7 @@ defmodule BrodMimic.GroupCoordinator do
   @doc """
   For group member to call to acknowledge a consumed message offset
   """
-  @spec ack(pid(), integer(), Brod.topic(), Brod.partition(), Brod.offset()) :: :ok
+  @spec ack(pid(), integer(), topic(), partition(), offset()) :: :ok
   def ack(pid, generation_id, topic, partition, offset) do
     send(pid, {:ack, generation_id, topic, partition, offset})
     :ok
@@ -226,7 +227,7 @@ defmodule BrodMimic.GroupCoordinator do
   Update the list of topics the `BrodMimic.GroupCoordinator` follow which
   triggers a join group rebalance
   """
-  @spec update_topics(pid(), [Brod.topic()]) :: :ok
+  @spec update_topics(pid(), [topic()]) :: :ok
   def update_topics(coordinator_pid, topics) do
     GenServer.cast(coordinator_pid, {:update_topics, topics})
   end

@@ -6,33 +6,25 @@ defmodule BrodMimic.TopicSubscriber do
 
   Callbacks are documented in the source code of this module.
   """
+  use BrodMimic.Macros
   use GenServer
 
-  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
+  import Record, only: [defrecordp: 3]
 
   alias BrodMimic.Brod
   alias BrodMimic.Utils, as: BrodUtils
 
-  @type committed_offsets() :: [{Brod.partition(), Brod.offset()}]
+  @type committed_offsets() :: [{partition(), offset()}]
   @type cb_state() :: term()
   @type cb_ret() :: {:ok, cb_state()} | {:ok, :ack, cb_state()}
 
-  defrecord(:kafka_message, extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl"))
-
-  defrecord(:r_kafka_message_set, :kafka_message_set,
-    topic: :undefined,
-    partition: :undefined,
-    high_wm_offset: :undefined,
-    messages: :undefined
-  )
-
-  defrecord(:r_cbm_init_data, :cbm_init_data,
+  defrecordp(:r_cbm_init_data, :cbm_init_data,
     committed_offsets: :undefined,
     cb_fun: :undefined,
     cb_data: :undefined
   )
 
-  defrecord(:r_consumer, :consumer,
+  defrecordp(:r_consumer, :consumer,
     partition: :undefined,
     consumer_pid: :undefined,
     consumer_mref: :undefined,
@@ -40,7 +32,7 @@ defmodule BrodMimic.TopicSubscriber do
     last_offset: :undefined
   )
 
-  defrecord(:r_state, :state,
+  defrecordp(:r_state, :state,
     client: :undefined,
     client_mref: :undefined,
     topic: :undefined,
@@ -62,7 +54,7 @@ defmodule BrodMimic.TopicSubscriber do
   #      e.g. CommittedOffsets = [], the consumer will use 'latest' by default,
   #      or `begin_offset' in consumer config (if found) to start fetching.
   # cb_state is the user's looping state for message processing.
-  @callback init(Brod.topic(), term()) :: {:ok, committed_offsets(), cb_state()}
+  @callback init(topic(), term()) :: {:ok, committed_offsets(), cb_state()}
 
   # Handle a message. Return one of:
   #
@@ -78,8 +70,8 @@ defmodule BrodMimic.TopicSubscriber do
   #       unless prefetch_count and prefetch_bytes are set to 0 in consumer
   #       config.
   @callback handle_message(
-              Brod.partition(),
-              Brod.message() | Brod.message_set(),
+              partition(),
+              Brod.message() | message_set(),
               cb_state()
             ) :: cb_ret()
 
@@ -201,7 +193,7 @@ defmodule BrodMimic.TopicSubscriber do
     {:ok, state}
   end
 
-  def handle_info({_consumer_pid, r_kafka_message_set() = msg_set}, state0) do
+  def handle_info({_consumer_pid, kafka_message_set() = msg_set}, state0) do
     state = handle_consumer_delivery(msg_set, state0)
     {:noreply, state}
   end
@@ -325,7 +317,7 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   defp handle_consumer_delivery(
-         r_kafka_message_set(topic: topic, partition: partition, messages: messages) = msg_set,
+         kafka_message_set(topic: topic, partition: partition, messages: messages) = msg_set,
          r_state(topic: topic, message_type: msg_type) = state0
        ) do
     state = update_last_offset(partition, messages, state0)
@@ -408,7 +400,7 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   defp handle_message_set(message_set, state) do
-    r_kafka_message_set(partition: partition, messages: messages) = message_set
+    kafka_message_set(partition: partition, messages: messages) = message_set
     r_state(cb_module: cb_module, cb_state: cb_state) = state
 
     {ack_now, new_cb_state} =

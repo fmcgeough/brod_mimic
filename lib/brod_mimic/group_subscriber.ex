@@ -16,9 +16,10 @@ defmodule BrodMimic.GroupSubscriber do
     * Send acknowledged offsets to group coordinator which will be committed
       to Kafka periodically.
   """
+  use BrodMimic.Macros
   use GenServer
 
-  import Record, only: [defrecord: 2, extract: 2]
+  import Record, only: [defrecordp: 2]
 
   alias BrodMimic.Brod
   alias BrodMimic.GroupCoordinator, as: BrodGroupCoordinator
@@ -33,9 +34,7 @@ defmodule BrodMimic.GroupSubscriber do
   @type cb_state() :: term()
   @type member_id() :: Brod.group_member_id()
 
-  defrecord(:kafka_message, extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl"))
-
-  defrecord(:consumer,
+  defrecordp(:consumer,
     topic_partition: {:undefined, :undefined},
     consumer_pid: :undefined,
     consumer_mref: :undefined,
@@ -44,39 +43,7 @@ defmodule BrodMimic.GroupSubscriber do
     last_offset: :undefined
   )
 
-  @type consumer() ::
-          record(
-            :consumer,
-            topic_partition: {Brod.topic(), Brod.partition()},
-            consumer_pid: :undefined | pid() | {:down, String.t(), any()},
-            consumer_mref: :undefined | reference(),
-            begin_offset: :undefined | Brod.offset(),
-            acked_offset: :undefined | Brod.offset(),
-            last_offset: :undefined | Brod.offset()
-          )
-
-  @type ack_ref() :: {Brod.topic(), Brod.partition(), Brod.offset()}
-
-  defrecord(:brod_received_assignment, topic: nil, partition: nil, begin_offset: :undefined)
-
-  @type brod_received_assignment() ::
-          record(:brod_received_assignment,
-            topic: Brod.topic(),
-            partition: Brod.partition(),
-            begin_offset: :undefined | Brod.offset()
-          )
-
-  defrecord(:kafka_message_set, topic: nil, partition: nil, high_wm_offset: 0, messages: [])
-
-  @type kafka_message_set() ::
-          record(:kafka_message_set,
-            topic: Brod.topic(),
-            partition: Brod.partition(),
-            high_wm_offset: integer(),
-            messages: [Brod.message()] | :kpro.incomplete_batch()
-          )
-
-  defrecord(:state,
+  defrecordp(:state,
     client: nil,
     client_mref: nil,
     group_id: nil,
@@ -91,6 +58,19 @@ defmodule BrodMimic.GroupSubscriber do
     cb_state: nil,
     message_type: nil
   )
+
+  @type consumer() ::
+          record(
+            :consumer,
+            topic_partition: {topic(), partition()},
+            consumer_pid: :undefined | pid() | {:down, String.t(), any()},
+            consumer_mref: :undefined | reference(),
+            begin_offset: :undefined | offset(),
+            acked_offset: :undefined | offset(),
+            last_offset: :undefined | offset()
+          )
+
+  @type ack_ref() :: {topic(), partition(), offset()}
 
   @type state() ::
           record(
@@ -133,9 +113,9 @@ defmodule BrodMimic.GroupSubscriber do
      unless prefetch_count and prefetch_bytes are set to 0 in consumer config.
   """
   @callback handle_message(
-              Brod.topic(),
-              Brod.partition(),
-              Brod.message() | Brod.message_set(),
+              topic(),
+              partition(),
+              Brod.message() | message_set(),
               cb_state()
             ) ::
               {:ok, cb_state()}
@@ -156,8 +136,8 @@ defmodule BrodMimic.GroupSubscriber do
   ```
     @callback get_committed_offsets(
       Brod.group_id(),
-      [{Brod.topic(), Brod.partition()}], cb_state()) ::
-      {:ok, [{{Brod.topic(), Brod.partition()}, Brod.offset()}], cb_state()}
+      [{topic(), partition()}], cb_state()) ::
+      {:ok, [{{topic(), partition()}, offset()}], cb_state()}
   ```
    This function is called only when `partition_assignment_strategy` is
    `callback_implemented` in group config. The first element in the group member
@@ -167,7 +147,7 @@ defmodule BrodMimic.GroupSubscriber do
   ```
     @callback assign_partitions(
       [Brod.group_member()],
-      [{Brod.topic(), Brod.partition()}],
+      [{topic(), partition()}],
       cb_state()) ::
       [{Brod.group_member_id(), [Brod.partition_assignment()]}]
   ```
@@ -176,7 +156,7 @@ defmodule BrodMimic.GroupSubscriber do
   @spec start_link(
           Brod.client(),
           Brod.group_id(),
-          [Brod.topic()],
+          [topic()],
           Brod.group_config(),
           Brod.consumer_config(),
           module(),
@@ -214,7 +194,7 @@ defmodule BrodMimic.GroupSubscriber do
 
    `message_type`:
      The type of message that is going to be handled by the callback
-     module. Can be either `message' or `message_set'.
+     module. Can be either `:message' or `:message_set'.
 
    `cb_module':
      Callback module which should have the callback functions
@@ -228,7 +208,7 @@ defmodule BrodMimic.GroupSubscriber do
   @spec start_link(
           Brod.client(),
           Brod.group_id(),
-          [Brod.topic()],
+          [topic()],
           Brod.group_config(),
           Brod.consumer_config(),
           :message | :message_set,
@@ -273,7 +253,7 @@ defmodule BrodMimic.GroupSubscriber do
   disordered acks may overwrite offset commits and lead to unnecessary
   message re-delivery in case of restart.
   """
-  @spec ack(pid(), Brod.topic(), Brod.partition(), Brod.offset()) :: :ok
+  @spec ack(pid(), topic(), partition(), offset()) :: :ok
   def ack(pid, topic, partition, offset) do
     ack(pid, topic, partition, offset, true)
   end
@@ -284,7 +264,7 @@ defmodule BrodMimic.GroupSubscriber do
     This call may or may not commit group subscriber offset depending on
     the value of `commit` argument
   """
-  @spec ack(pid(), Brod.topic(), Brod.partition(), Brod.offset(), boolean()) :: :ok
+  @spec ack(pid(), topic(), partition(), offset(), boolean()) :: :ok
   def ack(pid, topic, partition, offset, commit) do
     GenServer.cast(pid, {:ack, topic, partition, offset, commit})
   end
@@ -300,7 +280,7 @@ defmodule BrodMimic.GroupSubscriber do
   @doc """
   Commit offset for a topic. This is an asynchronous call
   """
-  @spec commit(pid(), Brod.topic(), Brod.partition(), Brod.offset()) :: :ok
+  @spec commit(pid(), topic(), partition(), offset()) :: :ok
   def commit(pid, topic, partition, offset) do
     GenServer.cast(pid, {:commit_offset, topic, partition, offset})
   end
@@ -329,7 +309,7 @@ defmodule BrodMimic.GroupSubscriber do
   This function is called only when `partition_assignment_strategy'
   is set for `callback_implemented' in group config.
   """
-  @spec assign_partitions(pid(), [Brod.group_member()], [{Brod.topic(), Brod.partition()}]) :: [
+  @spec assign_partitions(pid(), [Brod.group_member()], [{topic(), partition()}]) :: [
           {member_id(), [Brod.partition_assignment()]}
         ]
   def assign_partitions(pid, members, topic_partition_list) do
@@ -347,8 +327,8 @@ defmodule BrodMimic.GroupSubscriber do
    NOTE: The committed offsets should be the offsets for successfully processed
          (acknowledged) messages, not the `begin_offset' to start fetching from.
   """
-  @spec get_committed_offsets(pid(), [{Brod.topic(), Brod.partition()}]) ::
-          {:ok, [{{Brod.topic(), Brod.partition()}, Brod.offset()}]}
+  @spec get_committed_offsets(pid(), [{topic(), partition()}]) ::
+          {:ok, [{{topic(), partition()}, offset()}]}
   def get_committed_offsets(pid, topic_partitions) do
     GenServer.call(pid, {:get_committed_offsets, topic_partitions}, :infinity)
   end

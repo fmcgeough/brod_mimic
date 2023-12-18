@@ -18,18 +18,7 @@ defmodule BrodMimic.Brod do
   alias BrodMimic.TopicSubscriber, as: BrodTopicSubscriber
   alias BrodMimic.Utils, as: BrodUtils
 
-  defrecordp(:kafka_message_set,
-    topic: :undefined,
-    partition: :undefined,
-    high_wm_offset: :undefined,
-    messages: :undefined
-  )
-
-  defrecordp(:brod_call_ref,
-    caller: :undefined,
-    callee: :undefined,
-    ref: :undefined
-  )
+  defrecordp(:brod_call_ref, caller: :undefined, callee: :undefined, ref: :undefined)
 
   ### Types created for Elixir port ============================================
   @type ets_table_id() :: atom() | term()
@@ -43,11 +32,8 @@ defmodule BrodMimic.Brod do
   @type hostname() :: :kpro.hostname()
   @type portnum() :: pos_integer()
   @type endpoint() :: {hostname(), portnum()}
-  @type topic() :: :kpro.topic()
   @type topic_config() :: :kpro.struct()
-  @type partition() :: :kpro.partition()
   @type topic_partition() :: {topic(), partition()}
-  @type offset() :: :kpro.offset()
   @type key() :: :undefined | binary()
   #    no value, transformed to <<>>
   @type value() ::
@@ -82,16 +68,6 @@ defmodule BrodMimic.Brod do
   # default client config
   @type bootstrap() :: [endpoint()] | {[endpoint()], client_config()}
   @type offset_time() :: integer() | :earliest | :latest
-  @type message() :: :kpro.message()
-  @type message_set ::
-          record(:kafka_message_set,
-            topic: topic(),
-            partition: partition(),
-            high_wm_offset: integer(),
-            # the list of `t:message/0` is exposed to users of library
-            # the `incomplete_batch` is internal only
-            messages: [message()] | :kpro.incomplete_batch()
-          )
   @type error_code() :: :kpro.error_code()
 
   ## producers

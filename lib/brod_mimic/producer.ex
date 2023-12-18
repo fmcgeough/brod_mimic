@@ -53,9 +53,6 @@ defmodule BrodMimic.Producer do
 
   @type milli_sec() :: non_neg_integer()
   @type delay_send_ref() :: :undefined | {reference(), reference()}
-  @type topic() :: Brod.topic()
-  @type partition() :: Brod.partition()
-  @type offset() :: Brod.offset()
   @type config() :: :proplists.proplist()
   @type call_ref() :: Brod.call_ref()
   @type conn() :: :kpro.connection()
@@ -150,7 +147,7 @@ defmodule BrodMimic.Producer do
     configured to have message format 0.10, sending message with headers would
     result in `:unknown_server_error` error code.
   """
-  @spec start_link(pid(), Brod.topic(), Brod.partition(), config()) :: {:ok, pid()}
+  @spec start_link(pid(), topic(), partition(), config()) :: {:ok, pid()}
   def start_link(client_pid, topic, partition, config) do
     GenServer.start_link(__MODULE__, {client_pid, topic, partition, config}, [])
   end
@@ -221,7 +218,7 @@ defmodule BrodMimic.Producer do
   `produce/3` in which the call reference was created.
   """
   @spec sync_produce_request(call_ref(), timeout()) ::
-          {:ok, Brod.offset()} | {:error, produce_request_error()}
+          {:ok, offset()} | {:error, produce_request_error()}
   def sync_produce_request(call_ref, timeout) do
     r_brod_call_ref(caller: caller, callee: callee, ref: ref) = call_ref
     ^caller = self()

@@ -59,13 +59,6 @@ defmodule BrodMimic.Consumer do
   @type config() :: Brod.consumer_config()
   @type debug() :: GenServer.debug()
 
-  defrecord(:r_kafka_message_set, :kafka_message_set,
-    topic: :undefined,
-    partition: :undefined,
-    high_wm_offset: :undefined,
-    messages: :undefined
-  )
-
   defrecord(:pending_acks, :pending_acks, count: 0, bytes: 0, queue: :queue.new())
 
   defrecord(:state, :state,
@@ -134,8 +127,8 @@ defmodule BrodMimic.Consumer do
   """
   @spec start_link(
           Brod.bootstrap() | pid(),
-          Brod.topic(),
-          Brod.partition(),
+          topic(),
+          partition(),
           config(),
           debug()
         ) ::
@@ -490,7 +483,7 @@ defmodule BrodMimic.Consumer do
 
         false ->
           msg_set =
-            r_kafka_message_set(
+            kafka_message_set(
               topic: topic,
               partition: partition,
               high_wm_offset: stable_offset,

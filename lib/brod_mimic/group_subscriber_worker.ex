@@ -2,10 +2,11 @@ defmodule BrodMimic.GroupSubscriberWorker do
   @moduledoc """
   Implements the `BrodMimic.TopicSubscriber` behaviour
   """
-
   @behaviour BrodMimic.TopicSubscriber
 
-  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
+  use BrodMimic.Macros
+
+  import Record, only: [defrecordp: 3]
 
   alias BrodMimic.Utils, as: BrodUtils
 
@@ -14,19 +15,7 @@ defmodule BrodMimic.GroupSubscriberWorker do
   @starting_group_subscriber "Starting group_subscriber_worker: ~p~nOffset: ~p~nPid: ~p~n"
   @discard_invalid_offset "Discarded invalid committed offset ~p for: ~s:~p~n"
 
-  defrecord(
-    :kafka_message,
-    extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl")
-  )
-
-  defrecord(:r_kafka_message_set, :kafka_message_set,
-    topic: :undefined,
-    partition: :undefined,
-    high_wm_offset: :undefined,
-    messages: :undefined
-  )
-
-  defrecord(:r_state, :state,
+  defrecordp(:r_state, :state,
     start_options: :undefined,
     cb_module: :undefined,
     cb_state: :undefined,
@@ -92,7 +81,7 @@ defmodule BrodMimic.GroupSubscriberWorker do
     offset
   end
 
-  defp get_last_offset(r_kafka_message_set(messages: messages)) do
+  defp get_last_offset(kafka_message_set(messages: messages)) do
     messages |> :lists.last() |> kafka_message(:offset)
   end
 

@@ -2,15 +2,14 @@ defmodule BrodMimic.KafkaRequest do
   @moduledoc """
     Collection of Kafka requests
   """
+  use BrodMimic.Macros
+
   alias BrodMimic.Brod
   alias BrodMimic.KafkaApis, as: BrodKafkaApis
 
   @type api() :: BrodKafkaApis.api()
   @type vsn() :: BrodKafkaApis.vsn()
-  @type topic() :: Brod.topic()
   @type topic_config() :: :kpro.struct()
-  @type partition() :: Brod.partition()
-  @type offset() :: Brod.offset()
   @type conn() :: :kpro.connection()
   @type request_configs() :: %{
           optional(:timeout) => :kpro.int32(),

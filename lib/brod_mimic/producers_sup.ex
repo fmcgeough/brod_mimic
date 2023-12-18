@@ -2,16 +2,17 @@ defmodule BrodMimic.ProducersSup do
   @moduledoc """
   Root producers supervisor
   """
-
   @behaviour BrodMimic.Supervisor3
+
+  use BrodMimic.Macros
 
   alias BrodMimic.Brod
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.Supervisor3, as: BrodSupervisor3
 
   @type find_producer_error() ::
-          {:producer_not_found, Brod.topic()}
-          | {:producer_not_found, Brod.topic(), Brod.partition()}
+          {:producer_not_found, topic()}
+          | {:producer_not_found, topic(), partition()}
           | {:producer_down, any()}
 
   @doc """
@@ -27,7 +28,7 @@ defmodule BrodMimic.ProducersSup do
   @doc """
   Dynamically start a per-topic supervisor
   """
-  @spec start_producer(pid(), pid(), Brod.topic(), Brod.producer_config()) ::
+  @spec start_producer(pid(), pid(), topic(), Brod.producer_config()) ::
           {:ok, pid()} | {:error, any()}
   def start_producer(sup_pid, client_pid, topic_name, config) do
     spec = producers_sup_spec(client_pid, topic_name, config)
@@ -37,7 +38,7 @@ defmodule BrodMimic.ProducersSup do
   @doc """
   Dynamically stop a per-topic supervisor
   """
-  @spec stop_producer(pid(), Brod.topic()) :: :ok
+  @spec stop_producer(pid(), topic()) :: :ok
   def stop_producer(sup_pid, topic_name) do
     BrodSupervisor3.terminate_child(sup_pid, topic_name)
     BrodSupervisor3.delete_child(sup_pid, topic_name)
@@ -46,7 +47,7 @@ defmodule BrodMimic.ProducersSup do
   @doc """
   Find a brod_producer process pid running under the partitions supervisor
   """
-  @spec find_producer(pid(), Brod.topic(), Brod.partition()) ::
+  @spec find_producer(pid(), topic(), partition()) ::
           {:ok, pid()} | {:error, find_producer_error()}
   def find_producer(sup_pid, topic, partition) do
     case BrodSupervisor3.find_child(sup_pid, topic) do

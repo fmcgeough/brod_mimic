@@ -4,6 +4,7 @@ defmodule BrodMimic.CgCommits do
   """
   @behaviour BrodMimic.GroupMember
 
+  use BrodMimic.Macros
   use GenServer
 
   import Record, only: [defrecord: 3]
@@ -20,9 +21,6 @@ defmodule BrodMimic.CgCommits do
   @nonexistent_partitions "Nonexisting partitions in input: ~p"
   @topic_not_in_assignment "Topic ~s is not received in assignment"
 
-  @type topic() :: Brod.topic()
-  @type partition() :: Brod.partition()
-  @type offset() :: Brod.offset()
   @type group_id() :: Brod.group_id()
   @type member_id() :: Brod.group_member_id()
   #  -1 to use whatever configured in kafka
@@ -120,7 +118,7 @@ defmodule BrodMimic.CgCommits do
   `callback_implemented` in group config
   """
   @impl BrodGroupMember
-  @spec assign_partitions(pid(), [Brod.group_member()], [{Brod.topic(), Brod.partition()}]) :: [
+  @spec assign_partitions(pid(), [Brod.group_member()], [{topic(), partition()}]) :: [
           {member_id(), [Brod.partition_assignment()]}
         ]
   def assign_partitions(pid, members, topic_partition_list) do
@@ -135,8 +133,8 @@ defmodule BrodMimic.CgCommits do
   Kafka. i.e. offset_commit_policy is set to consumer_managed
   """
   @impl BrodGroupMember
-  @spec get_committed_offsets(pid(), [{Brod.topic(), Brod.partition()}]) ::
-          {:ok, [{{Brod.topic(), Brod.partition()}, Brod.offset()}]}
+  @spec get_committed_offsets(pid(), [{topic(), partition()}]) ::
+          {:ok, [{{topic(), partition()}, offset()}]}
   def get_committed_offsets(_pid, _topic_partitions) do
     {:ok, []}
   end

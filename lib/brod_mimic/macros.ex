@@ -7,14 +7,19 @@ defmodule BrodMimic.Macros do
     quote do
       import Record, only: [defrecordp: 2, extract: 2]
 
-      alias BrodMimic.Brod
-
       defrecordp(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
       defrecordp(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
 
       defrecordp(
         :kafka_message,
         extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl")
+      )
+
+      defrecordp(:kafka_message_set,
+        topic: :undefined,
+        partition: :undefined,
+        high_wm_offset: :undefined,
+        messages: :undefined
       )
 
       defrecordp(:kafka_group_member_metadata,
@@ -38,12 +43,21 @@ defmodule BrodMimic.Macros do
 
       defrecordp(:brod_cg, id: :undefined, protocol_type: :undefined)
 
-      @type cg() :: record(:brod_cg, id: Brod.group_id(), protocol_type: Brod.cg_protocol_type())
+      @type topic() :: :kpro.topic()
+      @type partition() :: :kpro.partition()
+      @type offset() :: :kpro.offset()
+      @type message() :: :kpro.message()
+
+      @type cg() ::
+              record(:brod_cg,
+                id: BrodMimic.Brod.group_id(),
+                protocol_type: BrodMimic.Brod.cg_protocol_type()
+              )
 
       @type kafka_group_member_metadata ::
               record(:kafka_group_member_metadata,
                 version: non_neg_integer(),
-                topics: [Brod.topic()],
+                topics: [topic()],
                 user_data: binary()
               )
 
@@ -52,17 +66,30 @@ defmodule BrodMimic.Macros do
       """
       @type brod_received_assignment ::
               record(:brod_received_assignment,
-                topic: Brod.topic(),
-                partition: Brod.partition(),
-                begin_offset: :undefined | Brod.offset() | {:begin_offset, Brod.offset_time()}
+                topic: topic(),
+                partition: BrodMimic.Brod.partition(),
+                begin_offset:
+                  :undefined
+                  | offset()
+                  | {:begin_offset, BrodMimic.Brod.offset_time()}
               )
 
       @type kafka_fetch_error() ::
               record(:kafka_fetch_error,
-                topic: Brod.topic(),
-                partition: Brod.partition(),
-                error_code: Brod.error_code(),
+                topic: topic(),
+                partition: partition(),
+                error_code: BrodMimic.Brod.error_code(),
                 error_desc: String.t()
+              )
+
+      @type message_set ::
+              record(:kafka_message_set,
+                topic: topic(),
+                partition: partition(),
+                high_wm_offset: integer(),
+                # the list of `t:message/0` is exposed to users of library
+                # the `incomplete_batch` is internal only
+                messages: [message()] | :kpro.incomplete_batch()
               )
 
       defp offset_earliest, do: :earliest
