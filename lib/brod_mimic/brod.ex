@@ -429,7 +429,7 @@ defmodule BrodMimic.Brod do
   - `[{k, v} | {t, k, v}]`: A batch, where `v` could be a nested list of such representation
   - `[{key: k, value: v, ts: t, headers: [{_, _}]}]`: A batch
 
-   When `value' is a batch, the `key' argument is only used as partitioner input
+   When `value` is a batch, the `key` argument is only used as partitioner input
    and all messages are written on the same partition.
 
    `ts` field is dropped for Kafka prior to version `0.10` (produce API version
@@ -453,7 +453,7 @@ defmodule BrodMimic.Brod do
 
    Example:
    ```
-   > BrodMimic.Brod.produce(my_client, <<"my_topic">>, 0, "key", "Hello from erlang!")
+   > BrodMimic.Brod.produce(my_client, "my_topic", 0, "key", "Hello from BrodMimic!")
    {:ok, {brod_call_ref,<0.83.0>,<0.133.0>,#Ref<0.3024768151.2556690436.92841>}}
    ```
   """
