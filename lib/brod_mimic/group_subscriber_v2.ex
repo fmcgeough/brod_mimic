@@ -45,12 +45,24 @@ defmodule BrodMimic.GroupSubscriberv2 do
 
   @type commit_fun() :: (Brod.offset() -> :ok)
 
+  @type subscriber_config() :: %{
+          required(:client) => Brod.client(),
+          required(:group_id) => Brod.group_id(),
+          required(:topics) => [Brod.topic()],
+          required(:cb_module) => module(),
+          required(:init_data) => term(),
+          required(:message_type) => :message | :message_set,
+          required(:consumer_config) => Brod.consumer_config(),
+          required(:group_config) => Brod.group_config()
+        }
+
   @type init_info() :: %{
           required(:group_id) => Brod.group_id(),
           required(:topic) => Brod.topic(),
           required(:partition) => Brod.partition(),
           required(:commit_fun) => commit_fun()
         }
+
   @type cb_config() :: term()
   @type state() :: term()
   @type member_id() :: Brod.group_member_id()

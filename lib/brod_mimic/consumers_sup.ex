@@ -47,7 +47,7 @@ defmodule BrodMimic.ConsumersSup do
   end
 
   @doc """
-  Find a brod_consumer process pid running under @PARTITIONS_SUP
+  Find a brod_consumer process pid running under the partition's supervisor
   """
   @spec find_consumer(pid(), Brod.topic(), Brod.partition()) :: {:ok, pid()} | {:error, any()}
   def find_consumer(sup_pid, topic, partition) do
@@ -75,7 +75,7 @@ defmodule BrodMimic.ConsumersSup do
   end
 
   @doc """
-  supervisor3 callback.
+  supervisor3 callback
   """
   @impl true
   def init(@topics_sup) do
@@ -104,6 +104,7 @@ defmodule BrodMimic.ConsumersSup do
     end
   end
 
+  @impl true
   def post_init(_) do
     :ignore
   end
@@ -167,11 +168,11 @@ defmodule BrodMimic.ConsumersSup do
 
     {
       _id = partition,
-      _start = {:brod_consumer, :start_link, args},
+      _start = {BrodMimic.Consumer, :start_link, args},
       _restart = {:transient, delay_secs},
       _shut_down = 5000,
       _type = :worker,
-      _module = [__MODULE__]
+      _module = [BrodMimic.Consumer]
     }
   end
 end
