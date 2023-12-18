@@ -7,7 +7,7 @@ defmodule BrodMimic.Brod do
   use BrodMimic.Macros
 
   import Bitwise
-  import Record, only: [defrecord: 3]
+  import Record, only: [defrecord: 2, defrecord: 3]
 
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.Consumer, as: BrodConsumer
@@ -23,6 +23,12 @@ defmodule BrodMimic.Brod do
     partition: :undefined,
     high_wm_offset: :undefined,
     messages: :undefined
+  )
+
+  defrecord(:brod_call_ref,
+    caller: :undefined,
+    callee: :undefined,
+    ref: :undefined
   )
 
   ### Types created for Elixir port ============================================
@@ -91,9 +97,14 @@ defmodule BrodMimic.Brod do
   @type producer_config() :: BrodMimic.Producer.config()
   @type partition_fun() :: (topic(), pos_integer(), key(), value() -> {:ok, partition()})
   @type partitioner() :: partition_fun() | :random | :hash
-  # @type produce_ack_cb() :: fun((partition(), offset()) -> _)
+  @type produce_ack_cb() :: (partition(), offset() -> any())
   @type compression() :: :no_compression | :gzip | :snappy
-  @type call_ref() :: map()
+  @type call_ref() ::
+          record(:brod_call_ref,
+            caller: :undefined | pid(),
+            callee: :undefined | pid(),
+            ref: :undefined | reference()
+          )
   @type produce_result() :: :brod_produce_req_buffered | :brod_produce_req_acked
 
   ## consumers
@@ -372,10 +383,25 @@ defmodule BrodMimic.Brod do
     BrodClient.get_producer(client, topic, partition)
   end
 
+  @doc """
+  Equivalent of `produce(pid, <<>>, value)`
+  """
+  @spec produce(pid(), value()) :: {:ok, call_ref()} | {:error, any()}
   def produce(pid, value) do
     produce(pid, _key = <<>>, value)
   end
 
+  @doc """
+  Produce one or more messages
+
+  The pid should be a partition producer pid, NOT client pid.
+
+  The return value is a call reference of type `call_ref()`,
+  so the caller can use it to expect (match)
+  a `#brod_produce_reply{result = brod_produce_req_acked}`
+  message after the produce request has been acked by Kafka.
+  """
+  @spec produce(pid(), key(), value()) :: {:ok, call_ref()} | {:error, any()}
   def produce(producer_pid, key, value) do
     BrodProducer.produce(producer_pid, key, value)
   end
@@ -410,8 +436,7 @@ defmodule BrodMimic.Brod do
     BrodProducer.produce_cb(producer_pid, key, value, ack_cb)
   end
 
-  def produce_cb(client, topic, part, key, value, ack_cb)
-      when is_integer(part) do
+  def produce_cb(client, topic, part, key, value, ack_cb) when is_integer(part) do
     case get_producer(client, topic, part) do
       {:ok, pid} ->
         produce_cb(pid, key, value, ack_cb)
@@ -445,8 +470,7 @@ defmodule BrodMimic.Brod do
     BrodProducer.produce_no_ack(producer_pid, key, value)
   end
 
-  def produce_no_ack(client, topic, part, key, value)
-      when is_integer(part) do
+  def produce_no_ack(client, topic, part, key, value) when is_integer(part) do
     case get_producer(client, topic, part) do
       {:ok, pid} ->
         produce_no_ack(pid, key, value)

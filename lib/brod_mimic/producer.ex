@@ -28,6 +28,29 @@ defmodule BrodMimic.Producer do
   ]
   @failed_init_connection "Failed to (re)init connection, reason:\n~p"
 
+  # default number of messages in buffer before block callers
+  @default_partition_buffer_limit 512
+  # default number of message sets sent on wire before block waiting for acks
+  @default_partition_onwire_limit 1
+  # by default, send max 1 MB of data in one batch (message set)
+  @default_max_batch_size 1_048_576
+  # by default, require acks from all ISR
+  @default_required_acks -1
+  # by default, leader should wait 10 seconds for replicas to ack
+  @default_ack_timeout 10_000
+  # by default, brod_producer will sleep for 0.5 second before trying to send
+  # buffered messages again upon receiving a error from kafka
+  @default_retry_backoff_ms 500
+  # by default, brod_producer will try to retry 3 times before crashing
+  @default_max_retries 3
+  # by default, no compression
+  @default_compression :no_compression
+  # by default, messages never linger around in buffer
+  # should be sent immediately when onwire-limit allows
+  @default_max_linger_ms 0
+  # by default, messages never linger around in buffer
+  @default_max_linger_count 0
+
   @type milli_sec() :: non_neg_integer()
   @type delay_send_ref() :: :undefined | {reference(), reference()}
   @type topic() :: Brod.topic()
@@ -36,6 +59,7 @@ defmodule BrodMimic.Producer do
   @type config() :: :proplists.proplist()
   @type call_ref() :: Brod.call_ref()
   @type conn() :: :kpro.connection()
+  @type produce_request_error() :: :timeout | {:producer_down, any()}
 
   defrecord(:r_brod_call_ref, :brod_call_ref,
     caller: :undefined,
@@ -131,10 +155,23 @@ defmodule BrodMimic.Producer do
     GenServer.start_link(__MODULE__, {client_pid, topic, partition, config}, [])
   end
 
+  @doc """
+  Produce a message to partition asynchronously
+
+  The call is blocked until the request has been buffered in producer worker The
+  function returns a call reference of type `t:call_ref/0` to the caller so the
+  caller can used it to expect (match) a `#brod_produce_reply{result =
+  brod_produce_req_acked}` message after the produce request has been acked by
+  Kafka.
+  """
   def produce(pid, key, value) do
     produce_cb(pid, key, value, :undefined)
   end
 
+  @doc """
+  Fire-n-forget, no ack, no back-pressure
+  """
+  @spec produce_no_ack(pid(), Brod.key(), Brod.value()) :: :ok
   def produce_no_ack(pid, key, value) do
     call_ref = r_brod_call_ref(caller: :undefined)
     ack_cb = &__MODULE__.do_no_ack/2
@@ -143,6 +180,13 @@ defmodule BrodMimic.Producer do
     :ok
   end
 
+  @doc """
+  Async produce, evaluate callback if `ack_cb` is a function
+  otherwise send `#brod_produce_reply{result = brod_produce_req_acked}`
+  message to caller after the produce request has been acked by Kafka.
+  """
+  @spec produce_cb(pid(), Brod.key(), Brod.value(), :undefined | Brod.produce_ack_cb()) ::
+          :ok | {:ok, call_ref()} | {:error, any()}
   def produce_cb(pid, key, value, ack_cb) do
     call_ref = r_brod_call_ref(caller: self(), callee: pid, ref: mref = Process.monitor(pid))
 
@@ -169,6 +213,15 @@ defmodule BrodMimic.Producer do
     end
   end
 
+  @doc """
+  Block calling process until it receives an acked reply for the
+  `call_ref`.
+
+  The caller pid of this function must be the caller of
+  `produce/3` in which the call reference was created.
+  """
+  @spec sync_produce_request(call_ref(), timeout()) ::
+          {:ok, Brod.offset()} | {:error, produce_request_error()}
   def sync_produce_request(call_ref, timeout) do
     r_brod_call_ref(caller: caller, callee: callee, ref: ref) = call_ref
     ^caller = self()
@@ -199,16 +252,21 @@ defmodule BrodMimic.Producer do
   @impl GenServer
   def init({client_pid, topic, partition, config}) do
     Process.flag(:trap_exit, true)
-    buffer_limit = :proplists.get_value(:partition_buffer_limit, config, 512)
-    on_wire_limit = :proplists.get_value(:partition_onwire_limit, config, 1)
-    max_batch_size = :proplists.get_value(:max_batch_size, config, 1_048_576)
-    max_retries = :proplists.get_value(:max_retries, config, 3)
-    retry_backoff_ms = :proplists.get_value(:retry_backoff_ms, config, 500)
-    required_acks = :proplists.get_value(:required_acks, config, -1)
-    ack_timeout = :proplists.get_value(:ack_timeout, config, 10_000)
-    compression = :proplists.get_value(:compression, config, :no_compression)
-    max_linger_ms = :proplists.get_value(:max_linger_ms, config, 0)
-    max_linger_count = :proplists.get_value(:max_linger_count, config, 0)
+
+    buffer_limit =
+      :proplists.get_value(:partition_buffer_limit, config, @default_partition_buffer_limit)
+
+    on_wire_limit =
+      :proplists.get_value(:partition_onwire_limit, config, @default_partition_onwire_limit)
+
+    max_batch_size = :proplists.get_value(:max_batch_size, config, @default_max_batch_size)
+    max_retries = :proplists.get_value(:max_retries, config, @default_max_retries)
+    retry_backoff_ms = :proplists.get_value(:retry_backoff_ms, config, @default_retry_backoff_ms)
+    required_acks = :proplists.get_value(:required_acks, config, @default_required_acks)
+    ack_timeout = :proplists.get_value(:ack_timeout, config, @default_ack_timeout)
+    compression = :proplists.get_value(:compression, config, @default_compression)
+    max_linger_ms = :proplists.get_value(:max_linger_ms, config, @default_max_linger_ms)
+    max_linger_count = :proplists.get_value(:max_linger_count, config, @default_max_linger_count)
     send_fun = make_send_fun(topic, partition, required_acks, ack_timeout, compression)
 
     buffer =
