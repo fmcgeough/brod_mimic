@@ -63,6 +63,7 @@ defmodule BrodMimic.GroupCoordinator do
   @type offset_commit_policy() :: brod_offset_commit_policy()
   @type member_id() :: Brod.group_member_id()
   @type topic_partition_offset() :: {Brod.topic(), Brod.partition(), Brod.offset()}
+  @type topic_partition_list() :: [Brod.topic_partition()]
 
   @typedoc """
   GenServer state
@@ -132,9 +133,9 @@ defmodule BrodMimic.GroupCoordinator do
   - config - The group coordinator configs in a proplist, possible values:
     - `:partition_assignment_strategy` (optional, default = `:roundrobin_v2`).
       Possible values:
-      - `:roundrobin_v2` Take all topic-offset (sorted `topic_partition()`
-        list), assign one to each member in a roundrobin fashion. Only
-        partitions in the subscription topic list are assigned
+      - `:roundrobin_v2` Take all topic-offset (sorted
+        `t:topic_partition_list/0`), assign one to each member in a roundrobin
+        fashion. Only partitions in the subscription topic list are assigned
       - `:callback_implemented` Call `cb_module.assign_partitions/2` to assign
         partitions
     - `:session_timeout_seconds` (optional, default = 30). Time in seconds for

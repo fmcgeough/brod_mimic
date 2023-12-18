@@ -7,7 +7,7 @@ defmodule BrodMimic.Brod do
   use BrodMimic.Macros
 
   import Bitwise
-  import Record, only: [defrecord: 2, defrecord: 3]
+  import Record, only: [defrecordp: 2]
 
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.Consumer, as: BrodConsumer
@@ -18,14 +18,14 @@ defmodule BrodMimic.Brod do
   alias BrodMimic.TopicSubscriber, as: BrodTopicSubscriber
   alias BrodMimic.Utils, as: BrodUtils
 
-  defrecord(:kafka_message_set, :kafka_message_set,
+  defrecordp(:kafka_message_set,
     topic: :undefined,
     partition: :undefined,
     high_wm_offset: :undefined,
     messages: :undefined
   )
 
-  defrecord(:brod_call_ref,
+  defrecordp(:brod_call_ref,
     caller: :undefined,
     callee: :undefined,
     ref: :undefined
@@ -100,6 +100,10 @@ defmodule BrodMimic.Brod do
   @type partitioner() :: partition_fun() | :random | :hash
   @type produce_ack_cb() :: (partition(), offset() -> any())
   @type compression() :: :no_compression | :gzip | :snappy
+
+  @typedoc """
+  A call reference Record
+  """
   @type call_ref() ::
           record(:brod_call_ref,
             caller: :undefined | pid(),
@@ -397,10 +401,10 @@ defmodule BrodMimic.Brod do
 
   The pid should be a partition producer pid, NOT client pid.
 
-  The return value is a call reference of type `call_ref()`,
-  so the caller can use it to expect (match)
-  a `#brod_produce_reply{result = brod_produce_req_acked}`
-  message after the produce request has been acked by Kafka.
+  The return value is a call reference of type `call_ref()`, so the caller can
+  use it to expect (match) using a `brod_produce_reply` Record after the produce
+  request has been acked by Kafka (`result: :brod_produce_req_acked` - See
+  `BrodMimic.Producer`).
   """
   @spec produce(pid(), key(), value()) :: {:ok, call_ref()} | {:error, any()}
   def produce(producer_pid, key, value) do
@@ -425,8 +429,8 @@ defmodule BrodMimic.Brod do
   - value - can have many different forms:
     - `binary()`: Single message with key from the `key` argument
     - `{Brod.msg_ts(), binary()}`: Single message with its create-time timestamp and key from `key`
-  - `{ts: Brod.msg_ts(), value: binary(), headers: [{_, _}]}`: Single message; if this map does not have a `key'
-         field, `key' is used instead
+  - `{ts: Brod.msg_ts(), value: binary(), headers: [{_, _}]}`: Single message. If this map does not have a `key`
+    field, `key` is used instead.
   - `[{k, v} | {t, k, v}]`: A batch, where `v` could be a nested list of such representation
   - `[{key: k, value: v, ts: t, headers: [{_, _}]}]`: A batch
 
@@ -768,18 +772,71 @@ defmodule BrodMimic.Brod do
     BrodUtils.get_metadata(hosts, topics, options)
   end
 
+  @doc """
+  The equivalent of `resolve_offset(hosts, topic, partition, :latest, [])`
+  """
+  @spec resolve_offset([endpoint()], topic(), partition()) :: {:ok, offset()} | {:error, any()}
   def resolve_offset(hosts, topic, partition) do
     resolve_offset(hosts, topic, partition, :latest)
   end
 
+  @doc """
+  The equivalent of `resolve_offset(hosts, topic, partition, time, [])`
+  """
+  @spec resolve_offset([endpoint()], topic(), partition(), offset_time()) ::
+          {:ok, offset()} | {:error, any()}
   def resolve_offset(hosts, topic, partition, time) do
     resolve_offset(hosts, topic, partition, time, [])
   end
 
+  @doc """
+  Resolve semantic offset or timestamp to real offset.
+
+  The same as `resolve_offset/6` but the timeout is extracted from connection config
+  """
+  @spec resolve_offset([endpoint()], topic(), partition(), offset_time(), conn_config()) ::
+          {:ok, offset()} | {:error, any()}
   def resolve_offset(hosts, topic, partition, time, conn_cfg) do
     BrodUtils.resolve_offset(hosts, topic, partition, time, conn_cfg)
   end
 
+  @doc """
+  Resolve semantic offset or timestamp to real offset.
+
+  The function returns the offset of the first message
+  with the given timestamp, or of the first message after
+  the given timestamp (in case no message matches the
+  timestamp exactly), or -1 if the timestamp is newer
+  than (>) all messages in the topic.
+
+  You can also use two semantic offsets instead of
+  a timestamp: `:earliest` gives you the offset of the
+  first message in the topic and `:latest` gives you
+  the offset of the last message incremented by 1.
+
+  If the topic is empty, both `:earliest` and `:latest`
+  return the same value (which is 0 unless some messages
+  were deleted from the topic), and any timestamp returns
+  -1.
+
+   An example for illustration:
+   ```
+   Messages:
+   offset       0   1   2   3
+   timestamp    10  20  20  30
+
+   Calls:
+   resolve_offset(endpoints, topic, partition, 5) → 0
+   resolve_offset(endpoints, topic, partition, 10) → 0
+   resolve_offset(endpoints, topic, partition, 13) → 1
+   resolve_offset(endpoints, topic, partition, 20) → 1
+   resolve_offset(endpoints, topic, partition, 31) → -1
+   resolve_offset(endpoints, topic, partition, :earliest) → 0
+   resolve_offset(endpoints, topic, partition, :latest) → 4
+   ```
+  """
+  @spec resolve_offset([endpoint()], topic(), partition(), offset_time(), conn_config(), any()) ::
+          {:ok, offset()} | {:error, any()}
   def resolve_offset(hosts, topic, partition, time, conn_cfg, opts) do
     BrodUtils.resolve_offset(hosts, topic, partition, time, conn_cfg, opts)
   end
@@ -789,6 +846,69 @@ defmodule BrodMimic.Brod do
     fetch(conn_or_bootstrap, topic, partition, offset, opts)
   end
 
+  @doc """
+  Fetch a single message set from the given topic-partition.
+
+   The first arg can either be an already established connection to leader,
+   or `{endpoints, conn_config}` (or just `endpoints`) so to establish a new
+   connection before fetch.
+
+   The fourth argument is the start offset of the query. Messages with offset
+   greater or equal will be fetched.
+
+   You can also pass options for the fetch query. See `t:fetch_opts/0` for
+   documentation. Only `:max_wait_time`, `:min_bytes`, `:max_bytes`, and `:isolation_level`
+   options are currently supported. The defaults are the same as documented
+   in the linked type, except for `:min_bytes` which defaults to 1.
+   Note that `:max_bytes` will be rounded up so that full messages are
+   retrieved. For example, if you specify `max_bytes: 42` and there
+   are three messages of size 40 bytes, two of them will be fetched.
+
+   On success, the function returns the messages along with the _last stable
+   offset_ (when using `:read_committed` mode, the last committed offset) or the
+   _high watermark offset_ (offset of the last message that was successfully
+   copied to all replicas, incremented by 1), whichever is lower. In essence, this
+   is the offset up to which it was possible to read the messages at the time of
+   fetching. This is similar to what `resolve_offset/6` with `:latest`
+   returns. You can use this information to determine how far from the end of the
+   topic you currently are. Note that when you use this offset as the start offset
+   for a subseuqent call, an empty list of messages will be returned (assuming the
+   topic hasn't changed, e.g. no new message arrived). Only when you use an offset
+   greater than this one, `{:error, :offset_out_of_range}` will be returned.
+
+   Note also that Kafka batches messages in a message set only up to the end of
+   a topic segment in which the first retrieved message is, so there may actually
+   be more messages behind the last fetched offset even if the fetched size is
+   significantly less than `:max_bytes` provided in `t:fetch_opts/0`.
+
+   Example (the topic has only two messages):
+
+   ```
+   iex> BrodMimic.Brod.fetch([{"localhost", 9092}], "my_topic", 0, 0, %{max_bytes: 1024})
+   {
+      :ok,
+      {
+        2, [
+        {kafka_message,0,<<"some_key">>,<<"Hello world!">>, create,1663940976473,[]},
+        {kafka_message,1,<<"another_key">>,<<"This is a message with offset 1.">>, create,1663940996335,[]}
+        ]
+      }
+    }
+
+   iex> BrodMimic.Brod.fetch([{"localhost", 9092}], "my_topic", 0, 2, %{max_bytes: 1024})
+   {:ok,{2,[]}}
+
+   iex> BrodMimic.Brod.fetch([{"localhost", 9092}], "my_topic", 0, 3, %{max_bytes: 1024})
+   {:error, :offset_out_of_range}
+   ```
+  """
+  @spec fetch(
+          connection() | client_id() | bootstrap(),
+          topic(),
+          partition(),
+          offset(),
+          fetch_opts()
+        ) :: {:ok, {offset(), [message()]}} | {:error, any()}
   def fetch(conn_or_bootstrap, topic, partition, offset, opts) do
     BrodUtils.fetch(conn_or_bootstrap, topic, partition, offset, opts)
   end
@@ -801,6 +921,21 @@ defmodule BrodMimic.Brod do
     fetch(hosts, topic, partition, offset, max_wait_time, min_bytes, max_bytes, [])
   end
 
+  @doc """
+  Fetch a single message set from the given topic-partition
+
+  @deprecated Please use `fetch/5` instead
+  """
+  @spec fetch(
+          [endpoint()],
+          topic(),
+          partition(),
+          offset(),
+          non_neg_integer(),
+          non_neg_integer(),
+          pos_integer(),
+          conn_config()
+        ) :: {:ok, [message()]} | {:error, any()}
   def fetch(hosts, topic, partition, offset, max_wait_time, min_bytes, max_bytes, conn_config) do
     fetch_opts = %{max_wait_time: max_wait_time, min_bytes: min_bytes, max_bytes: max_bytes}
 
@@ -813,23 +948,58 @@ defmodule BrodMimic.Brod do
     end
   end
 
+  @doc """
+  Connect partition leader
+  """
+  @spec connect_leader([endpoint()], topic(), partition(), conn_config()) :: {:ok, pid()}
   def connect_leader(hosts, topic, partition, conn_config) do
     kpro_options = BrodUtils.kpro_connection_options(conn_config)
     :kpro.connect_partition_leader(hosts, conn_config, topic, partition, kpro_options)
   end
 
+  @doc """
+    List ALL consumer groups in the given Kafka cluster.
+
+    _Exception if failed to connect any of the coordinator brokers_.
+  """
+  @spec list_all_groups([endpoint()], conn_config()) :: [{endpoint(), [cg()] | {:error, any()}}]
   def list_all_groups(endpoints, conn_cfg) do
     BrodUtils.list_all_groups(endpoints, conn_cfg)
   end
 
+  @doc """
+  List consumer groups in the given group coordinator broker
+  """
+  @spec list_groups(endpoint(), conn_config()) :: {:ok, [cg()]} | {:error, any()}
   def list_groups(coordinator_endpoint, conn_cfg) do
     BrodUtils.list_groups(coordinator_endpoint, conn_cfg)
   end
 
+  @doc """
+    Describe consumer groups
+
+    The given consumer group IDs should be all managed by the coordinator-broker
+    running at the given endpoint. Otherwise error codes will be returned in the
+    result structs. Return `describe_groups` response body field named `groups`.
+    See `kpro_schema.erl` for struct details.
+  """
+  @spec describe_groups(endpoint(), conn_config(), [group_id()]) ::
+          {:ok, [:kpro.struct()]} | {:error, any()}
   def describe_groups(coordinator_endpoint, conn_cfg, iDs) do
     BrodUtils.describe_groups(coordinator_endpoint, conn_cfg, iDs)
   end
 
+  @doc """
+    Connect to consumer group coordinator broker
+
+    Done in steps:
+
+    1. Connect to any of the given bootstrap endpoints
+    2. Send group_coordinator_request to resolve group coordinator endpoint
+    3. Connect to the resolved endpoint and return the connection pid
+  """
+  @spec connect_group_coordinator([endpoint()], conn_config(), group_id()) ::
+          {:ok, pid()} | {:error, any()}
   def connect_group_coordinator(bootstrap_endpoints, conn_cfg, group_id) do
     kpro_options = BrodUtils.kpro_connection_options(conn_cfg)
     args = Map.merge(kpro_options, %{type: :group, id: group_id})
@@ -837,10 +1007,22 @@ defmodule BrodMimic.Brod do
     :kpro.connect_coordinator(bootstrap_endpoints, conn_cfg, args)
   end
 
+  @doc """
+  Fetch committed offsets for ALL topics in the given consumer group
+
+  Return the `responses` field of the `offset_fetch` response. See
+  `kpro_schema.erl` for struct details.
+  """
+  @spec fetch_committed_offsets([endpoint()], conn_config(), group_id()) ::
+          {:ok, [:kpro.struct()]} | {:error, any()}
   def fetch_committed_offsets(bootstrap_endpoints, conn_cfg, group_id) do
     BrodUtils.fetch_committed_offsets(bootstrap_endpoints, conn_cfg, group_id, [])
   end
 
+  @doc """
+  Same as `fetch_committed_offsets/3` but works with a started `brod_client`
+  """
+  @spec fetch_committed_offsets(client(), group_id()) :: {:ok, [:kpro.struct()]} | {:error, any()}
   def fetch_committed_offsets(client, group_id) do
     BrodUtils.fetch_committed_offsets(client, group_id, [])
   end

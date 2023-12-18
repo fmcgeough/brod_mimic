@@ -3,36 +3,40 @@ defmodule BrodMimic.Macros do
 
   defmacro __using__(_) do
     quote do
-      import Record, only: [defrecord: 2, extract: 2]
+      import Record, only: [defrecordp: 2, extract: 2]
 
       alias BrodMimic.Brod
 
-      defrecord(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
-      defrecord(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
+      defrecordp(:kpro_req, extract(:kpro_req, from_lib: "kafka_protocol/include/kpro.hrl"))
+      defrecordp(:kpro_rsp, extract(:kpro_rsp, from_lib: "kafka_protocol/include/kpro.hrl"))
 
-      defrecord(
+      defrecordp(
         :kafka_message,
         extract(:kafka_message, from_lib: "kafka_protocol/include/kpro.hrl")
       )
 
-      defrecord(:kafka_group_member_metadata,
+      defrecordp(:kafka_group_member_metadata,
         version: :undefined,
         topics: :undefined,
         user_data: :undefined
       )
 
-      defrecord(:brod_received_assignment,
+      defrecordp(:brod_received_assignment,
         topic: :undefined,
         partition: :undefined,
         begin_offset: :undefined
       )
 
-      defrecord(:kafka_fetch_error,
+      defrecordp(:kafka_fetch_error,
         topic: :undefined,
         partition: :undefined,
         error_code: :undefined,
         error_desc: ""
       )
+
+      defrecordp(:brod_cg, id: :undefined, protocol_type: :undefined)
+
+      @type cg() :: record(:brod_cg, id: Brod.group_id(), protocol_type: Brod.cg_protocol_type())
 
       @type kafka_group_member_metadata ::
               record(:kafka_group_member_metadata,

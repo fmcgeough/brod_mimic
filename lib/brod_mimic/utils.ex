@@ -36,7 +36,7 @@ defmodule BrodMimic.Utils do
           timeout: :kpro.int32(),
           validate_only: boolean()
         }) ::
-          {:ok, Brod.topic_config()} | {:error, any()} | :ok
+          {:ok, topic_config()} | {:error, any()} | :ok
   def create_topics(hosts, topic_configs, request_configs) do
     create_topics(hosts, topic_configs, request_configs, _conn_cfg = [])
   end
@@ -518,6 +518,7 @@ defmodule BrodMimic.Utils do
   @doc """
   List all groups in the given coordinator broker
   """
+  @spec list_groups(endpoint(), conn_config()) :: {:ok, [cg()]} | {:error, any()}
   def list_groups(endpoint, conn_cfg) do
     with_conn([endpoint], conn_cfg, fn pid ->
       request = BrodKafkaRequest.list_groups(pid)
