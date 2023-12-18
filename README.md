@@ -14,8 +14,10 @@ This project was created for a couple of reasons.
    examine this code and then have a clearer understanding of how `brod` works.
    To make this a reality I needed to:
    - convert the `brod` code file by file (so that a developer looking at the code could
-     align what is in this library with the`brod` code)
-   - modify doc so that the information aligns with usage from Elixir (the brod documentation
+     align what is in this library with the`brod` code). So, for example, in the `brod`
+     library there is a `src/brod_consumers_sup.erl` file. In this library there is a
+     `lib/brod_mimic/consumers_sup.ex` file.
+   - modify doc so that the information aligns with usage from Elixir (the `brod`` documentation
      is written from an Erlang perspective)
    - add documentation that clarifies some of the more complicated aspects of the code
 
@@ -38,33 +40,39 @@ Klarna Bank AB (publ) (https://www.klarna.com)
 
 ## Porting Notes
 
-There are cases where new functions in the Elixir version. Generally, this is to deal with
-Erlang syntax that is extremely awkward and hard to read in Elixir. It was also done,
-at times, to resolve credo issues (function too complex, etc).
+There are cases where new functions are introduced in the Elixir version.
+Generally, this is to deal with Erlang syntax that is extremely awkward and hard
+to read in Elixir. It was also done, at times, to resolve credo issues (function
+too complex, etc).
 
-Erlang functions like `:application.get_env` were converted to their Elixir equivalents.
-In most cases the Elixir function has the same name so it's not too hard to compare
-the `brod` code with this converted code.
+Erlang functions like `:application.get_env` were converted to their Elixir
+equivalents. In most cases the Elixir function has the same name so it's not too
+hard to compare the `brod` code with this converted code.
 
 The intention is to pull available doc from the `brod` code base and incorporate
-it into this library. When the doc is moved over its edited to align with Elixir naming
-and general standards. The goal is to make the doc as accessible as possible for Elixir
-developers.
+it into this library. When the doc is moved over its edited to align with Elixir
+naming and general standards. The goal is to make the doc as accessible as
+possible for Elixir developers.
 
-The `brod` code base makes heavy use of `Record`. This is not something that is common
-in Elixir code bases. In Erlang declaring a record allows defining the record and
-specifying type information in a single statement. The Elixir approach requires a
-definition of the record itself (using `defrecord`) and then a separate definition of
-the record type information (see https://hexdocs.pm/elixir/1.12.3/Record.html#module-types).
+The `brod` code base makes heavy use of `Record`. This is not something that is
+common in Elixir code bases. In Erlang declaring a record allows defining the
+record and specifying type information in a single statement. The Elixir
+approach requires a definition of the record itself (using `defrecord`) and then
+a separate definition of the record type information (see
+https://hexdocs.pm/elixir/1.12.3/Record.html#module-types).
 
 The `brod` code base uses its own `Supervisor` implementation. This has been
 ported over to Elixir.
 
+The `brod` code makes significant use of Erlang macros. The module `BrodMimic.Macros`
+was created to emulate the Erlang macros. In some cases the macro was discarded and
+the code the macro expands to was just put in place in the Elixir version.
+
 Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc).
 
-## Notes on brod library in Elixir
+## Notes on `brod` library in Elixir
 
-- No plans (as of now) to convert the files: brod_cli.erl, brod_cli_pipe.erl. These are utility
+- No plans (as of now) to convert the files: `brod_cli.erl`, `brod_cli_pipe.erl`. These are utility
   command line tools. Personally, I've never used them so I didn't think it was worth including
   that work.
 
