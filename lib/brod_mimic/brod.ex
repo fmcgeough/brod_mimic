@@ -623,6 +623,33 @@ defmodule BrodMimic.Brod do
     BrodConsumer.unsubscribe(consumer_pid, subscriber_pid)
   end
 
+  @doc """
+  Acknowledge that one or more messages have been processed.
+
+  `BrodMimic.Consumer` sends message-sets to the subscriber process, and keep
+   the messages in a 'pending' queue. The subscriber may choose to ack any
+   received offset. Acknowledging a greater offset will automatically
+   acknowledge the messages before this offset. For example, if message `[1, 2,
+   3, 4]` have been sent to (as one or more message-sets) to the subscriber, the
+   subscriber may acknowledge with offset `3` to indicate that the first three
+   messages are successfully processed, leaving behind only message `4` pending.
+
+
+   The `pending` queue has a size limit (see `prefetch_count` consumer config)
+   which is to provide a mechanism to handle back-pressure. If there are too
+   many messages pending on ack, the consumer will stop fetching new ones so the
+   subscriber won't get overwhelmed.
+
+   Note, there is no range check done for the acknowledging offset, meaning if
+   offset `[m, n]` are pending to be acknowledged, acknowledging with `offset >
+   n' will cause all offsets to be removed from the pending queue, and
+   acknowledging with `offset < m' has no effect.
+
+   Use this function only with plain partition subscribers (i.e., when you
+   manually call `subscribe/5`). Behaviours like `BrodMimic.TopicSubscriber`
+   have their own way how to ack messages.
+  """
+  @spec consume_ack(client(), topic(), partition(), offset()) :: :ok | {:error, any()}
   def consume_ack(client, topic, partition, offset) do
     case BrodClient.get_consumer(client, topic, partition) do
       {:ok, consumer_pid} ->
@@ -633,10 +660,28 @@ defmodule BrodMimic.Brod do
     end
   end
 
+  @doc """
+  Equivalent to `BrodMimic.Consumer.ack/2`
+
+  See `consume_ack/4` for more information.
+  """
+  @spec consume_ack(pid(), offset()) :: :ok | {:error, any()}
   def consume_ack(consumer_pid, offset) do
     BrodConsumer.ack(consumer_pid, offset)
   end
 
+  @doc """
+  See `BrodMimic.GroupSubscriber.start_link/7`
+  """
+  @spec start_link_group_subscriber(
+          client(),
+          group_id(),
+          [topic()],
+          group_config(),
+          consumer_config(),
+          module(),
+          term()
+        ) :: {:ok, pid()} | {:error, any()}
   def start_link_group_subscriber(
         client,
         group_id,
@@ -658,7 +703,7 @@ defmodule BrodMimic.Brod do
   end
 
   @doc """
-  Start group_subscriber_v2
+  Start `BrodMimic.GroupSubscriberv2`
   """
   @spec start_link_group_subscriber_v2(BrodMimic.GroupSubscriberv2.subscriber_config()) ::
           {:ok, pid()} | {:error, any()}
@@ -666,6 +711,9 @@ defmodule BrodMimic.Brod do
     BrodGroupSubscriberv2.start_link(config)
   end
 
+  @doc """
+  Start `BrodMimic.GroupSubscriber`
+  """
   def start_link_group_subscriber(
         client,
         group_id,
