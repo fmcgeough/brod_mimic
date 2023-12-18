@@ -416,6 +416,47 @@ defmodule BrodMimic.Brod do
     end
   end
 
+  @doc """
+  Produce one or more messages.
+
+  ## Parameters
+
+  - value - can have many different forms:
+    - `binary()`: Single message with key from the `key` argument
+    - `{Brod.msg_ts(), binary()}`: Single message with its create-time timestamp and key from `key`
+  - `{ts: Brod.msg_ts(), value: binary(), headers: [{_, _}]}`: Single message; if this map does not have a `key'
+         field, `key' is used instead
+  - `[{k, v} | {t, k, v}]`: A batch, where `v` could be a nested list of such representation
+  - `[{key: k, value: v, ts: t, headers: [{_, _}]}]`: A batch
+
+   When `value' is a batch, the `key' argument is only used as partitioner input
+   and all messages are written on the same partition.
+
+   `ts` field is dropped for Kafka prior to version `0.10` (produce API version
+   0, magic version 0). `headers` field is dropped for Kafka prior to version
+   `0.11` (produce API version 0-2, magic version 0-1).
+
+   `partition` may be either a concrete partition (an integer) or a partitioner
+   (see `partitioner/0` for more info).
+
+   A producer for the particular topic has to be already started (by calling
+   `start_producer/3`, unless you have specified `auto_start_producers: true`
+   when starting the client.
+
+   This function first looks up the producer pid, then calls `produce/3` to do
+   the real work.
+
+   The return value is a call reference of type `t:call_ref/0`, so the caller
+   can used it to expect (match) a `#brod_produce_reply{result =
+   brod_produce_req_acked}` (see `t:produce_reply/0`) message after the produce
+   request has been acked by Kafka.
+
+   Example:
+   ```
+   > BrodMimic.Brod.produce(my_client, <<"my_topic">>, 0, "key", "Hello from erlang!")
+   {:ok, {brod_call_ref,<0.83.0>,<0.133.0>,#Ref<0.3024768151.2556690436.92841>}}
+   ```
+  """
   def produce(client, topic, partitioner, key, value) do
     part_fun = BrodUtils.make_part_fun(partitioner)
 
