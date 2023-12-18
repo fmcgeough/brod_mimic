@@ -73,6 +73,7 @@ Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_do
 - simple `iex` session can start a client
 - bringing up observer after starting simple `iex` session shows same processes started as
   the brod library
+- simple publishing appears to work okay
 
 ## Sample Session
 

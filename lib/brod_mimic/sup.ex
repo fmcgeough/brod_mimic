@@ -42,65 +42,21 @@ defmodule BrodMimic.Sup do
 
   @behaviour BrodMimic.Supervisor3
 
+  alias BrodMimic.Brod
   alias BrodMimic.KafkaApis, as: BrodKafkaApis
   alias BrodMimic.Supervisor3
   alias BrodMimic.Utils, as: BrodUtils
-  require Record
 
-  Record.defrecord(:r_kafka_message_set, :kafka_message_set,
-    topic: :undefined,
-    partition: :undefined,
-    high_wm_offset: :undefined,
-    messages: :undefined
-  )
-
-  Record.defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
-    topic: :undefined,
-    partition: :undefined,
-    error_code: :undefined,
-    error_desc: ''
-  )
-
-  Record.defrecord(:r_brod_call_ref, :brod_call_ref,
-    caller: :undefined,
-    callee: :undefined,
-    ref: :undefined
-  )
-
-  Record.defrecord(:r_brod_produce_reply, :brod_produce_reply,
-    call_ref: :undefined,
-    base_offset: :undefined,
-    result: :undefined
-  )
-
-  Record.defrecord(:r_brod_received_assignment, :brod_received_assignment,
-    topic: :undefined,
-    partition: :undefined,
-    begin_offset: :undefined
-  )
-
-  Record.defrecord(:r_brod_cg, :brod_cg,
-    id: :undefined,
-    protocol_type: :undefined
-  )
-
-  Record.defrecord(:r_socket, :socket,
-    pid: :undefined,
-    host: :undefined,
-    port: :undefined,
-    node_id: :undefined
-  )
-
-  Record.defrecord(:r_cbm_init_data, :cbm_init_data,
-    committed_offsets: :undefined,
-    cb_fun: :undefined,
-    cb_data: :undefined
-  )
-
+  @doc """
+  Start root supervisor
+  """
+  @spec start_link() :: {:ok, pid()}
   def start_link do
     Supervisor3.start_link({:local, :brod_sup}, BrodMimic.Sup, :clients_sup)
   end
 
+  @spec start_client([Brod.endpoint()], Brod.client_id(), Brod.client_config()) ::
+          :ok | {:error, any()}
   def start_client(endpoints, client_id, config) do
     client_spec = client_spec(endpoints, client_id, config)
 
@@ -113,6 +69,7 @@ defmodule BrodMimic.Sup do
     end
   end
 
+  @spec stop_client(Brod.client_id()) :: :ok | {:error, any()}
   def stop_client(client_id) do
     _ = Supervisor3.terminate_child(:brod_sup, client_id)
     Supervisor3.delete_child(:brod_sup, client_id)
