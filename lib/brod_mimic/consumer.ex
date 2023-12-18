@@ -57,6 +57,7 @@ defmodule BrodMimic.Consumer do
   @type offset_reset_policy() :: :reset_by_subscriber | :reset_to_earliest | :reset_to_latest
   @type bytes() :: non_neg_integer()
   @type config() :: Brod.consumer_config()
+  @type debug() :: GenServer.debug()
 
   defrecord(:r_kafka_message_set, :kafka_message_set,
     topic: :undefined,
@@ -129,13 +130,14 @@ defmodule BrodMimic.Consumer do
   - topic - The topic we are consuming
   - partition - The partition we are consuming
   - config - A proplist defining the consumer config. See `t:config/0`
+  - debug - `t:debug/0`
   """
   @spec start_link(
           Brod.bootstrap() | pid(),
           Brod.topic(),
           Brod.partition(),
           config(),
-          [any()]
+          debug()
         ) ::
           {:ok, pid()} | {:error, any()}
   def start_link(bootstrap, topic, partition, config) do
