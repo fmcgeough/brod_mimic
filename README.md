@@ -12,9 +12,12 @@ This project was created for a couple of reasons.
    that require some knowledge of how the library is talking to Kafka.
 3. I figured having an Elixir implementation would allow Elixir developers to
    examine this code and then have a clearer understanding of how `brod` works.
-   To make this a reality I needed to convert the `brod` code file by file (so
-   that a developer looking at the code could align what is in this library with
-   the`brod` code).
+   To make this a reality I needed to:
+   - convert the `brod` code file by file (so that a developer looking at the code could
+     align what is in this library with the`brod` code)
+   - modify doc so that the information aligns with usage from Elixir (the brod documentation
+     is written from an Erlang perspective)
+   - add documentation that clarifies some of the more complicated aspects of the code
 
 Developers should not use this library in lieu of `brod`. It's not nearly production
 ready and the `brod` library has been used for years by all sorts of companies. This
