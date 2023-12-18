@@ -27,6 +27,13 @@ defmodule BrodMimic.Macros do
         begin_offset: :undefined
       )
 
+      defrecord(:kafka_fetch_error,
+        topic: :undefined,
+        partition: :undefined,
+        error_code: :undefined,
+        error_desc: ""
+      )
+
       @type kafka_group_member_metadata ::
               record(:kafka_group_member_metadata,
                 version: non_neg_integer(),
@@ -42,6 +49,14 @@ defmodule BrodMimic.Macros do
                 topic: Brod.topic(),
                 partition: Brod.partition(),
                 begin_offset: :undefined | Brod.offset() | {:begin_offset, Brod.offset_time()}
+              )
+
+      @type kafka_fetch_error() ::
+              record(:kafka_fetch_error,
+                topic: Brod.topic(),
+                partition: Brod.partition(),
+                error_code: Brod.error_code(),
+                error_desc: String.t()
               )
 
       defp offset_earliest, do: :earliest

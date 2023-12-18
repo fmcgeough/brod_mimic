@@ -92,6 +92,7 @@ defmodule BrodMimic.Brod do
             # the `incomplete_batch` is internal only
             messages: [message()] | :kpro.incomplete_batch()
           )
+  @type error_code() :: :kpro.error_code()
 
   ## producers
   @type producer_config() :: BrodMimic.Producer.config()

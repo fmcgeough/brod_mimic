@@ -64,13 +64,6 @@ defmodule BrodMimic.Consumer do
     messages: :undefined
   )
 
-  defrecord(:r_kafka_fetch_error, :kafka_fetch_error,
-    topic: :undefined,
-    partition: :undefined,
-    error_code: :undefined,
-    error_desc: ''
-  )
-
   defrecord(:pending_acks, :pending_acks, count: 0, bytes: 0, queue: :queue.new())
 
   defrecord(:state, :state,
@@ -126,6 +119,56 @@ defmodule BrodMimic.Consumer do
             isolation_level: isolation_level()
           )
 
+  @doc """
+  Start (link) a partition consumer
+
+  ## Parameters
+
+  - config - The consumer config in a proplist, possible values:
+    - `:min_bytes` (optional, default = 0). Minimal bytes to fetch in a batch of
+      messages
+    - `:max_bytes` (optional, default = 1MB). Maximum bytes to fetch in a batch
+       of messages. NOTE: this value might be expanded to retry when it is not
+       enough to fetch even a single message, then slowly shrunk back to the
+       given value.</li>
+    - `:max_wait_time` (optional, default = 10000 ms). Max number of seconds
+      allowed for the broker to collect `min_bytes` of messages in fetch
+      response
+    - `:sleep_timeout` (optional, default = 1000 ms). Allow consumer process to
+      sleep this amount of ms if Kafka replied `empty` message set.
+    - `:prefetch_count` (optional, default = 10). The window size (number of
+      messages) allowed to fetch-ahead.
+    - `:prefetch_bytes` (optional, default = 100KB). The total number of bytes
+         allowed to fetch-ahead. The BrodMimic.Consumer is greedy, it only stops
+         fetching more messages in when number of unacked messages has exceeded
+         `:prefetch_count` AND the unacked total volume has exceeded
+         `:prefetch_bytes`
+    - `:begin_offset` (optional, default = latest). The offset from which to
+         begin fetch requests. A subscriber may consume and process messages,
+         then persist the associated offset to a persistent storage, then start
+         (or restart) from `last_processed_offset + 1` as the `:begin_offset` to
+         proceed. The offset has to already exist at the time of calling.</li>
+    - `:offset_reset_policy` (optional, default = reset_by_subscriber).
+      - How to reset `begin_offset' if `:offset_out_of_range` exception is
+        received.
+         - `:reset_by_subscriber`: consumer is suspended (`:is_suspended: true`
+           in state) and wait for subscriber to re-subscribe with a new
+           `:begin_offset` option.
+         - `:reset_to_earliest`: consume from the earliest offset.
+         - `:reset_to_latest`: consume from the last available offset.
+    - `:size_stat_window`: (optional, default = 5). The moving-average window
+      size to calculate average message size.  Average message size is used to
+      shrink `max_bytes` in fetch requests after it has been expanded to fetch a
+      large message. Use 0 to immediately shrink back to original `:max_bytes`
+      from config.  A size estimation allows users to set a relatively small
+      `:max_bytes`, then let it dynamically adjust to a number around
+      `prefetch_count * average_size`
+    - `:isolation_level`: (optional, default = `read_commited'). Level to
+      control what transaction records are exposed to the consumer. Two values
+      are allowed, `:read_uncommitted` to retrieve all records, independently on
+      the transaction outcome (if any), and `:read_committed` to get only the
+      records from committed transactions
+  """
   def start_link(bootstrap, topic, partition, config) do
     start_link(bootstrap, topic, partition, config, [])
   end
@@ -406,7 +449,7 @@ defmodule BrodMimic.Consumer do
         handle_batches(header, batches, state)
 
       {:error, error_code} ->
-        error = r_kafka_fetch_error(topic: topic, partition: partition, error_code: error_code)
+        error = kafka_fetch_error(topic: topic, partition: partition, error_code: error_code)
         handle_fetch_error(error, state)
     end
   end
@@ -560,7 +603,7 @@ defmodule BrodMimic.Consumer do
   def err_op(_), do: :restart
 
   defp handle_fetch_error(
-         r_kafka_fetch_error(error_code: error_code) = error,
+         kafka_fetch_error(error_code: error_code) = error,
          state(
            topic: topic,
            partition: partition,
