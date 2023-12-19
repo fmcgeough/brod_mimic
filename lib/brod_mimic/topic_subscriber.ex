@@ -80,6 +80,7 @@ defmodule BrodMimic.TopicSubscriber do
 
   @optional_callbacks [terminate: 2]
 
+  @deprecated "Please use `start_link/1` instead"
   def start_link(client, topic, partitions, consumer_config, cb_module, cb_init_arg) do
     args = %{
       client: client,
@@ -94,6 +95,7 @@ defmodule BrodMimic.TopicSubscriber do
     start_link(args)
   end
 
+  @deprecated "Please use `start_link/1` instead"
   def start_link(client, topic, partitions, consumer_config, message_type, cb_module, cb_init_arg) do
     args = %{
       client: client,
@@ -108,6 +110,7 @@ defmodule BrodMimic.TopicSubscriber do
     start_link(args)
   end
 
+  @deprecated "Please use `start_link/1` instead"
   def start_link(
         client,
         topic,

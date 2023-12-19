@@ -380,17 +380,17 @@ defmodule BrodMimic.GroupSubscriberv2 do
   end
 
   defp start_worker(client, topic, message_type, partition, consumer_config, start_options) do
-    {:ok, pid} =
-      BrodTopicSubscriber.start_link(
-        client,
-        topic,
-        [partition],
-        consumer_config,
-        message_type,
-        BrodGroupSubscriberWorker,
-        start_options
-      )
+    args = %{
+      client: client,
+      topic: topic,
+      partitions: [partition],
+      consumer_config: consumer_config,
+      message_type: message_type,
+      cb_module: BrodGroupSubscriberWorker,
+      init_data: start_options
+    }
 
+    {:ok, pid} = BrodTopicSubscriber.start_link(args)
     {:ok, pid}
   end
 

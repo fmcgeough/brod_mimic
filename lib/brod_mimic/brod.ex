@@ -775,10 +775,12 @@ defmodule BrodMimic.Brod do
     )
   end
 
+  @deprecated "Please use `start_link_topic_subscriber/1` instead"
   def start_link_topic_subscriber(client, topic, consumer_config, cb_module, cb_init_arg) do
     start_link_topic_subscriber(client, topic, :all, consumer_config, cb_module, cb_init_arg)
   end
 
+  @deprecated "Please use `start_link_topic_subscriber/1` instead"
   def start_link_topic_subscriber(
         client,
         topic,
@@ -798,24 +800,27 @@ defmodule BrodMimic.Brod do
     )
   end
 
+  @deprecated "Please use `start_link_topic_subscriber/1` instead"
   def start_link_topic_subscriber(
         client,
         topic,
         partitions,
         consumer_config,
-        messageType,
+        message_type,
         cb_module,
         cb_init_arg
       ) do
-    BrodTopicSubscriber.start_link(
-      client,
-      topic,
-      partitions,
-      consumer_config,
-      messageType,
-      cb_module,
-      cb_init_arg
-    )
+    args = %{
+      client: client,
+      topic: topic,
+      partitions: partitions,
+      consumer_config: consumer_config,
+      message_type: message_type,
+      cb_module: cb_module,
+      init_data: cb_init_arg
+    }
+
+    BrodTopicSubscriber.start_link(args)
   end
 
   def start_link_topic_subscriber(config) do
@@ -1038,30 +1043,26 @@ defmodule BrodMimic.Brod do
   end
 
   @doc """
-  Fold through messages in a partition
-
-  Works like `:lists.foldl/3` but with below stop conditions:
-
-  - Always return after reach high watermark offset
-  - Return after the given message count limit is reached
-  - Return after the given kafka offset is reached
-  - Return if the fold function returns an `{:error, reason}` tuple
-
-  _Exceptions from evaluating fold function are not caught_.
+  Equivalent to fetch(Hosts, Topic, Partition, Offset, Wait, MinBytes, MaxBytes, [])
   """
-  def fold(bootstrap, topic, partition, offset, opts, acc, fun, limits) do
-    BrodUtils.fold(bootstrap, topic, partition, offset, opts, acc, fun, limits)
-  end
-
+  @deprecated "Please use `fetch/5` instead"
+  @spec fetch(
+          [endpoint()],
+          topic(),
+          partition(),
+          offset(),
+          non_neg_integer(),
+          non_neg_integer(),
+          pos_integer()
+        ) :: {:ok, [message()]} | {:error, any()}
   def fetch(hosts, topic, partition, offset, max_wait_time, min_bytes, max_bytes) do
     fetch(hosts, topic, partition, offset, max_wait_time, min_bytes, max_bytes, [])
   end
 
   @doc """
   Fetch a single message set from the given topic-partition
-
-  @deprecated Please use `fetch/5` instead
   """
+  @deprecated "Please use `fetch/5` instead"
   @spec fetch(
           [endpoint()],
           topic(),
@@ -1082,6 +1083,22 @@ defmodule BrodMimic.Brod do
       {:error, reason} ->
         {:error, reason}
     end
+  end
+
+  @doc """
+  Fold through messages in a partition
+
+  Works like `:lists.foldl/3` but with below stop conditions:
+
+  - Always return after reach high watermark offset
+  - Return after the given message count limit is reached
+  - Return after the given kafka offset is reached
+  - Return if the fold function returns an `{:error, reason}` tuple
+
+  _Exceptions from evaluating fold function are not caught_.
+  """
+  def fold(bootstrap, topic, partition, offset, opts, acc, fun, limits) do
+    BrodUtils.fold(bootstrap, topic, partition, offset, opts, acc, fun, limits)
   end
 
   @doc """
