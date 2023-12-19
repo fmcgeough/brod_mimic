@@ -120,6 +120,20 @@ defmodule BrodMimic.Brod do
           | :reached_target_offset
           | {:error, any()}
 
+  @type get_consumer_error() ::
+          :client_down
+          | {:client_down, any()}
+          | {:consumer_down, any()}
+          | {:consumer_not_found, topic()}
+          | {:consumer_not_found, topic(), partition()}
+
+  @type get_producer_error() ::
+          :client_down
+          | {:client_down, any()}
+          | {:producer_down, any()}
+          | {:producer_not_found, topic()}
+          | {:producer_not_found, topic(), partition()}
+
   @typedoc """
   Consumer configuration
 
@@ -358,18 +372,43 @@ defmodule BrodMimic.Brod do
     BrodClient.start_consumer(client, topic_name, consumer_config)
   end
 
+  @doc """
+  Get number of partitions for a given topic.
+
+  The higher level producers may need the partition numbers to
+  find the partition producer pid – if the number of partitions
+  is not statically configured for them.
+
+  It is up to the callers how they want to distribute their data
+  (e.g. random, roundrobin or consistent-hashing) to the partitions.
+
+  _The partitions count is cached for 120 seconds_.
+  """
+  @spec get_partitions_count(client(), topic()) :: {:ok, pos_integer()} | {:error, any()}
   def get_partitions_count(client, topic) do
     BrodClient.get_partitions_count(client, topic)
   end
 
+  @doc """
+  The same as `get_partitions_count/2` but ensured not to auto-create topics in Kafka even
+  when Kafka has topic auto-creation configured.
+  """
+  @spec get_partitions_count_safe(client(), topic()) :: {:ok, pos_integer()} | {:error, any()}
   def get_partitions_count_safe(client, topic) do
     BrodClient.get_partitions_count_safe(client, topic)
   end
 
+  @spec get_consumer(client(), topic(), partition()) ::
+          {:ok, pid()} | {:error, get_consumer_error()}
   def get_consumer(client, topic, partition) do
     BrodClient.get_consumer(client, topic, partition)
   end
 
+  @doc """
+  Equivalent to `BrodMimic.Client.get_producer/3`
+  """
+  @spec get_producer(client(), topic(), partition()) ::
+          {:ok, pid()} | {:error, get_producer_error()}
   def get_producer(client, topic, partition) do
     BrodClient.get_producer(client, topic, partition)
   end
@@ -998,6 +1037,18 @@ defmodule BrodMimic.Brod do
     BrodUtils.fetch(conn_or_bootstrap, topic, partition, offset, opts)
   end
 
+  @doc """
+  Fold through messages in a partition
+
+  Works like `:lists.foldl/3` but with below stop conditions:
+
+  - Always return after reach high watermark offset
+  - Return after the given message count limit is reached
+  - Return after the given kafka offset is reached
+  - Return if the fold function returns an `{:error, reason}` tuple
+
+  _Exceptions from evaluating fold function are not caught_.
+  """
   def fold(bootstrap, topic, partition, offset, opts, acc, fun, limits) do
     BrodUtils.fold(bootstrap, topic, partition, offset, opts, acc, fun, limits)
   end
