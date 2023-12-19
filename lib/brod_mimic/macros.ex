@@ -92,6 +92,11 @@ defmodule BrodMimic.Macros do
                 messages: [message()] | :kpro.incomplete_batch()
               )
 
+      @type request_configs() :: %{
+              optional(:timeout) => :kpro.int32(),
+              optional(:validate_only) => boolean()
+            }
+
       defp offset_earliest, do: :earliest
       defp offset_latest, do: :latest
       defp unknown_topic_cache_expire_seconds, do: 120

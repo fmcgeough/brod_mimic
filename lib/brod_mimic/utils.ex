@@ -6,9 +6,6 @@ defmodule BrodMimic.Utils do
   use BrodMimic.Macros
 
   import Bitwise
-  import Record, only: [defrecord: 3]
-
-  defrecord(:r_brod_cg, :brod_cg, id: :undefined, protocol_type: :undefined)
 
   alias BrodMimic.Brod
   alias BrodMimic.Client, as: BrodClient
@@ -30,10 +27,7 @@ defmodule BrodMimic.Utils do
   @doc """
   This is equivalent to the `create_topics(hosts, topic_configs, request_configs, [])`
   """
-  @spec create_topics([endpoint()], [topic_config()], %{
-          timeout: :kpro.int32(),
-          validate_only: boolean()
-        }) ::
+  @spec create_topics([endpoint()], [topic_config()], request_configs()) ::
           {:ok, topic_config()} | {:error, any()} | :ok
   def create_topics(hosts, topic_configs, request_configs) do
     create_topics(hosts, topic_configs, request_configs, _conn_cfg = [])
@@ -46,7 +40,7 @@ defmodule BrodMimic.Utils do
   @spec create_topics(
           [endpoint()],
           [topic_config()],
-          %{timeout: :kpro.int32(), validate_only: boolean()},
+          request_configs(),
           conn_config()
         ) ::
           {:ok, Brod.topic_config()} | {:error, any()} | :ok
@@ -649,7 +643,7 @@ defmodule BrodMimic.Utils do
     Enum.map(groups0, fn struct ->
       id = :kpro.find(:group_id, struct)
       type = :kpro.find(:protocol_type, struct)
-      r_brod_cg(id: id, protocol_type: type)
+      brod_cg(id: id, protocol_type: type)
     end)
   end
 

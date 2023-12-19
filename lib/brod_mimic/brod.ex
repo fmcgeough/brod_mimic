@@ -783,12 +783,58 @@ defmodule BrodMimic.Brod do
     BrodTopicSubscriber.start_link(config)
   end
 
-  def create_topics(hosts, topicConfigs, request_configs) do
-    BrodUtils.create_topics(hosts, topicConfigs, request_configs)
+  @doc """
+  Create topics equivalent to `create_topics(host, topic_configs, request_configs, [])`
+  """
+  def create_topics(hosts, topic_configs, request_configs) do
+    BrodUtils.create_topics(hosts, topic_configs, request_configs)
   end
 
-  def create_topics(hosts, topicConfigs, request_configs, options) do
-    BrodUtils.create_topics(hosts, topicConfigs, request_configs, options)
+  @doc """
+  Create topic(s) in Kafka
+
+  - `topic_configs` - List of topic configurations. A topic configuration is a Map
+    (or tuple list for backward compatibility) with the following keys (all of
+    them are required):
+    - `:name` The topic name
+    - `:num_partitions` The number of partitions to create in the topic, or -1
+      if we are either specifying a manual partition assignment or using the
+      default partitions.
+    - `:replication_factor` The number of replicas to create for each partition
+      in the topic, or -1 if we are either specifying a manual partition
+      assignment or using the default replication factor.
+    - `:assignments` The manual partition assignment, or the empty list if we
+      let Kafka automatically assign them. It is a list of maps (or tuple lists)
+      with the following keys: `partition_index` and `broker_ids` (a list of of
+      brokers to place the partition on).
+    - `:configs` The custom topic configurations to set. It is a list of of maps
+      (or tuple lists) with keys `name' and `value'. You can find possible
+      options in the Kafka documentation.
+
+  ## Example:
+
+  ```
+    iex> topic_configs = [
+         %{
+           name: "my_topic",
+           num_partitions: 1,
+           replication_factor: 1,
+           assignments: [],
+           configs: [%{name: "cleanup.policy", value: "compact"}]
+         }
+       ]
+     iex> BrodMimic.Brod.create_topics([{"localhost", 9092}], topic_configs, %{timeout: 1000}, [])
+     :ok
+  ```
+  """
+  @spec create_topics(
+          [endpoint()],
+          [topic_config()],
+          request_configs(),
+          conn_config()
+        ) :: :ok | {:error, any()}
+  def create_topics(hosts, topic_configs, request_configs, options) do
+    BrodUtils.create_topics(hosts, topic_configs, request_configs, options)
   end
 
   def delete_topics(hosts, topics, timeout) do

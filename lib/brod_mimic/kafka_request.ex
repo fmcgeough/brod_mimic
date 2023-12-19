@@ -11,10 +11,7 @@ defmodule BrodMimic.KafkaRequest do
   @type vsn() :: BrodKafkaApis.vsn()
   @type topic_config() :: :kpro.struct()
   @type conn() :: :kpro.connection()
-  @type request_configs() :: %{
-          optional(:timeout) => :kpro.int32(),
-          optional(:validate_only) => boolean()
-        }
+
   @doc """
   Make a produce request, If the first arg is a connection pid, call
   `KafkaApis.pick_version/2` to resolve version
