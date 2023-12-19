@@ -175,7 +175,7 @@ defmodule BrodMimic.ProducerBuffer do
   end
 
   @doc """
-  Reply 'acked` to callers.
+  Reply `acked` to callers
   """
   @spec ack(buf(), reference()) :: buf()
   def ack(buf, ref) do
