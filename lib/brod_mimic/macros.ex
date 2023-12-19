@@ -48,6 +48,23 @@ defmodule BrodMimic.Macros do
       @type offset() :: :kpro.offset()
       @type message() :: :kpro.message()
 
+      @type kpro_req() ::
+              record(:kpro_req,
+                ref: reference(),
+                api: :kpro.api(),
+                vsn: :kpro.vsn(),
+                no_ack: :boolean,
+                msg: iodata() | :kpro.struct()
+              )
+
+      @type kpro_rsp() ::
+              record(:kpro_rsp,
+                ref: false | reference(),
+                api: :kpro.api(),
+                vsn: :kpro.vsn(),
+                msg: binary() | :kpro.struct()
+              )
+
       @type cg() ::
               record(:brod_cg,
                 id: BrodMimic.Brod.group_id(),

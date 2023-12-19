@@ -11,9 +11,6 @@ defmodule BrodMimic.Utils do
   alias BrodMimic.Client, as: BrodClient
   alias BrodMimic.KafkaRequest, as: BrodKafkaRequest
 
-  @type kpro_rsp :: kpro_rsp()
-  @type kpro_req :: kpro_req()
-
   @type req_fun() :: (offset(), :kpro.count() -> :kpro.req())
   @type fetch_fun() ::
           (offset() -> {:ok, {offset(), [Brod.message()]}} | {:error, any()})
