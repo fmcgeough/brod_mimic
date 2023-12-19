@@ -47,6 +47,8 @@ defmodule BrodMimic.ProducerBuffer do
           (pid(), batch(), vsn() -> send_fun_res())
           | {(any(), pid(), batch(), vsn() -> send_fun_res()), any()}
 
+  @type send_action() :: :ok | :retry | {:delay, milli_sec()}
+
   @typedoc """
   - `msg_cnt` - messages in the set
   - `ctime` - time when request was created
@@ -125,6 +127,12 @@ defmodule BrodMimic.ProducerBuffer do
     :erlang.error(:bad_init)
   end
 
+  @doc """
+  Buffer a produce request
+
+  Respond to caller immediately if the buffer limit is not yet reached.
+  """
+  @spec add(buf(), buf_cb(), Brod.batch_input()) :: buf()
   def add(buf(pending: pending) = buf, buf_cb, batch) do
     req =
       req(
@@ -139,6 +147,20 @@ defmodule BrodMimic.ProducerBuffer do
     maybe_buffer(buf(buf, pending: :queue.in(req, pending)))
   end
 
+  @doc """
+  Maybe (if there is any produce requests buffered) send the produce
+  request to Kafka. In case a request has been tried for more maximum allowed
+  times an 'exit' exception is raised.
+  Return `{res, new_buffer}`, where `res` can be:
+
+  - `:ok` There is no more message left to send, or allowed to send due to
+    onwire limit, caller should wait for the next event to trigger a new
+    `maybe_send` call.  Such event can either be a new produce request or
+    a produce response from kafka.
+  - `{:delay, time}` Caller should retry after the returned milli-seconds.
+  - `:retry` Failed to send a batch, caller should schedule a delayed retry.
+  """
+  @spec maybe_send(buf(), pid(), vsn()) :: {send_action(), buf()}
   def maybe_send(buf() = buf, conn, vsn) do
     case take_reqs(buf) do
       false ->
@@ -152,6 +174,10 @@ defmodule BrodMimic.ProducerBuffer do
     end
   end
 
+  @doc """
+  Reply 'acked` to callers.
+  """
+  @spec ack(buf(), reference()) :: buf()
   def ack(buf, ref) do
     ack(buf, ref, -1)
   end
