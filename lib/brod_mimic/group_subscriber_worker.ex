@@ -22,6 +22,7 @@ defmodule BrodMimic.GroupSubscriberWorker do
     commit_fun: :undefined
   )
 
+  @impl BrodMimic.TopicSubscriber
   def init(topic, start_opts) do
     %{
       cb_module: cb_module,
@@ -51,6 +52,7 @@ defmodule BrodMimic.GroupSubscriberWorker do
     {:ok, committed_offsets, state}
   end
 
+  @impl BrodMimic.TopicSubscriber
   def handle_message(_partition, msg, state) do
     r_state(cb_module: cb_module, cb_state: cb_state, commit_fun: commit) = state
 
@@ -70,6 +72,7 @@ defmodule BrodMimic.GroupSubscriberWorker do
     end
   end
 
+  @impl BrodMimic.TopicSubscriber
   def terminate(
         reason,
         r_state(cb_module: cb_module, cb_state: state)

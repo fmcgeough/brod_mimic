@@ -1,6 +1,6 @@
 defmodule BrodMimic.KafkaRequest do
   @moduledoc """
-    Collection of Kafka requests
+    Collection of functions used to build different Kafka requests
   """
   use BrodMimic.Macros
 
@@ -49,6 +49,10 @@ defmodule BrodMimic.KafkaRequest do
     :kpro_req_lib.create_topics(vsn, topic_configs, request_configs)
   end
 
+  @doc """
+  Make a delete_topics request
+  """
+  @spec delete_topics(vsn() | conn(), [topic()], pos_integer()) :: :kpro.req()
   def delete_topics(connection, topics, timeout) when is_pid(connection) do
     vsn = BrodKafkaApis.pick_version(connection, :delete_topics)
 
@@ -59,6 +63,20 @@ defmodule BrodMimic.KafkaRequest do
     :kpro_req_lib.delete_topics(vsn, topics, %{timeout: timeout})
   end
 
+  @doc """
+  Make a fetch request, If the first arg is a connection pid, call
+  `pick_version/2` to resolve version.
+  """
+  @spec fetch(
+          conn(),
+          topic(),
+          partition(),
+          offset(),
+          :kpro.wait(),
+          :kpro.count(),
+          :kpro.count(),
+          :kpro.isolation_level()
+        ) :: :kpro.req()
   def fetch(pid, topic, partition, offset, waitTime, minBytes, maxBytes, isolationLevel) do
     vsn = pick_version(:fetch, pid)
 
@@ -70,12 +88,27 @@ defmodule BrodMimic.KafkaRequest do
     })
   end
 
+  @doc """
+  Make a `list_offsets` request message for offset resolution.
+
+  In Kafka protocol, -2 and -1 are semantic 'time' to request for
+  `:earliest` and `:latest` offsets.
+
+  In brod implementation, -2, -1, `:earliest` and `:latest`
+  are semantic 'offset', this is why often a variable named
+  offset is used as the time argument.
+  """
+  @spec list_offsets(conn(), topic(), partition(), Brod.offset_time()) :: :kpro.req()
   def list_offsets(connection, topic, partition, timeOrSemanticOffset) do
     time = ensure_integer_offset_time(timeOrSemanticOffset)
     vsn = pick_version(:list_offsets, connection)
     :kpro_req_lib.list_offsets(vsn, topic, partition, time)
   end
 
+  @doc """
+  Make a metadata request
+  """
+  @spec metadata(vsn() | conn(), :all | [topic()]) :: :kpro.req()
   def metadata(connection, topics) when is_pid(connection) do
     vsn = BrodKafkaApis.pick_version(connection, :metadata)
 
@@ -86,6 +119,12 @@ defmodule BrodMimic.KafkaRequest do
     :kpro_req_lib.metadata(vsn, topics)
   end
 
+  @doc """
+  Make a offset fetch request.
+
+  _Empty topics list only works for kafka 0.10.2.0 or later_
+  """
+  @spec offset_fetch(conn(), Brod.group_id(), [{topic(), [partition()]}]) :: :kpro.req()
   def offset_fetch(connection, group_id, topics0) do
     topics =
       Enum.map(topics0, fn {topic, partitions} ->
@@ -105,19 +144,35 @@ defmodule BrodMimic.KafkaRequest do
     :kpro.make_request(:offset_fetch, vsn, body)
   end
 
+  @doc """
+  Make a `list_groups` request
+  """
+  @spec list_groups(conn()) :: :kpro.req()
   def list_groups(connection) do
     vsn = pick_version(:list_groups, connection)
     :kpro.make_request(:list_groups, vsn, [])
   end
 
+  @doc """
+  Make a `join_group` request.
+  """
+  @spec join_group(conn(), :kpro.struct()) :: :kpro.req()
   def join_group(conn, fields) do
     make_req(:join_group, conn, fields)
   end
 
+  @doc """
+  Make a `sync_group` request.
+  """
+  @spec sync_group(conn(), :kpro.struct()) :: :kpro.req()
   def sync_group(conn, fields) do
     make_req(:sync_group, conn, fields)
   end
 
+  @doc """
+  Make a `offset_commit` request
+  """
+  @spec offset_commit(conn(), :kpro.struct()) :: :kpro.req()
   def offset_commit(conn, fields) do
     make_req(:offset_commit, conn, fields)
   end

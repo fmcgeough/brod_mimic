@@ -69,6 +69,8 @@ defmodule BrodMimic.GroupSubscriberv2 do
   @type state() :: term()
   @type member_id() :: Brod.group_member_id()
   @type reason() :: term()
+  @type worker() :: pid()
+  @type workers() :: %{Brod.topic_partition() => worker()}
 
   # Callbacks
   @callback init(init_info(), cb_config()) :: {:ok, state()}
@@ -79,18 +81,48 @@ defmodule BrodMimic.GroupSubscriberv2 do
   @callback get_committed_offset(cb_config(), topic(), partition()) ::
               {:ok, offset() | {:begin_offset, Brod.offset_time()}} | :undefined
 
-  # Assign partitions (in case `partition_assignment_strategy' is set
-  # for `callback_implemented' in group config).
+  # Assign partitions (in case `partition_assignment_strategy` is set
+  # for `callback_implemented` in group config).
   @callback assign_partitions(cb_config(), [Brod.group_member()], [Brod.topic_partition()]) :: [
               {member_id(), [Brod.partition_assignment()]}
             ]
   @callback terminate(reason(), state()) :: any()
   @optional_callbacks assign_partitions: 3, get_committed_offset: 3, terminate: 2
 
+  @doc """
+  Start (link) a group subscriber.
+
+  Possible `config` keys:
+
+  - `:client`: Client ID (or pid, but not recommended) of the brod client.
+    Mandatory
+  - `:group_id`: Consumer group ID which should be unique per Kafka cluster.
+    Mandatory
+  - `:topics`: Predefined set of topic names to join the group. Mandatory. _The
+    group leader member will collect topics from all members and assign all
+    collected topic-partitions to members in the group. i.e. members can join
+    with arbitrary set of topics_.
+  - `:cb_module`: Callback module which should have the callback functions
+    implemented for message processing. Mandatory
+  - `:group_config`: For group coordinator, see
+    `BrodMimic.GroupCoordinator.start_link/6`. Optional
+  - `:consumer_config`: For partition consumer,
+    `BrodMimic.TopicSubscriber.start_link/6`. Optional
+  - `:message_type`: The type of message that is going to be handled by the
+      callback module. Can be either message or message set. Optional, defaults
+      to `:message`
+  - `:init_data`: The `term()` that is going to be passed to `cb_module.init/2`
+    when initializing the subscriber. Optional, defaults to `:undefined`
+  """
+  @spec start_link(subscriber_config()) :: {:ok, pid()} | {:error, any()}
   def start_link(config) do
     GenServer.start_link(BrodMimic.GroupSubscriberv2, config, [])
   end
 
+  @doc """
+  Stop group subscriber, wait for pid `:DOWN` before return
+  """
+  @spec stop(pid()) :: :ok
   def stop(pid) do
     mref = Process.monitor(pid)
     Process.unlink(pid)
@@ -102,18 +134,34 @@ defmodule BrodMimic.GroupSubscriberv2 do
     end
   end
 
+  @doc """
+  Commit offset for a topic-partition, but don't commit it to
+  Kafka. This is an asynchronous call
+  """
+  @spec ack(pid(), topic(), partition(), offset()) :: :ok
   def ack(pid, topic, partition, offset) do
     GenServer.cast(pid, {:ack_offset, topic, partition, offset})
   end
 
+  @doc """
+  Ack offset for a topic-partition. This is an asynchronous call
+  """
+  @spec commit(pid(), topic(), partition(), offset()) :: :ok
   def commit(pid, topic, partition, offset) do
     GenServer.cast(pid, {:commit_offset, topic, partition, offset})
   end
 
+  @doc """
+  Returns a map from Topic-Partitions to worker PIDs for the
+  given group.  Useful for health checking.  This is a synchronous
+  call.
+  """
+  @spec get_workers(pid()) :: workers()
   def get_workers(pid) do
     get_workers(pid, :infinity)
   end
 
+  @spec get_workers(pid(), timeout()) :: workers()
   defp get_workers(pid, timeout) do
     GenServer.call(pid, :get_workers, timeout)
   end

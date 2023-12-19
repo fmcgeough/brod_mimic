@@ -2,6 +2,7 @@ defmodule BrodMimic.KafkaApis do
   @moduledoc """
   Wrapper around Kafka APIs
   """
+  use GenServer
 
   require Logger
   require Record
@@ -62,13 +63,14 @@ defmodule BrodMimic.KafkaApis do
   end
 
   ### _* gen_server callbacks =====================================================
-
+  @impl GenServer
   def init([]) do
     :brod_kafka_apis = :ets.new(:brod_kafka_apis, [:named_table, :public])
 
     {:ok, r_state()}
   end
 
+  @impl GenServer
   def handle_info({:DOWN, _mref, :process, conn, _reason}, state) do
     _ = :ets.delete(:brod_kafka_apis, conn)
     {:noreply, state}
@@ -79,6 +81,7 @@ defmodule BrodMimic.KafkaApis do
     {:noreply, state}
   end
 
+  @impl GenServer
   def handle_cast({:monitor_connection, conn}, state) do
     Process.monitor(conn)
     {:noreply, state}
@@ -89,6 +92,7 @@ defmodule BrodMimic.KafkaApis do
     {:noreply, state}
   end
 
+  @impl GenServer
   def handle_call(:stop, from, state) do
     GenServer.reply(from, :ok)
     {:stop, :normal, state}
@@ -98,10 +102,12 @@ defmodule BrodMimic.KafkaApis do
     {:reply, {:error, {:unknown_call, call}}, state}
   end
 
+  @impl GenServer
   def code_change(_oldvsn, state, _extra) do
     {:ok, state}
   end
 
+  @impl GenServer
   def terminate(_reason, _state) do
     :ok
   end
