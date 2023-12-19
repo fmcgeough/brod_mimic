@@ -34,7 +34,8 @@ defmodule BrodMimic.MixProject do
       {:kafka_protocol, "~> 4.1"},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev], runtime: false},
-      {:ex_doc, "~> 0.30.9", only: :dev, runtime: false}
+      {:ex_doc, "~> 0.30.9", only: :dev, runtime: false},
+      {:doctor, "~> 0.21.0", only: :dev, runtime: false}
     ]
   end
 end

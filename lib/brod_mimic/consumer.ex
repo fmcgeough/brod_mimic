@@ -115,6 +115,15 @@ defmodule BrodMimic.Consumer do
           )
 
   @doc """
+  Equivalent to `start_link/5` with the `debug` parameter set to an empty List
+  """
+  @spec start_link(Brod.bootstrap() | pid(), topic(), partition(), config()) ::
+          {:ok, pid()} | {:error, any()}
+  def start_link(bootstrap, topic, partition, config) do
+    start_link(bootstrap, topic, partition, config, [])
+  end
+
+  @doc """
   Start (link) a partition consumer
 
   ## Parameters
@@ -133,19 +142,17 @@ defmodule BrodMimic.Consumer do
           debug()
         ) ::
           {:ok, pid()} | {:error, any()}
-  def start_link(bootstrap, topic, partition, config) do
-    start_link(bootstrap, topic, partition, config, [])
-  end
-
   def start_link(bootstrap, topic, partition, config, debug) do
     args = {bootstrap, topic, partition, config}
     GenServer.start_link(__MODULE__, args, [{:debug, debug}])
   end
 
+  @spec stop(pid()) :: :ok | {:error, any()}
   def stop(pid) do
     safe_gen_call(pid, :stop, :infinity)
   end
 
+  @spec stop_maybe_kill(pid(), timeout()) :: :ok
   def stop_maybe_kill(pid, timeout) do
     GenServer.call(pid, :stop, timeout)
   catch
@@ -157,6 +164,7 @@ defmodule BrodMimic.Consumer do
       :ok
   end
 
+  @impl GenServer
   def init({bootstrap, topic, partition, config}) do
     Process.flag(:trap_exit, true)
 
@@ -207,6 +215,17 @@ defmodule BrodMimic.Consumer do
      )}
   end
 
+  @doc """
+  Subscribe or resubscribe on messages from a partition.
+
+  Caller may specify a set of options extending consumer config.
+  It is possible to update parameters such as `max_bytes` and
+  `max_wait_time`, or the starting point (`begin_offset`) of the data
+  stream. Note that you currently cannot update `isolation_level`.
+
+  Possible options are documented at `start_link/5`.
+  """
+  @spec subscribe(pid(), pid(), config()) :: :ok | {:error, any()}
   def subscribe(pid, subscriber_pid, consumer_options) do
     safe_gen_call(pid, {:subscribe, subscriber_pid, consumer_options}, :infinity)
   end
@@ -235,6 +254,7 @@ defmodule BrodMimic.Consumer do
     GenServer.call(pid, :get_connection)
   end
 
+  @impl GenServer
   def handle_info(
         :init_connection,
         state(subscriber: subscriber) = state0
@@ -283,6 +303,7 @@ defmodule BrodMimic.Consumer do
     {:noreply, state}
   end
 
+  @impl GenServer
   def handle_call(:get_connection, _from, state(connection: c) = state) do
     {:reply, c, state}
   end
@@ -331,6 +352,7 @@ defmodule BrodMimic.Consumer do
     {:reply, {:error, {:unknown_call, call}}, state}
   end
 
+  @impl GenServer
   def handle_cast({:ack, offset}, state(pending_acks: pending_acks) = state0) do
     new_pending_acks = handle_ack(pending_acks, offset)
     state1 = state(state0, pending_acks: new_pending_acks)
@@ -346,6 +368,7 @@ defmodule BrodMimic.Consumer do
     {:noreply, state}
   end
 
+  @impl GenServer
   def terminate(
         reason,
         state(bootstrap: bootstrap, topic: topic, partition: partition, connection: connection)

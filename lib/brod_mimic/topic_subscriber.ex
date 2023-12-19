@@ -159,6 +159,7 @@ defmodule BrodMimic.TopicSubscriber do
     GenServer.cast(pid, {:ack, partition, offset})
   end
 
+  @impl GenServer
   def init(config) do
     defaults = %{
       message_type: :message_set,
@@ -196,6 +197,7 @@ defmodule BrodMimic.TopicSubscriber do
     {:ok, state}
   end
 
+  @impl GenServer
   def handle_info({_consumer_pid, kafka_message_set() = msg_set}, state0) do
     state = handle_consumer_delivery(msg_set, state0)
     {:noreply, state}
@@ -289,10 +291,12 @@ defmodule BrodMimic.TopicSubscriber do
     {:noreply, state}
   end
 
+  @impl GenServer
   def handle_call(call, _from, state) do
     {:reply, {:error, {:unknown_call, call}}, state}
   end
 
+  @impl GenServer
   def handle_cast({:ack, partition, offset}, state) do
     ack_ref = {partition, offset}
     new_state = handle_ack(ack_ref, state)
@@ -307,10 +311,12 @@ defmodule BrodMimic.TopicSubscriber do
     {:noreply, state}
   end
 
+  @impl GenServer
   def code_change(_old_vsn, state, _extra) do
     {:ok, state}
   end
 
+  @impl GenServer
   def terminate(
         reason,
         r_state(cb_module: cb_module, cb_state: cb_state)
