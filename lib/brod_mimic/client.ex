@@ -40,8 +40,6 @@ defmodule BrodMimic.Client do
   @default_get_metadata_timeout_seconds 5
 
   @type endpoint() :: Brod.endpoint()
-  @type client() :: Brod.client()
-  @type client_id() :: Brod.client_id()
 
   @typedoc """
   Proplist with configuration information for client

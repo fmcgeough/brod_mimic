@@ -69,6 +69,23 @@ defmodule BrodMimic.Macros do
       """
       @type message() :: :kpro.message()
 
+      @typedoc """
+      A client is identified using a unique atom
+      """
+      @type client_id() :: atom()
+
+      @typedoc """
+      A client is started with an atom to give it a unique GenServer name
+
+      Thereafter its possible to pass either the pid returned by starting the
+      GenServer or the atom (this module does a lookup for pid if atom is
+      given).
+      """
+      @type client() :: client_id() | pid()
+
+      @typedoc """
+      Record defining a Kafka request for protocol library
+      """
       @type kpro_req() ::
               record(:kpro_req,
                 ref: reference(),
@@ -78,6 +95,9 @@ defmodule BrodMimic.Macros do
                 msg: iodata() | :kpro.struct()
               )
 
+      @typedoc """
+      Record defining a Kafka response for protocol library
+      """
       @type kpro_rsp() ::
               record(:kpro_rsp,
                 ref: false | reference(),
@@ -86,6 +106,9 @@ defmodule BrodMimic.Macros do
                 msg: binary() | :kpro.struct()
               )
 
+      @typedoc """
+      Record defining consumer group data (id and protocol type)
+      """
       @type cg() ::
               record(:brod_cg,
                 id: BrodMimic.Brod.group_id(),

@@ -55,15 +55,6 @@ defmodule BrodMimic.Brod do
   @type batch_input() :: [msg_input()]
 
   @type msg_ts() :: :kpro.msg_ts()
-  @type client_id() :: atom()
-  @typedoc """
-  A client is started with an atom to give it a unique GenServer name
-
-  Thereafter its possible to pass either the pid returned by starting the
-  GenServer or the atom (this module does a lookup for pid if atom is
-  given).
-  """
-  @type client() :: client_id() | pid()
   @type client_config() :: BrodMimic.Client.config()
   # default client config
   @type bootstrap() :: [endpoint()] | {[endpoint()], client_config()}
