@@ -78,6 +78,15 @@ iex> BrodMimic.Supervisor3.state_info(pid)
 ]
 ```
 
+This is much clearer than trying to use `:sys.get_state/1` which leaves out
+the keys:
+
+```
+iex> :sys.get_state(pid)
+{:state, {:local, :brod_sup}, :one_for_one, [], :undefined, 0, 1, [],
+ BrodMimic.Sup, :clients_sup}
+```
+
 ### Records
 
 The `brod` code base makes heavy use of `Record`. This is not something that is
