@@ -296,6 +296,14 @@ defmodule BrodMimic.Supervisor3 do
     cast(supervisor, {:try_again_restart, child, reason})
   end
 
+  @doc """
+  Return the state stored in the proces as a Keyword list
+  """
+  @spec state_info(sup_ref) :: keyword()
+  def state_info(supervisor) do
+    call(supervisor, :state_info)
+  end
+
   defp cast(supervisor, req) do
     GenServer.cast(supervisor, req)
   end
@@ -434,6 +442,11 @@ defmodule BrodMimic.Supervisor3 do
       what ->
         {:error, what}
     end
+  end
+
+  def handle_call(:state_info, _from, state) do
+    data = state(state)
+    {:reply, data, state}
   end
 
   def handle_call({:start_child, e_args}, _from, state)
