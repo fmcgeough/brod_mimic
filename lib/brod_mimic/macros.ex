@@ -43,9 +43,30 @@ defmodule BrodMimic.Macros do
 
       defrecordp(:brod_cg, id: :undefined, protocol_type: :undefined)
 
+      @typedoc """
+      Kafka topics are the categories used to organize messages. Each topic has
+      a name that is unique across the entire Kafka cluster.
+      """
       @type topic() :: :kpro.topic()
+
+      @typedoc """
+      The messages stored for a topic are divided into partitions. A partition is
+      the smallest storage unit that holds a subset of the total messages for a
+      topic.
+      """
       @type partition() :: :kpro.partition()
+
+      @typedoc """
+      Offsets are used to track the progress of a consumer group as it consumes
+      messages from Kafka topics. Each partition of a Kafka topic has its own
+      set of offsets, which indicate the last message that was successfully
+      processed by the consumer group for that partition
+      """
       @type offset() :: :kpro.offset()
+
+      @typedoc """
+      A record with offset, key, value, ts_type, ts, and headers.
+      """
       @type message() :: :kpro.message()
 
       @type kpro_req() ::
@@ -99,6 +120,9 @@ defmodule BrodMimic.Macros do
                 error_desc: String.t()
               )
 
+      @typedoc """
+      A record with topic, partition, high_wm_offset (max offset of the partition), and messages.
+      """
       @type message_set ::
               record(:kafka_message_set,
                 topic: topic(),

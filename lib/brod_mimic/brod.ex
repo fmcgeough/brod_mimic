@@ -101,6 +101,30 @@ defmodule BrodMimic.Brod do
           | :size_stat_window
   @type consumer_options() :: [{consumer_option(), integer()}]
   @type connection() :: :kpro.connection()
+
+  @typedoc """
+  Connection configuration that will be passed to kpro calls.
+
+  This is defined in the `kafka_protocol` library.
+
+  It is a tuple list or map with following keys (all of them are optional):
+
+  - `:connection_timeout`: timeout (in ms) for the initial connection, defaults to 5 seconds
+  - `:client_id`: string representing the client in Kafka, defaults to "kpro-client"
+  - `:extra_sock_opts`: extra options passed down to `gen_tpc`, defaults to []
+  - `:debug`: debugging mode, defaults to false
+  - `:nolink`: whether not to link the `kpro_connection` process to the caller, defaults to false
+  - `:query_api_version`: whether to query Kafka for supported API versions at the beginning,
+    so that `kpro` can use newer APIs; the `ApiVersionRequest` was introduced in Kafka 0.10,
+    so set this to false when using an older version of Kafka; defaults to true
+  - `:request_timeout`: timeout (in ms) for the actual request, defaults to 4 minutes
+  - `:sasl`: configuration of SASL authentication, can be either `{mechanism, username, password}`
+     or `{mechanism, file}` or `:undefined`, where `mechanism` is `:plain | :scram_sha_256 | :scram_sha_512`,
+     and `file` is the path to a text file which contains two lines, first line for username
+     and second line for password; defaults to `:undefined`
+  - `:ssl`: whether to use SSL, defaults to `false`, more information can be found in
+     [brod documentation](https://hexdocs.pm/brod/authentication.html).
+  """
   @type conn_config() :: [{atom(), term()}] | :kpro.conn_config()
 
   ## consumer groups
@@ -280,9 +304,9 @@ defmodule BrodMimic.Brod do
      - `request_timeout` (optional, default=`240_000`, constraint: >= `1_000`).
        Timeout when waiting for a response, connection restart when timed out.
      - `query_api_versions` (optional, default=true). Must be set to false to
-       work with kafka versions prior to 0.10, When set to `true', at connection
+       work with kafka versions prior to 0.10, When set to `true`, at connection
        start, BrodMimic will send a query request to get the broker supported API
-       version ranges. When set to 'false`, BrodMimic will always use the lowest
+       version ranges. When set to `false`, BrodMimic will always use the lowest
        supported API version when sending requests to Kafka. Supported API
        version ranges can be found in:
        `BrodMimic.KafkaApis.supported_versions/1`
@@ -666,7 +690,7 @@ defmodule BrodMimic.Brod do
   Acknowledge that one or more messages have been processed.
 
   `BrodMimic.Consumer` sends message-sets to the subscriber process, and keep
-   the messages in a 'pending' queue. The subscriber may choose to ack any
+   the messages in a `pending` queue. The subscriber may choose to ack any
    received offset. Acknowledging a greater offset will automatically
    acknowledge the messages before this offset. For example, if message `[1, 2,
    3, 4]` have been sent to (as one or more message-sets) to the subscriber, the
@@ -681,8 +705,8 @@ defmodule BrodMimic.Brod do
 
    Note, there is no range check done for the acknowledging offset, meaning if
    offset `[m, n]` are pending to be acknowledged, acknowledging with `offset >
-   n' will cause all offsets to be removed from the pending queue, and
-   acknowledging with `offset < m' has no effect.
+   n` will cause all offsets to be removed from the pending queue, and
+   acknowledging with `offset < m` has no effect.
 
    Use this function only with plain partition subscribers (i.e., when you
    manually call `subscribe/5`). Behaviours like `BrodMimic.TopicSubscriber`
@@ -852,7 +876,7 @@ defmodule BrodMimic.Brod do
       with the following keys: `partition_index` and `broker_ids` (a list of of
       brokers to place the partition on).
     - `:configs` The custom topic configurations to set. It is a list of of maps
-      (or tuple lists) with keys `name' and `value'. You can find possible
+      (or tuple lists) with keys `name` and `value`. You can find possible
       options in the Kafka documentation.
 
   ## Example:

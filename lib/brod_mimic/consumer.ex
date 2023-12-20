@@ -86,8 +86,14 @@ defmodule BrodMimic.Consumer do
     isolation_level: :undefined
   )
 
+  @typedoc """
+  Type definition for the Record `:pending_acks` used internally
+  """
   @type pending_acks() :: record(:pending_acks, count: integer(), bytes: integer(), queue: any())
 
+  @typedoc """
+  Type definition for the Record `:state` used as this module's GenServer state
+  """
   @type state() ::
           record(:state,
             bootstrap: pid() | Brod.bootstrap(),
