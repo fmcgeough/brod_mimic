@@ -58,7 +58,7 @@ Generally, this is to deal with Erlang syntax that is extremely awkward and hard
 to read in Elixir. It was also done, at times, to resolve credo issues (function
 too complex, etc).
 
-There are some instances where debugging functions are introduced. For example,
+There are also some instances where debugging functions are introduced. For example,
 `BrodMimic.Supervisor3` has a `state_info/1` function. This returns the internal
 state (a Record) as a Keyword list. For example:
 
