@@ -61,6 +61,11 @@ approach requires a definition of the record itself (using `defrecord`) and then
 a separate definition of the record type information (see
 https://hexdocs.pm/elixir/1.12.3/Record.html#module-types).
 
+This library defines Records using `defrecordp`. This keeps the somewhat useless
+information about the Record from showing up in the generated doc. If a type is
+associated with a Record its documentation is generated. That shows the fields in
+the Record and the field's type.
+
 The `brod` code base uses its own `Supervisor` implementation. This has been
 ported over to Elixir.
 
