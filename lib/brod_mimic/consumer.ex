@@ -92,7 +92,7 @@ defmodule BrodMimic.Consumer do
   @type pending_acks() :: record(:pending_acks, count: integer(), bytes: integer(), queue: any())
 
   @typedoc """
-  Type definition for the Record `:state` used as this module's GenServer state
+  Type definition for the `Record` used for `BrodMimic.Consumer` GenServer state
   """
   @type state() ::
           record(:state,

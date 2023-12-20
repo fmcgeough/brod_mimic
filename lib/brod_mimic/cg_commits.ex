@@ -44,6 +44,10 @@ defmodule BrodMimic.CgCommits do
           group_id() | topic() | retention() | offsets() | BrodGroupCoordinator.protocol_name()
   @type group_input() :: [{prop_key(), prop_val()}]
   @type pending_sync() :: :undefined | GenServer.from()
+
+  @typedoc """
+  Type definition for the `Record` used for `BrodMimic.CgCommits` GenServer state
+  """
   @type state() ::
           record(:state,
             client: Brod.client(),
@@ -150,12 +154,12 @@ defmodule BrodMimic.CgCommits do
   @impl GenServer
   def init({client, group_input}) do
     :ok = BrodUtils.assert_client(client)
+
     group_id = :proplists.get_value(:id, group_input)
     :ok = BrodUtils.assert_group_id(group_id)
+
     topic = :proplists.get_value(:topic, group_input)
-
     protocol_name = :proplists.get_value(:protocol, group_input)
-
     retention = :proplists.get_value(:retention, group_input)
     offsets = :proplists.get_value(:offsets, group_input)
 
@@ -166,24 +170,9 @@ defmodule BrodMimic.CgCommits do
       {:rejoin_delay_seconds, 2}
     ]
 
-    {:ok, pid} =
-      BrodGroupCoordinator.start_link(
-        client,
-        group_id,
-        [topic],
-        config,
-        __MODULE__,
-        self()
-      )
+    {:ok, pid} = BrodGroupCoordinator.start_link(client, group_id, [topic], config, __MODULE__, self())
 
-    state =
-      state(
-        client: client,
-        group_id: group_id,
-        coordinator: pid,
-        topic: topic,
-        offsets: offsets
-      )
+    state = state(client: client, group_id: group_id, coordinator: pid, topic: topic, offsets: offsets)
 
     {:ok, state}
   end
@@ -353,8 +342,9 @@ defmodule BrodMimic.CgCommits do
 
   # I am the current leader because I am assigning partitions.
   # My member ID should be positioned at the head of the member list.
-  @spec assign_all_to_self([Brod.group_member()], [{topic(), partition()}]) ::
-          [{member_id(), [Brod.partition_assignment()]}]
+  @spec assign_all_to_self([Brod.group_member()], [{topic(), partition()}]) :: [
+          {member_id(), [Brod.partition_assignment()]}
+        ]
   defp assign_all_to_self([{my_member_id, _} | members], topic_partitions) do
     groupped = BrodUtils.group_per_key(topic_partitions)
 

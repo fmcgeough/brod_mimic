@@ -42,6 +42,59 @@ defmodule BrodMimic.Client do
   @type endpoint() :: Brod.endpoint()
   @type client() :: Brod.client()
   @type client_id() :: Brod.client_id()
+
+  @typedoc """
+  Proplist with configuration information for client
+
+  ## Keys
+
+  - `:restart_delay_seconds` (optional, default=10).  How long to wait
+    between attempts to restart `BrodMimic.Client` process when it crashes
+  - `:get_metadata_timeout_seconds` (optional, default=5) Return `{:error,
+    timeout}` from `BrodMimic.Client` `get_xxx` calls if responses for APIs such as
+    `metadata`, `find_coordinator` are not received in time.
+  - `:reconnect_cool_down_seconds` (optional, default=1). Delay this
+    configured number of seconds before retrying to establish a new
+    connection to the Kafka partition leader.
+  - `:allow_topic_auto_creation` (optional, default=true). By default, brod
+    respects what is configured in the broker about topic auto-creation. i.e.
+    whether `auto.create.topics.enable` is set in the broker configuration.
+    However if `allow_topic_auto_creation` is set to `false` in client
+    config, BrodMimic will avoid sending metadata requests that may cause an
+    auto-creation of the topic regardless of what broker config is.
+  - `:auto_start_producers` (optional, default=false).  If true, BrodMimic
+    client will spawn a producer automatically when user is trying to call
+    `produce` but did not call `BrodMimic.Brod.start_producer` explicitly. Can be
+    useful for applications which don't know beforehand which topics they
+    will be working with.
+  - `:default_producer_config` (optional, default=`[]`).  Producer configuration
+    to use when `auto_start_producers` is true. See
+    `BrodMimic.Producer.start_link/4` for details about producer config.
+    Connection options can be added to the same proplist. See
+    `kpro_connection.erl` in `kafka_protocol` for the details.
+  - `:ssl` (optional, default=false). `true | false | ssl:ssl_option()` `true`
+    is translated to `[]` as `ssl:ssl_option()` i.e. all default.
+  - `:sasl` (optional, default=`:undefined`).  Credentials for SASL/Plain
+    authentication. `{mechanism(), filename}` or `{mechanism(), user_name,
+    password}` where mechanism can be atoms: `:plain` (for "PLAIN"),
+    `:scram_sha_256` (for "SCRAM-SHA-256") or `:scram_sha_512` (for
+    SCRAM-SHA-512). `filename` should be a file consisting two lines, first
+    line is the username and the second line is the password. Both
+    `user_name` and `password` should be `String.t() | binary()`
+  - `:connect_timeout` (optional, default=`5_000`). Timeout when trying to
+    connect to an endpoint.
+  - `:request_timeout` (optional, default=`240_000`, constraint: >= `1_000`).
+    Timeout when waiting for a response, connection restart when timed out.
+  - `:query_api_versions` (optional, default=true). Must be set to false to
+    work with Kafka versions prior to 0.10, When set to `true`, at connection
+    start, BrodMimic will send a query request to get the broker supported API
+    version ranges. When set to `false`, BrodMimic will always use the lowest
+    supported API version when sending requests to Kafka. Supported API
+    version ranges can be found in:
+    `BrodMimic.KafkaApis.supported_versions/1`
+  - `:extra_sock_opts` (optional, default=[]). Extra socket options to tune
+    socket performance. e.g. `[{Bitwise.bsl(sndbuf, 1, 20}]`. [More info](http://erlang.org/doc/man/gen_tcp.html#type-option).
+  """
   @type config() :: :proplists.proplist()
   @type group_id() :: Brod.group_id()
 
@@ -76,6 +129,9 @@ defmodule BrodMimic.Client do
   @type conn :: record(:conn, endpoint: endpoint(), pid: connection() | dead_conn())
 
   @type conn_state() :: conn()
+  @typedoc """
+  Type definition for the `Record` used for `BrodMimic.Client` GenServer state
+  """
   @type state ::
           record(:state,
             client_id: client_id(),
@@ -206,7 +262,7 @@ defmodule BrodMimic.Client do
   end
 
   @doc """
-  Get the connection to kafka broker which is a leader for given topic-partition
+  Get the connection to Kafka broker which is a leader for given topic-partition
 
   Return already established connection towards the leader broker,
   Otherwise a new one is established and cached in client state.
@@ -219,7 +275,7 @@ defmodule BrodMimic.Client do
   end
 
   @doc """
-  Get connection to a kafka broker
+  Get connection to a Kafka broker
 
   Return already established connection towards the broker,
   otherwise a new one is established and cached in client state.

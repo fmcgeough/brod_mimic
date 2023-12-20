@@ -146,6 +146,9 @@ defmodule BrodMimic.Supervisor3 do
             modules: modules()
           )
 
+  @typedoc """
+  Type definition for the `Record` used for `BrodMimic.Supervisor3` GenServer state
+  """
   @type state() ::
           record(:state,
             name: atom(),

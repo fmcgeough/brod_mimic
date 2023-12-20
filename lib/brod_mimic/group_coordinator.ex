@@ -67,7 +67,9 @@ defmodule BrodMimic.GroupCoordinator do
   @type topic_partition_list() :: [Brod.topic_partition()]
 
   @typedoc """
-  GenServer state
+  Type definition for the `Record` used for `BrodMimic.GroupCoordinator` GenServer state
+
+  ## Keys
 
   - group_member_id -  Group member ID, which should be set to empty in the
     first join group request, then a new member id is assigned by the group
