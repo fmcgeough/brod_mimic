@@ -19,7 +19,7 @@ defmodule BrodMimic.Consumer do
   use BrodMimic.Macros
   use GenServer
 
-  import Record, only: [defrecord: 3]
+  import Record, only: [defrecordp: 2]
 
   alias BrodMimic.Brod
   alias BrodMimic.Client, as: BrodClient
@@ -59,9 +59,9 @@ defmodule BrodMimic.Consumer do
   @type config() :: Brod.consumer_config()
   @type debug() :: GenServer.debug()
 
-  defrecord(:pending_acks, :pending_acks, count: 0, bytes: 0, queue: :queue.new())
+  defrecordp(:pending_acks, count: 0, bytes: 0, queue: :queue.new())
 
-  defrecord(:state, :state,
+  defrecordp(:state,
     bootstrap: :undefined,
     connection: :undefined,
     topic: :undefined,

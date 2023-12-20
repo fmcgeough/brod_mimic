@@ -4,8 +4,9 @@ defmodule BrodMimic.KafkaApis do
   """
   use GenServer
 
+  import Record, only: [defrecordp: 2]
+
   require Logger
-  require Record
 
   @supported_versions %{
     produce: {0, 5},
@@ -25,7 +26,7 @@ defmodule BrodMimic.KafkaApis do
     delete_topics: {0, 0}
   }
 
-  Record.defrecord(:r_state, :state, [])
+  defrecordp(:state, [])
 
   @type vsn() :: :kpro.vsn()
   @type range() :: {vsn(), vsn()}
@@ -67,7 +68,7 @@ defmodule BrodMimic.KafkaApis do
   def init([]) do
     :brod_kafka_apis = :ets.new(:brod_kafka_apis, [:named_table, :public])
 
-    {:ok, r_state()}
+    {:ok, state()}
   end
 
   @impl GenServer

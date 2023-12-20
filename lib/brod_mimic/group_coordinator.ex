@@ -6,7 +6,7 @@ defmodule BrodMimic.GroupCoordinator do
   use BrodMimic.Macros
   use GenServer
 
-  import Record, only: [defrecord: 2]
+  import Record, only: [defrecordp: 2]
 
   alias BrodMimic.Brod
   alias BrodMimic.Client, as: BrodClient
@@ -22,7 +22,7 @@ defmodule BrodMimic.GroupCoordinator do
   @assignments_received "assignments received:~s"
   @group_member_info "Group member (~s,coor=~p,cb=~p,generation=~p):\n"
 
-  defrecord(:state,
+  defrecordp(:state,
     client: :undefined,
     group_id: :undefined,
     member_id: "",

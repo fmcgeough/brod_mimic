@@ -10,7 +10,7 @@ defmodule BrodMimic.Client do
   use BrodMimic.Macros
   use GenServer
 
-  import Record, only: [defrecord: 2]
+  import Record, only: [defrecordp: 2]
 
   alias BrodMimic.Brod
   alias BrodMimic.ConsumersSup, as: BrodConsumersSup
@@ -23,7 +23,7 @@ defmodule BrodMimic.Client do
   @consumer_supervisor_down "client ~p consumers supervisor down~nreason: ~p"
   @unexpected_info "~p [~p] ~p got unexpected info: ~p"
 
-  defrecord(:state,
+  defrecordp(:state,
     client_id: :undefined,
     bootstrap_endpoints: :undefined,
     meta_conn: :undefined,
@@ -33,6 +33,8 @@ defmodule BrodMimic.Client do
     config: :undefined,
     workers_tab: :undefined
   )
+
+  defrecordp(:conn, endpoint: nil, pid: nil)
 
   @default_reconnect_cool_down_seconds 1
   @default_get_metadata_timeout_seconds 5
@@ -71,7 +73,6 @@ defmodule BrodMimic.Client do
   @type timestamp() ::
           {mega_secs :: non_neg_integer(), secs :: non_neg_integer(), micro_secs :: non_neg_integer()}
   @type dead_conn() :: {:dead_since, timestamp(), any()}
-  defrecord(:conn, endpoint: nil, pid: nil)
   @type conn :: record(:conn, endpoint: endpoint(), pid: connection() | dead_conn())
 
   @type conn_state() :: conn()

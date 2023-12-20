@@ -7,7 +7,7 @@ defmodule BrodMimic.CgCommits do
   use BrodMimic.Macros
   use GenServer
 
-  import Record, only: [defrecord: 3]
+  import Record, only: [defrecordp: 2]
 
   alias BrodMimic.Brod
   alias BrodMimic.GroupCoordinator, as: BrodGroupCoordinator
@@ -16,6 +16,19 @@ defmodule BrodMimic.CgCommits do
 
   require Logger
   require Record
+
+  defrecordp(:state,
+    client: :undefined,
+    group_id: :undefined,
+    member_id: :undefined,
+    generation_id: :undefined,
+    coordinator: :undefined,
+    topic: :undefined,
+    offsets: :undefined,
+    is_elected: false,
+    pending_sync: :undefined,
+    is_done: false
+  )
 
   @partitions_not_received "Partitions ~p are not received in assignment, There is probably another active group member subscribing to topic ~s, stop it and retry"
   @nonexistent_partitions "Nonexisting partitions in input: ~p"
@@ -30,25 +43,20 @@ defmodule BrodMimic.CgCommits do
   @type prop_val() ::
           group_id() | topic() | retention() | offsets() | BrodGroupCoordinator.protocol_name()
   @type group_input() :: [{prop_key(), prop_val()}]
-
-  defrecord(:r_brod_received_assignment, :brod_received_assignment,
-    topic: :undefined,
-    partition: :undefined,
-    begin_offset: :undefined
-  )
-
-  defrecord(:r_state, :state,
-    client: :undefined,
-    group_id: :undefined,
-    member_id: :undefined,
-    generation_id: :undefined,
-    coordinator: :undefined,
-    topic: :undefined,
-    offsets: :undefined,
-    is_elected: false,
-    pending_sync: :undefined,
-    is_done: false
-  )
+  @type pending_sync() :: :undefined | GenServer.from()
+  @type state() ::
+          record(:state,
+            client: Brod.client(),
+            group_id: Brod.group_id(),
+            member_id: :undefined | member_id(),
+            generation_id: :undefined | Brod.group_generation_id(),
+            coordinator: pid(),
+            topic: :undefined | topic(),
+            offsets: :undefined | offsets(),
+            is_elected: boolean(),
+            pending_sync: pending_sync(),
+            is_done: boolean()
+          )
 
   @doc """
   Force commit offsets
@@ -169,7 +177,7 @@ defmodule BrodMimic.CgCommits do
       )
 
     state =
-      r_state(
+      state(
         client: client,
         group_id: group_id,
         coordinator: pid,
@@ -188,7 +196,7 @@ defmodule BrodMimic.CgCommits do
 
   @impl GenServer
   def handle_call(:sync, from, state0) do
-    state1 = r_state(state0, pending_sync: from)
+    state1 = state(state0, pending_sync: from)
     state = maybe_reply_sync(state1)
     {:noreply, state}
   end
@@ -196,7 +204,7 @@ defmodule BrodMimic.CgCommits do
   def handle_call(
         {:assign_partitions, members, topic_partitions},
         _from,
-        r_state(topic: my_topic, offsets: offsets) = state
+        state(topic: my_topic, offsets: offsets) = state
       ) do
     Logger.info("Assigning all topic partitions to self")
 
@@ -221,10 +229,10 @@ defmodule BrodMimic.CgCommits do
     # but discard all other topic-partitions.
     # After all, I will leave group as soon as offsets are committed
     result = assign_all_to_self(members, my_tp)
-    {:reply, result, r_state(state, is_elected: true)}
+    {:reply, result, state(state, is_elected: true)}
   end
 
-  def handle_call(:unsubscribe_all_partitions, _from, r_state() = state) do
+  def handle_call(:unsubscribe_all_partitions, _from, state() = state) do
     # nothing to do, because I do not subscribe to any partition
     {:reply, :ok, state}
   end
@@ -236,7 +244,7 @@ defmodule BrodMimic.CgCommits do
   @impl GenServer
   def handle_cast(
         {:new_assignments, _member_id, generation_id, assignments},
-        r_state(
+        state(
           is_elected: is_leader,
           offsets: offsets_to_commit,
           coordinator: pid,
@@ -251,7 +259,7 @@ defmodule BrodMimic.CgCommits do
 
     groupped0 =
       BrodUtils.group_per_key(
-        fn r_brod_received_assignment(topic: topic, partition: partition, begin_offset: offset) ->
+        fn brod_received_assignment(topic: topic, partition: partition, begin_offset: offset) ->
           {topic, {partition, offset}}
         end,
         assignments
@@ -321,26 +329,26 @@ defmodule BrodMimic.CgCommits do
   end
 
   @impl GenServer
-  def terminate(_reason, r_state()) do
+  def terminate(_reason, state()) do
     :ok
   end
 
   defp set_done(state) do
-    maybe_reply_sync(r_state(state, is_done: true))
+    maybe_reply_sync(state(state, is_done: true))
   end
 
-  defp maybe_reply_sync(r_state(is_done: false) = state) do
+  defp maybe_reply_sync(state(is_done: false) = state) do
     state
   end
 
-  defp maybe_reply_sync(r_state(pending_sync: :undefined) = state) do
+  defp maybe_reply_sync(state(pending_sync: :undefined) = state) do
     state
   end
 
-  defp maybe_reply_sync(r_state(pending_sync: from) = state) do
+  defp maybe_reply_sync(state(pending_sync: from) = state) do
     GenServer.reply(from, :ok)
     Logger.info(fn -> log_string(state, "done\n", []) end)
-    r_state(state, pending_sync: :undefined)
+    state(state, pending_sync: :undefined)
   end
 
   # I am the current leader because I am assigning partitions.
@@ -358,7 +366,7 @@ defmodule BrodMimic.CgCommits do
     ]
   end
 
-  defp log_string(r_state(group_id: group_id), format_string, args) do
+  defp log_string(state(group_id: group_id), format_string, args) do
     :io_lib.format("Group member (~s,coor=~p):\n" <> format_string, [group_id, self() | args])
   end
 end

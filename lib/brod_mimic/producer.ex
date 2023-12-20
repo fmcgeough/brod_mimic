@@ -6,7 +6,7 @@ defmodule BrodMimic.Producer do
   use GenServer
 
   import Kernel, except: [send: 2]
-  import Record, only: [defrecord: 3]
+  import Record, only: [defrecordp: 2]
 
   alias BrodMimic.Brod
   alias BrodMimic.Client, as: BrodClient
@@ -58,19 +58,11 @@ defmodule BrodMimic.Producer do
   @type conn() :: :kpro.connection()
   @type produce_request_error() :: :timeout | {:producer_down, any()}
 
-  defrecord(:r_brod_call_ref, :brod_call_ref,
-    caller: :undefined,
-    callee: :undefined,
-    ref: :undefined
-  )
+  defrecordp(:brod_call_ref, caller: :undefined, callee: :undefined, ref: :undefined)
 
-  defrecord(:r_brod_produce_reply, :brod_produce_reply,
-    call_ref: :undefined,
-    base_offset: :undefined,
-    result: :undefined
-  )
+  defrecordp(:brod_produce_reply, call_ref: :undefined, base_offset: :undefined, result: :undefined)
 
-  defrecord(:r_state, :state,
+  defrecordp(:state,
     client_pid: :undefined,
     topic: :undefined,
     partition: :undefined,
@@ -170,7 +162,7 @@ defmodule BrodMimic.Producer do
   """
   @spec produce_no_ack(pid(), Brod.key(), Brod.value()) :: :ok
   def produce_no_ack(pid, key, value) do
-    call_ref = r_brod_call_ref(caller: :undefined)
+    call_ref = brod_call_ref(caller: :undefined)
     ack_cb = &__MODULE__.do_no_ack/2
     batch = BrodUtils.make_batch_input(key, value)
     Process.send(pid, {:produce, call_ref, batch, ack_cb}, [:noconnect])
@@ -185,16 +177,13 @@ defmodule BrodMimic.Producer do
   @spec produce_cb(pid(), Brod.key(), Brod.value(), :undefined | Brod.produce_ack_cb()) ::
           :ok | {:ok, call_ref()} | {:error, any()}
   def produce_cb(pid, key, value, ack_cb) do
-    call_ref = r_brod_call_ref(caller: self(), callee: pid, ref: mref = Process.monitor(pid))
+    call_ref = brod_call_ref(caller: self(), callee: pid, ref: mref = Process.monitor(pid))
 
     batch = BrodUtils.make_batch_input(key, value)
     Process.send(pid, {:produce, call_ref, batch, ack_cb}, [:noconnect])
 
     receive do
-      r_brod_produce_reply(
-        call_ref: r_brod_call_ref(ref: ^mref),
-        result: :brod_produce_req_buffered
-      ) ->
+      brod_produce_reply(call_ref: brod_call_ref(ref: ^mref), result: :brod_produce_req_buffered) ->
         Process.demonitor(mref, [:flush])
 
         case ack_cb do
@@ -220,13 +209,13 @@ defmodule BrodMimic.Producer do
   @spec sync_produce_request(call_ref(), timeout()) ::
           {:ok, offset()} | {:error, produce_request_error()}
   def sync_produce_request(call_ref, timeout) do
-    r_brod_call_ref(caller: caller, callee: callee, ref: ref) = call_ref
+    brod_call_ref(caller: caller, callee: callee, ref: ref) = call_ref
     ^caller = self()
     mref = Process.monitor(callee)
 
     receive do
-      r_brod_produce_reply(
-        call_ref: r_brod_call_ref(ref: ^ref),
+      brod_produce_reply(
+        call_ref: brod_call_ref(ref: ^ref),
         base_offset: offset,
         result: :brod_produce_req_acked
       ) ->
@@ -287,7 +276,7 @@ defmodule BrodMimic.Producer do
       end
 
     state =
-      r_state(
+      state(
         client_pid: client_pid,
         topic: topic,
         partition: partition,
@@ -302,19 +291,19 @@ defmodule BrodMimic.Producer do
   end
 
   @impl GenServer
-  def handle_info({:delayed_send, msg_ref}, r_state(delay_send_ref: {_tref, msg_ref}) = state0) do
-    state1 = r_state(state0, delay_send_ref: :undefined)
+  def handle_info({:delayed_send, msg_ref}, state(delay_send_ref: {_tref, msg_ref}) = state0) do
+    state1 = state(state0, delay_send_ref: :undefined)
     {:ok, state} = maybe_produce(state1)
     {:noreply, state}
   end
 
-  def handle_info({:delayed_send, _ref}, r_state() = state) do
+  def handle_info({:delayed_send, _ref}, state() = state) do
     # stale delay-send timer expiration, discard
     {:noreply, state}
   end
 
-  def handle_info(:retry, r_state() = state0) do
-    state1 = r_state(state0, retry_tref: :undefined)
+  def handle_info(:retry, state() = state0) do
+    state1 = state(state0, retry_tref: :undefined)
     {:ok, state2} = maybe_reinit_connection(state1)
     # For retry-interval deterministic, produce regardless of connection state.
     # In case it has failed to find a new connection in maybe_reinit_connection/1
@@ -326,30 +315,30 @@ defmodule BrodMimic.Producer do
 
   def handle_info(
         {:DOWN, _monitor_ref, :process, pid, reason},
-        r_state(connection: pid, buffer: buffer0) = state
+        state(connection: pid, buffer: buffer0) = state
       ) do
     case BrodMimic.ProducerBuffer.is_empty(buffer0) do
       true ->
         # no connection restart in case of empty request buffer
-        {:noreply, r_state(state, connection: :undefined, conn_mref: :undefined)}
+        {:noreply, state(state, connection: :undefined, conn_mref: :undefined)}
 
       false ->
         # put sent requests back to buffer immediately after connection down
         # to fail fast if retry is not allowed (reaching max_retries).
         buffer = BrodMimic.ProducerBuffer.nack_all(buffer0, reason)
-        {:ok, new_state} = schedule_retry(r_state(state, buffer: buffer))
-        {:noreply, r_state(new_state, connection: :undefined, conn_mref: :undefined)}
+        {:ok, new_state} = schedule_retry(state(state, buffer: buffer))
+        {:noreply, state(new_state, connection: :undefined, conn_mref: :undefined)}
     end
   end
 
-  def handle_info({:produce, call_ref, batch, ack_cb}, r_state(partition: partition) = state) do
+  def handle_info({:produce, call_ref, batch, ack_cb}, state(partition: partition) = state) do
     buf_cb = make_bufcb(call_ref, ack_cb, partition)
     handle_produce(buf_cb, batch, state)
   end
 
   def handle_info(
         {:msg, pid, kpro_rsp(api: :produce, ref: ref, msg: rsp)},
-        r_state(connection: pid, buffer: buffer) = state
+        state(connection: pid, buffer: buffer) = state
       ) do
     [topic_rsp] = :kpro.find(:responses, rsp)
     topic = :kpro.find(:topic, topic_rsp)
@@ -358,9 +347,9 @@ defmodule BrodMimic.Producer do
     error_code = :kpro.find(:error_code, partition_rsp)
     offset = :kpro.find(:base_offset, partition_rsp)
     # assert
-    # topic = r_state(state, :topic)
+    # topic = state(state, :topic)
     # assert
-    # partition = r_state(state, :partition)
+    # partition = state(state, :partition)
 
     {:ok, new_state} =
       case is_error(error_code) do
@@ -373,43 +362,43 @@ defmodule BrodMimic.Producer do
           end
 
           new_buffer = BrodMimic.ProducerBuffer.nack(buffer, ref, error)
-          schedule_retry(r_state(state, buffer: new_buffer))
+          schedule_retry(state(state, buffer: new_buffer))
 
         false ->
           new_buffer = BrodMimic.ProducerBuffer.ack(buffer, ref, offset)
-          maybe_produce(r_state(state, buffer: new_buffer))
+          maybe_produce(state(state, buffer: new_buffer))
       end
 
     {:noreply, new_state}
   end
 
-  def handle_info(_info, r_state() = state) do
+  def handle_info(_info, state() = state) do
     {:noreply, state}
   end
 
   @impl GenServer
-  def handle_call(:stop, _from, r_state() = state) do
+  def handle_call(:stop, _from, state() = state) do
     {:stop, :normal, :ok, state}
   end
 
-  def handle_call(call, _from, r_state() = state) do
+  def handle_call(call, _from, state() = state) do
     {:reply, {:error, {:unsupported_call, call}}, state}
   end
 
   @impl GenServer
-  def handle_cast(_cast, r_state() = state) do
+  def handle_cast(_cast, state() = state) do
     {:noreply, state}
   end
 
   @impl GenServer
-  def code_change(_old_vsn, r_state() = state, _extra) do
+  def code_change(_old_vsn, state() = state, _extra) do
     {:ok, state}
   end
 
   @impl GenServer
   def terminate(
         reason,
-        r_state(client_pid: client_pid, topic: topic, partition: partition)
+        state(client_pid: client_pid, topic: topic, partition: partition)
       ) do
     case BrodUtils.is_normal_reason(reason) do
       true ->
@@ -423,12 +412,12 @@ defmodule BrodMimic.Producer do
   end
 
   @impl GenServer
-  def format_status(:normal, [_pdict, state = r_state()]) do
+  def format_status(:normal, [_pdict, state = state()]) do
     [{:data, [{'State', state}]}]
   end
 
-  def format_status(:terminate, [_pdict, state = r_state(buffer: buffer)]) do
-    r_state(state, buffer: ProducerBuffer.empty_buffers(buffer))
+  def format_status(:terminate, [_pdict, state = state(buffer: buffer)]) do
+    state(state, buffer: ProducerBuffer.empty_buffers(buffer))
   end
 
   defp make_send_fun(topic, partition, required_acks, ack_timeout, compression) do
@@ -478,24 +467,18 @@ defmodule BrodMimic.Producer do
   end
 
   def do_bufcb({call_ref, ack_cb, partition}, arg) do
-    r_brod_call_ref(caller: pid) = call_ref
+    brod_call_ref(caller: pid) = call_ref
 
     case arg do
       :brod_produce_req_buffered when is_pid(pid) ->
-        reply = r_brod_produce_reply(call_ref: call_ref, result: :brod_produce_req_buffered)
+        reply = brod_produce_reply(call_ref: call_ref, result: :brod_produce_req_buffered)
         Process.send(pid, reply, [:noconnect])
 
       :brod_produce_req_buffered ->
         :ok
 
       {:brod_produce_req_acked, base_offset} when ack_cb === :undefined ->
-        reply =
-          r_brod_produce_reply(
-            call_ref: call_ref,
-            base_offset: base_offset,
-            result: :brod_produce_req_acked
-          )
-
+        reply = brod_produce_reply(call_ref: call_ref, base_offset: base_offset, result: :brod_produce_req_acked)
         Process.send(pid, reply, [:noconnect])
 
       {:brod_produce_req_acked, base_offset} when is_function(ack_cb, 2) ->
@@ -503,29 +486,29 @@ defmodule BrodMimic.Producer do
     end
   end
 
-  def handle_produce(buf_cb, batch, r_state(retry_tref: ref) = state) when is_reference(ref) do
+  def handle_produce(buf_cb, batch, state(retry_tref: ref) = state) when is_reference(ref) do
     do_handle_produce(buf_cb, batch, state)
   end
 
-  def handle_produce(buf_cb, batch, r_state(connection: pid) = state)
+  def handle_produce(buf_cb, batch, state(connection: pid) = state)
       when is_pid(pid) do
     do_handle_produce(buf_cb, batch, state)
   end
 
-  def handle_produce(buf_cb, batch, r_state() = state) do
+  def handle_produce(buf_cb, batch, state() = state) do
     {:ok, new_state} = maybe_reinit_connection(state)
     do_handle_produce(buf_cb, batch, new_state)
   end
 
-  defp do_handle_produce(buf_cb, batch, r_state(buffer: buffer) = state) do
+  defp do_handle_produce(buf_cb, batch, state(buffer: buffer) = state) do
     new_buffer = ProducerBuffer.add(buffer, buf_cb, batch)
-    state1 = r_state(state, buffer: new_buffer)
+    state1 = state(state, buffer: new_buffer)
     {:ok, new_state} = maybe_produce(state1)
     {:noreply, new_state}
   end
 
   defp maybe_reinit_connection(
-         r_state(
+         state(
            client_pid: client_pid,
            connection: old_connection,
            conn_mref: old_conn_mref,
@@ -546,7 +529,7 @@ defmodule BrodMimic.Producer do
         buffer = ProducerBuffer.nack_all(buffer0, :new_leader)
 
         {:ok,
-         r_state(state,
+         state(state,
            connection: connection,
            conn_mref: conn_mref,
            buffer: buffer,
@@ -558,16 +541,16 @@ defmodule BrodMimic.Producer do
         buffer = ProducerBuffer.nack_all(buffer0, :no_leader_connection)
         Logger.warning(:io_lib.format(@failed_init_connection, [reason]), %{domain: [:brod]})
 
-        {:ok, r_state(state, connection: :undefined, conn_mref: :undefined, buffer: buffer)}
+        {:ok, state(state, connection: :undefined, conn_mref: :undefined, buffer: buffer)}
     end
   end
 
-  defp maybe_produce(r_state(retry_tref: ref) = state) when is_reference(ref) do
+  defp maybe_produce(state(retry_tref: ref) = state) when is_reference(ref) do
     {:ok, state}
   end
 
   defp maybe_produce(
-         r_state(
+         state(
            buffer: buffer0,
            connection: connection,
            delay_send_ref: delay_send_ref0,
@@ -578,17 +561,17 @@ defmodule BrodMimic.Producer do
 
     case ProducerBuffer.maybe_send(buffer0, connection, vsn) do
       {:ok, buffer} ->
-        {:ok, r_state(state, buffer: buffer)}
+        {:ok, state(state, buffer: buffer)}
 
       {{:delay, timeout}, buffer} ->
         delay_send_ref = start_delay_send_timer(timeout)
 
-        new_state = r_state(state, buffer: buffer, delay_send_ref: delay_send_ref)
+        new_state = state(state, buffer: buffer, delay_send_ref: delay_send_ref)
 
         {:ok, new_state}
 
       {:retry, buffer} ->
-        schedule_retry(r_state(state, buffer: buffer))
+        schedule_retry(state(state, buffer: buffer))
     end
   end
 
@@ -623,14 +606,9 @@ defmodule BrodMimic.Producer do
     :ok
   end
 
-  defp schedule_retry(
-         r_state(
-           retry_tref: :undefined,
-           retry_backoff_ms: timeout
-         ) = state
-       ) do
+  defp schedule_retry(state(retry_tref: :undefined, retry_backoff_ms: timeout) = state) do
     t_ref = Process.send_after(self(), :retry, timeout)
-    {:ok, r_state(state, retry_tref: t_ref)}
+    {:ok, state(state, retry_tref: t_ref)}
   end
 
   defp schedule_retry(state) do

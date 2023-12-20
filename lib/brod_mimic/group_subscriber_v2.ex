@@ -12,7 +12,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
 
   use GenServer
 
-  import Record, only: [defrecord: 3]
+  import Record, only: [defrecordp: 2]
 
   alias BrodMimic.Brod
   alias BrodMimic.GroupCoordinator, as: BrodGroupCoordinator
@@ -26,13 +26,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
   @commit_flush_failed "group_subscriber_v2 ~s failed to flush commits before termination ~p"
   @terminating_worker "Terminating worker pid=~p"
 
-  defrecord(:r_brod_received_assignment, :brod_received_assignment,
-    topic: :undefined,
-    partition: :undefined,
-    begin_offset: :undefined
-  )
-
-  defrecord(:r_state, :state,
+  defrecordp(:state,
     config: :undefined,
     message_type: :undefined,
     group_id: :undefined,
@@ -208,7 +202,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
       )
 
     state =
-      r_state(
+      state(
         config: config,
         message_type: message_type,
         client: client,
@@ -224,7 +218,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
   def handle_call(
         {:get_committed_offsets, topic_partitions},
         _from,
-        r_state(cb_module: cb_module, cb_config: cb_config) = state
+        state(cb_module: cb_module, cb_config: cb_config) = state
       ) do
     fun = fn tp = {topic, partition} ->
       case cb_module.get_committed_offset(cb_config, topic, partition) do
@@ -240,18 +234,18 @@ defmodule BrodMimic.GroupSubscriberv2 do
     {:reply, {:ok, result}, state}
   end
 
-  def handle_call(:unsubscribe_all_partitions, _from, r_state(workers: workers) = state) do
+  def handle_call(:unsubscribe_all_partitions, _from, state(workers: workers) = state) do
     terminate_all_workers(workers)
-    {:reply, :ok, r_state(state, workers: %{})}
+    {:reply, :ok, state(state, workers: %{})}
   end
 
   def handle_call({:assign_partitions, members, topic_partition_list}, _from, state) do
-    r_state(cb_module: cb_module, cb_config: cb_config) = state
+    state(cb_module: cb_module, cb_config: cb_config) = state
     reply = cb_module.assign_partitions(cb_config, members, topic_partition_list)
     {:reply, reply, state}
   end
 
-  def handle_call(:get_workers, _from, r_state(workers: workers) = state) do
+  def handle_call(:get_workers, _from, state(workers: workers) = state) do
     {:reply, workers, state}
   end
 
@@ -263,7 +257,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
         {:commit_offset, topic, partition, offset},
         state
       ) do
-    r_state(
+    state(
       coordinator: coordinator,
       generation_id: generation_id
     ) = state
@@ -281,23 +275,15 @@ defmodule BrodMimic.GroupSubscriberv2 do
     {:noreply, state}
   end
 
-  def handle_cast(
-        {:new_assignments, member_id, generation_id, assignments},
-        r_state(config: config) = state0
-      ) do
+  def handle_cast({:new_assignments, member_id, generation_id, assignments}, state(config: config) = state0) do
     default_consumer_config = []
     consumer_config = Map.get(config, :consumer_config, default_consumer_config)
-    state1 = r_state(state0, generation_id: generation_id)
+    state1 = state(state0, generation_id: generation_id)
 
     state =
       :lists.foldl(
         fn assignment, state_ ->
-          r_brod_received_assignment(
-            topic: topic,
-            partition: partition,
-            begin_offset: begin_offset
-          ) = assignment
-
+          brod_received_assignment(topic: topic, partition: partition, begin_offset: begin_offset) = assignment
           maybe_start_worker(member_id, consumer_config, topic, partition, begin_offset, state_)
         end,
         state1,
@@ -311,12 +297,12 @@ defmodule BrodMimic.GroupSubscriberv2 do
     {:noreply, state}
   end
 
-  def handle_info({:EXIT, pid, _reason}, r_state(coordinator: pid) = state) do
-    {:stop, {:shutdown, :coordinator_failure}, r_state(state, coordinator: :undefined)}
+  def handle_info({:EXIT, pid, _reason}, state(coordinator: pid) = state) do
+    {:stop, {:shutdown, :coordinator_failure}, state(state, coordinator: :undefined)}
   end
 
   def handle_info({:EXIT, pid, reason}, state) do
-    case (for {tp, pid1} <- Map.to_list(r_state(state, :workers)),
+    case (for {tp, pid1} <- Map.to_list(state(state, :workers)),
               pid1 === pid do
             tp
           end) do
@@ -334,7 +320,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
     {:noreply, state}
   end
 
-  def terminate(_reason, r_state(workers: workers, coordinator: coordinator, group_id: group_id)) do
+  def terminate(_reason, state(workers: workers, coordinator: coordinator, group_id: group_id)) do
     :ok = terminate_all_workers(workers)
     :ok = flush_offset_commits(group_id, coordinator)
   end
@@ -356,7 +342,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
   end
 
   defp handle_worker_failure({topic, partition}, pid, reason, state) do
-    r_state(group_id: group_id) = state
+    state(group_id: group_id) = state
 
     @worker_crashed
     |> :io_lib.format([group_id, topic, partition, pid, reason])
@@ -387,7 +373,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
   end
 
   defp maybe_start_worker(_member_id, consumer_config, topic, partition, begin_offset, state) do
-    r_state(
+    state(
       workers: workers,
       client: client,
       cb_module: cb_module,
@@ -422,7 +408,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
         {:ok, pid} = start_worker(client, topic, message_type, partition, consumer_config, start_options)
 
         new_workers = Map.put(workers, topic_partition, pid)
-        r_state(state, workers: new_workers)
+        state(state, workers: new_workers)
     end
   end
 
@@ -441,7 +427,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
     {:ok, pid}
   end
 
-  defp do_ack(topic, partition, offset, r_state(workers: workers)) do
+  defp do_ack(topic, partition, offset, state(workers: workers)) do
     topic_partition = {topic, partition}
 
     case workers do
