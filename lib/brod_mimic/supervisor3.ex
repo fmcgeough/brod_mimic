@@ -166,6 +166,20 @@ defmodule BrodMimic.Supervisor3 do
   @type restart_child_err() ::
           {:error, :running | :restarting | :not_found | :simple_one_for_one | term()}
 
+  @type count() ::
+          {:specs, non_neg_integer()}
+          | {:active, non_neg_integer()}
+          | {:supervisors, non_neg_integer()}
+          | {:workers, non_neg_integer()}
+  @type prop_list_of_counts() :: [count()]
+  @type init_sup_name() :: sup_name() | :self
+  @type stop_rsn() ::
+          {:shutdown, term()}
+          | {:bad_return, {module(), :init, term()}}
+          | {:bad_start_spec, term()}
+          | {:start_spec, term()}
+          | {:supervisor_data, term()}
+
   @callback init(args :: term()) ::
               {
                 :ok,
@@ -222,18 +236,26 @@ defmodule BrodMimic.Supervisor3 do
     call(supervisor, {:delete_child, name})
   end
 
+  @doc """
+  Returns: `:ok | {:error, reason}`. Note that the child is *always* terminated in some
+  way (maybe killed).
+  """
+  @spec terminate_child(sup_ref(), pid() | child_id()) :: :ok | {:error, :not_found | :simple_one_for_one}
   def terminate_child(supervisor, name) do
     call(supervisor, {:terminate_child, name})
   end
 
+  @spec which_children(sup_ref()) :: [{child_id() | :undefined, child() | :restarting, worker(), modules()}]
   def which_children(supervisor) do
     call(supervisor, :which_children)
   end
 
+  @spec count_children(sup_ref()) :: prop_list_of_counts()
   def count_children(supervisor) do
     call(supervisor, :count_children)
   end
 
+  @spec find_child(sup_ref(), child_id) :: [pid()]
   def find_child(supervisor, name) do
     supervisor
     |> which_children()
@@ -248,6 +270,7 @@ defmodule BrodMimic.Supervisor3 do
     GenServer.call(supervisor, req, :infinity)
   end
 
+  @spec check_childspecs([child_spec()]) :: :ok | {:error, term()}
   def check_childspecs(child_specs) when is_list(child_specs) do
     case check_startspec(child_specs) do
       {:ok, _} ->
@@ -262,6 +285,10 @@ defmodule BrodMimic.Supervisor3 do
     {:error, {:badarg, x}}
   end
 
+  @doc """
+  Called by timer:apply_after from `restart/2`
+  """
+  @spec try_again_restart(sup_ref(), child_id() | pid(), term()) :: :ok
   def try_again_restart(supervisor, child, reason) do
     cast(supervisor, {:try_again_restart, child, reason})
   end
@@ -270,6 +297,7 @@ defmodule BrodMimic.Supervisor3 do
     GenServer.cast(supervisor, req)
   end
 
+  @spec init({init_sup_name(), module(), [term()]}) :: {:ok, state()} | :ignore | {:stop, stop_rsn()}
   def init({sup_name, mod, args}) do
     Process.flag(:trap_exit, true)
 
@@ -791,6 +819,10 @@ defmodule BrodMimic.Supervisor3 do
     {:noreply, state}
   end
 
+  @doc """
+  Terminate this server.
+  """
+  @spec terminate(term(), state()) :: :ok
   def terminate(_reason, state(children: [child]) = state)
       when state(state, :strategy) === :simple_one_for_one do
     terminate_dynamic_children(
@@ -807,6 +839,17 @@ defmodule BrodMimic.Supervisor3 do
     terminate_children(state(state, :children), state(state, :name))
   end
 
+  @doc """
+  Change code for the supervisor.
+
+  Call the new call-back module and fetch the new start specification.
+  Combine the new spec. with the old. If the new start spec. is
+  not valid the code change will not succeed.
+  Use the old Args as argument to Module:init/1.
+  NOTE: This requires that the init function of the call-back module
+       does not have any side effects.
+  """
+  @spec code_change(term(), state(), term()) :: {:ok, state()} | {:error, term()}
   def code_change(_, state, _) do
     case state(state, :module).init(state(state, :args)) do
       {:ok, {sup_flags, start_spec}} ->
