@@ -40,10 +40,7 @@ Klarna Bank AB (publ) (https://www.klarna.com)
 
 ## Porting Notes
 
-There are cases where new functions are introduced in the Elixir version.
-Generally, this is to deal with Erlang syntax that is extremely awkward and hard
-to read in Elixir. It was also done, at times, to resolve credo issues (function
-too complex, etc).
+### Code matches brod
 
 Erlang functions like `:application.get_env` were converted to their Elixir
 equivalents. In most cases the Elixir function has the same name so it's not too
@@ -53,6 +50,35 @@ The intention is to pull available doc from the `brod` code base and incorporate
 it into this library. When the doc is moved over its edited to align with Elixir
 naming and general standards. The goal is to make the doc as accessible as
 possible for Elixir developers.
+
+### New functions
+
+There are cases where new functions are introduced in the Elixir version.
+Generally, this is to deal with Erlang syntax that is extremely awkward and hard
+to read in Elixir. It was also done, at times, to resolve credo issues (function
+too complex, etc).
+
+There are some instances where debugging functions are introduced. For example,
+`BrodMimic.Supervisor3` has a `state_info/1` function. This returns the internal
+state (a Record) as a Keyword list. For example:
+
+```
+iex> pid = Process.whereis(:brod_sup)
+iex> BrodMimic.Supervisor3.state_info(pid)
+[
+  name: {:local, :brod_sup},
+  strategy: :one_for_one,
+  children: [],
+  dynamics: :undefined,
+  intensity: 0,
+  period: 1,
+  restarts: [],
+  module: BrodMimic.Sup,
+  args: :clients_sup
+]
+```
+
+### Records
 
 The `brod` code base makes heavy use of `Record`. This is not something that is
 common in Elixir code bases. In Erlang declaring a record allows defining the
@@ -66,20 +92,16 @@ information about the Record from showing up in the generated doc. If a type is
 associated with a Record its documentation is generated. That shows the fields in
 the Record and the field's type.
 
+### Internal Supervisor
+
 The `brod` code base uses its own `Supervisor` implementation. This has been
 ported over to Elixir.
+
+### Erlang Macros
 
 The `brod` code makes significant use of Erlang macros. The module `BrodMimic.Macros`
 was created to emulate the Erlang macros. In some cases the macro was discarded and
 the code the macro expands to was just put in place in the Elixir version.
-
-Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_doc).
-
-## Notes on `brod` library in Elixir
-
-- No plans (as of now) to convert the files: `brod_cli.erl`, `brod_cli_pipe.erl`. These are utility
-  command line tools. Personally, I've never used them so I didn't think it was worth including
-  that work.
 
 ## Current State
 
@@ -93,6 +115,9 @@ Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_do
   starts the `BrodMimic.KafkaApis` in it's init callback.
   ![Startup](./doc/images/brod_mimic_startup.png)
 - simple publishing appears to work okay
+- No plans (as of now) to convert the files: `brod_cli.erl`, `brod_cli_pipe.erl`. These are utility
+  command line tools. Personally, I've never used them so I didn't think it was worth including
+  that work.
 
 ## Sample Session
 
