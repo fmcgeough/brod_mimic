@@ -84,8 +84,7 @@ defmodule BrodMimic.ProducersSup do
   def post_init({:brod_producers_sup2, client_pid, topic, config}) do
     case BrodClient.get_partitions_count(client_pid, topic) do
       {:ok, partitions_cnt} ->
-        children =
-          Enum.map(0..(partitions_cnt - 1), &producer_spec(client_pid, topic, &1, config))
+        children = Enum.map(0..(partitions_cnt - 1), &producer_spec(client_pid, topic, &1, config))
 
         # Producer may crash in case of exception in case of network failure,
         # or error code received in produce response (e.g. leader transition)

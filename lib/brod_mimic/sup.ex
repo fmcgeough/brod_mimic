@@ -107,10 +107,7 @@ defmodule BrodMimic.Sup do
   end
 
   defp client_spec([], client_id, _Config) do
-    error =
-      :lists.flatten(
-        :io_lib.format('No endpoints found in brod client \'~p\' config', [client_id])
-      )
+    error = :lists.flatten(:io_lib.format('No endpoints found in brod client \'~p\' config', [client_id]))
 
     exit(error)
   end
@@ -127,8 +124,7 @@ defmodule BrodMimic.Sup do
     config = BrodUtils.init_sasl_opt(config1)
     start_args = [endpoints, client_id, config]
 
-    {_id = client_id, _start = {BrodMimic.Client, :start_link, start_args},
-     _restart = {:permanent, delay_secs}, _shutdown = 5000, _type = :worker,
-     _module = [BrodMimic.Client]}
+    {_id = client_id, _start = {BrodMimic.Client, :start_link, start_args}, _restart = {:permanent, delay_secs},
+     _shutdown = 5000, _type = :worker, _module = [BrodMimic.Client]}
   end
 end

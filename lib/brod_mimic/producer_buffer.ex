@@ -318,8 +318,7 @@ defmodule BrodMimic.ProducerBuffer do
         reqs0
       )
 
-    new_buffer =
-      :lists.foldr(fn req, acc_buffer -> :queue.in_r(req, acc_buffer) end, buffer, reqs)
+    new_buffer = :lists.foldr(fn req, acc_buffer -> :queue.in_r(req, acc_buffer) end, buffer, reqs)
 
     buf(buf, buffer: new_buffer, buffer_count: length(reqs) + buffer_count)
   end

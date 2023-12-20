@@ -744,7 +744,7 @@ defmodule BrodMimic.Brod do
   @doc """
   Start `BrodMimic.GroupSubscriberv2`
   """
-  @spec start_link_group_subscriber_v2(BrodMimic.GroupSubscriberv2.subscriber_config()) ::
+  @spec start_link_group_subscriber_v2(BrodGroupSubscriberv2.subscriber_config()) ::
           {:ok, pid()} | {:error, any()}
   def start_link_group_subscriber_v2(config) do
     BrodGroupSubscriberv2.start_link(config)

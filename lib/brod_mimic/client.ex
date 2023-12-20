@@ -69,8 +69,7 @@ defmodule BrodMimic.Client do
 
   @type connection() :: :kpro.connection()
   @type timestamp() ::
-          {mega_secs :: non_neg_integer(), secs :: non_neg_integer(),
-           micro_secs :: non_neg_integer()}
+          {mega_secs :: non_neg_integer(), secs :: non_neg_integer(), micro_secs :: non_neg_integer()}
   @type dead_conn() :: {:dead_since, timestamp(), any()}
   defrecord(:conn, endpoint: nil, pid: nil)
   @type conn :: record(:conn, endpoint: endpoint(), pid: connection() | dead_conn())
@@ -403,8 +402,7 @@ defmodule BrodMimic.Client do
   end
 
   def handle_info(info, state) do
-    error_string =
-      :io_lib.format(@unexpected_info, [:brod_client, self(), state(state, :client_id), info])
+    error_string = :io_lib.format(@unexpected_info, [:brod_client, self(), state(state, :client_id), info])
 
     Logger.warning(error_string, %{domain: [:brod]})
     {:noreply, state}
@@ -702,9 +700,7 @@ defmodule BrodMimic.Client do
   @doc """
   Ensure there is at least one metadata connection
   """
-  def ensure_metadata_connection(
-        state(bootstrap_endpoints: endpoints, meta_conn: :undefined) = state
-      ) do
+  def ensure_metadata_connection(state(bootstrap_endpoints: endpoints, meta_conn: :undefined) = state) do
     conn_config = conn_config(state)
 
     pid =
@@ -1013,9 +1009,7 @@ defmodule BrodMimic.Client do
           conn(endpoint: endpoint, pid: pid)
 
         {:error, reason} ->
-          Logger.info(
-            "client #{client_id} failed to connect to #{host}:#{port}\nreason: #{inspect(reason)}"
-          )
+          Logger.info("client #{client_id} failed to connect to #{host}:#{port}\nreason: #{inspect(reason)}")
 
           conn(endpoint: endpoint, pid: mark_dead(reason))
       end
@@ -1053,8 +1047,7 @@ defmodule BrodMimic.Client do
         {:value, conn, rest} ->
           {host, port} = conn(conn, :endpoint)
 
-          msg =
-            "client #{client_id}: payload connection down #{host}:#{port}\nreason:#{inspect(reason)}"
+          msg = "client #{client_id}: payload connection down #{host}:#{port}\nreason:#{inspect(reason)}"
 
           Logger.info(msg)
           new_conn = conn(conn, pid: mark_dead(reason))

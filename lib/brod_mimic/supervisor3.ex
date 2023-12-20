@@ -1,10 +1,107 @@
 defmodule BrodMimic.Supervisor3 do
   @moduledoc """
   This is a general process supervisor built upon gen_server.erl
+
+  ## Notes from brod_supervisor3.erl
+
+  ```
+  Copied from https://github.com/klarna/supervisor3
+  This file is a copy of supervisor.erl from the R16B Erlang/OTP
+  distribution, with the following modifications:
+
+  1) the module name is supervisor2
+
+  2) a find_child/2 utility function has been added
+
+  3) Added an 'intrinsic' restart type. Like the transient type, this
+     type means the child should only be restarted if the child exits
+     abnormally. Unlike the transient type, if the child exits
+     normally, the supervisor itself also exits normally. If the
+     child is a supervisor and it exits normally (i.e. with reason of
+     'shutdown') then the child's parent also exits normally.
+
+  4) child specifications can contain, as the restart type, a tuple
+     {permanent, Delay} | {transient, Delay} | {intrinsic, Delay}
+     where Delay >= 0 (see point (4) below for intrinsic). The delay,
+     in seconds, indicates what should happen if a child, upon being
+     restarted, exceeds the MaxT and MaxR parameters. Thus, if a
+     child exits, it is restarted as normal. If it exits sufficiently
+     quickly and often to exceed the boundaries set by the MaxT and
+     MaxR parameters, and a Delay is specified, then rather than
+     stopping the supervisor, the supervisor instead continues and
+     tries to start up the child again, Delay seconds later.
+
+    Note that if a child is delay-restarted this will reset the
+    count of restarts towrds MaxR and MaxT. This matters if MaxT >
+    Delay, since otherwise we would fail to restart after the delay.
+
+    Sometimes, you may wish for a transient or intrinsic child to
+    exit abnormally so that it gets restarted, but still log
+    nothing. gen_server will log any exit reason other than
+    'normal', 'shutdown' or {'shutdown', _}. Thus the exit reason of
+    {'shutdown', 'restart'} is interpreted to mean you wish the
+    child to be restarted according to the delay parameters, but
+    gen_server will not log the error. Thus from gen_server's
+    perspective it's a normal exit, whilst from supervisor's
+    perspective, it's an abnormal exit.
+
+    5) normal, and {shutdown, _} exit reasons are all treated the same
+       (i.e. are regarded as normal exits)
+
+    6) rename the module to supervisor3
+
+    7) introduce post_init callback
+
+    8) call os:timestamp/0 and timer:now_diff/2 for timestamps
+
+    9) ignore delayed retry in MaxR accumulation
+
+    Modifications 1-5 are (C) 2010-2013 GoPivotal, Inc.
+    Modifications 6-9 are (C) 2015 Klarna AB
+
+    %CopyrightBegin%
+
+    Copyright Ericsson AB 1996-2012. All Rights Reserved.
+
+    The contents of this file are subject to the Erlang Public License,
+    Version 1.1, (the "License"); you may not use this file except in
+    compliance with the License. You should have received a copy of the
+    Erlang Public License along with this software. If not, it can be
+    retrieved online at http://www.erlang.org/.
+
+    Software distributed under the License is distributed on an "AS IS"
+    basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See
+    the License for the specific language governing rights and limitations
+    under the License.
+
+    %CopyrightEnd%
+  ```
   """
   use GenServer
 
-  require Record
+  import Record, only: [defrecordp: 2]
+
+  defrecordp(:child,
+    pid: :undefined,
+    name: :undefined,
+    mfargs: :undefined,
+    restart_type: :undefined,
+    shutdown: :undefined,
+    child_type: :undefined,
+    modules: []
+  )
+
+  defrecordp(:state,
+    name: :undefined,
+    strategy: :undefined,
+    children: [],
+    dynamics: :undefined,
+    intensity: :undefined,
+    period: :undefined,
+    restarts: [],
+    module: :undefined,
+    args: :undefined
+  )
 
   @type child() :: :undefined | pid()
   @type child_id() :: term()
@@ -28,34 +125,46 @@ defmodule BrodMimic.Supervisor3 do
           | {:global, name :: atom()}
           | pid()
   @type child_spec() ::
-          {id :: child_id(), start_func :: mfargs(), restart :: restart(), shutdown :: shutdown(),
-           type :: worker(), modules :: modules()}
+          {id :: child_id(), start_func :: mfargs(), restart :: restart(), shutdown :: shutdown(), type :: worker(),
+           modules :: modules()}
 
   @type strategy() :: :one_for_all | :one_for_one | :rest_for_one | :simple_one_for_one
 
   @type tref() :: reference()
+  @type child_record_pid() ::
+          :undefined | child() | {:restarting, pid()} | {:delayed_restart, tref()} | [pid()]
+  @type dynamics() :: :dict.dict() | :sets.set()
 
-  Record.defrecord(:r_child, :child,
-    pid: :undefined,
-    name: :undefined,
-    mfargs: :undefined,
-    restart_type: :undefined,
-    shutdown: :undefined,
-    child_type: :undefined,
-    modules: []
-  )
+  @type child_rec() ::
+          record(:child,
+            pid: child_record_pid(),
+            name: child_id(),
+            mfargs: mfargs(),
+            restart_type: restart(),
+            shutdown: shutdown(),
+            child_type: worker(),
+            modules: modules()
+          )
 
-  Record.defrecord(:r_state, :state,
-    name: :undefined,
-    strategy: :undefined,
-    children: [],
-    dynamics: :undefined,
-    intensity: :undefined,
-    period: :undefined,
-    restarts: [],
-    module: :undefined,
-    args: :undefined
-  )
+  @type state() ::
+          record(:state,
+            name: atom(),
+            strategy: strategy(),
+            children: [child_rec()],
+            dynamics: dynamics(),
+            intensity: non_neg_integer(),
+            period: pos_integer(),
+            restarts: list(),
+            module: module(),
+            args: list()
+          )
+
+  @type startlink_err() :: {:already_started, pid()} | {:shutdown, term()} | term()
+  @type startlink_ret() :: {:ok, pid()} | :ignore | {:error, startlink_err()}
+  @type startchild_err() :: :already_present | {:already_started, child()} | term()
+  @type startchild_ret() :: {:ok, child()} | {:ok, child(), term()} | {:error, startchild_err()}
+  @type restart_child_err() ::
+          {:error, :running | :restarting | :not_found | :simple_one_for_one | term()}
 
   @callback init(args :: term()) ::
               {
@@ -88,18 +197,22 @@ defmodule BrodMimic.Supervisor3 do
 
   @optional_callbacks [post_init: 1]
 
+  @spec start_link(module(), term()) :: startlink_ret()
   def start_link(mod, args) do
     GenServer.start_link(BrodMimic.Supervisor3, {:self, mod, args}, [])
   end
 
+  @spec start_link(sup_name(), module(), term()) :: startlink_ret()
   def start_link(sup_name, mod, args) do
     :gen_server.start_link(sup_name, BrodMimic.Supervisor3, {sup_name, mod, args}, [])
   end
 
+  @spec start_child(sup_ref(), child_spec() | [term()]) :: startchild_ret()
   def start_child(supervisor, child_spec) do
     call(supervisor, {:start_child, child_spec})
   end
 
+  @spec restart_child(sup_ref(), child_id()) :: {:ok, child()} | {:ok, child(), term()} | restart_child_err()
   def restart_child(supervisor, name) do
     call(supervisor, {:restart_child, name})
   end
@@ -166,7 +279,7 @@ defmodule BrodMimic.Supervisor3 do
 
       :post_init ->
         send(self(), {:post_init, sup_name, mod, args})
-        {:ok, r_state()}
+        {:ok, state()}
 
       :ignore ->
         :ignore
@@ -177,13 +290,13 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp init_children(state, start_spec) do
-    sup_name = r_state(state, :name)
+    sup_name = state(state, :name)
 
     case check_startspec(start_spec) do
       {:ok, children} ->
         case start_children(children, sup_name) do
           {:ok, n_children} ->
-            {:ok, r_state(state, children: n_children)}
+            {:ok, state(state, children: n_children)}
 
           {:error, n_children, reason} ->
             terminate_children(n_children, sup_name)
@@ -198,7 +311,7 @@ defmodule BrodMimic.Supervisor3 do
   defp init_dynamic(state, [start_spec]) do
     case check_startspec([start_spec]) do
       {:ok, children} ->
-        {:ok, r_state(state, children: children)}
+        {:ok, state(state, children: children)}
 
       error ->
         {:stop, {:start_spec, error}}
@@ -216,20 +329,19 @@ defmodule BrodMimic.Supervisor3 do
   defp start_children([child | chs], n_children, sup_name) do
     case do_start_child(sup_name, child) do
       {:ok, :undefined}
-      when r_child(child, :restart_type) === :temporary ->
+      when child(child, :restart_type) === :temporary ->
         start_children(chs, n_children, sup_name)
 
       {:ok, pid} ->
-        start_children(chs, [r_child(child, pid: pid) | n_children], sup_name)
+        start_children(chs, [child(child, pid: pid) | n_children], sup_name)
 
       {:ok, pid, _extra} ->
-        start_children(chs, [r_child(child, pid: pid) | n_children], sup_name)
+        start_children(chs, [child(child, pid: pid) | n_children], sup_name)
 
       {:error, reason} ->
         report_error(:start_error, reason, child, sup_name)
 
-        {:error, :lists.reverse(chs) ++ [child | n_children],
-         {:failed_to_start_child, r_child(child, :name), reason}}
+        {:error, :lists.reverse(chs) ++ [child | n_children], {:failed_to_start_child, child(child, :name), reason}}
     end
   end
 
@@ -238,7 +350,7 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp do_start_child(sup_name, child) do
-    r_child(mfargs: {m, f, args}) = child
+    child(mfargs: {m, f, args}) = child
 
     case (try do
             apply(m, f, args)
@@ -248,12 +360,12 @@ defmodule BrodMimic.Supervisor3 do
             e -> e
           end) do
       {:ok, pid} when is_pid(pid) ->
-        n_child = r_child(child, pid: pid)
+        n_child = child(child, pid: pid)
         report_progress(n_child, sup_name)
         {:ok, pid}
 
       {:ok, pid, extra} when is_pid(pid) ->
-        n_child = r_child(child, pid: pid)
+        n_child = child(child, pid: pid)
         report_progress(n_child, sup_name)
         {:ok, pid, extra}
 
@@ -294,22 +406,22 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   def handle_call({:start_child, e_args}, _from, state)
-      when r_state(state, :strategy) === :simple_one_for_one do
-    child = hd(r_state(state, :children))
-    r_child(mfargs: {m, f, a}) = child
+      when state(state, :strategy) === :simple_one_for_one do
+    child = hd(state(state, :children))
+    child(mfargs: {m, f, a}) = child
     args = a ++ e_args
 
     case do_start_child_i(m, f, args) do
       {:ok, :undefined}
-      when r_child(child, :restart_type) === :temporary ->
+      when child(child, :restart_type) === :temporary ->
         {:reply, {:ok, :undefined}, state}
 
       {:ok, pid} ->
-        n_state = save_dynamic_child(r_child(child, :restart_type), pid, args, state)
+        n_state = save_dynamic_child(child(child, :restart_type), pid, args, state)
         {:reply, {:ok, pid}, n_state}
 
       {:ok, pid, extra} ->
-        n_state = save_dynamic_child(r_child(child, :restart_type), pid, args, state)
+        n_state = save_dynamic_child(child(child, :restart_type), pid, args, state)
         {:reply, {:ok, pid, extra}, n_state}
 
       what ->
@@ -319,17 +431,17 @@ defmodule BrodMimic.Supervisor3 do
 
   def handle_call({:terminate_child, name}, _from, state)
       when not is_pid(name) and
-             r_state(state, :strategy) === :simple_one_for_one do
+             state(state, :strategy) === :simple_one_for_one do
     {:reply, {:error, :simple_one_for_one}, state}
   end
 
   def handle_call({:terminate_child, name}, _from, state) do
-    case get_child(name, state, r_state(state, :strategy) === :simple_one_for_one) do
+    case get_child(name, state, state(state, :strategy) === :simple_one_for_one) do
       {:value, child} ->
-        case do_terminate(child, r_state(state, :name)) do
-          r_child(restart_type: rt)
+        case do_terminate(child, state(state, :name)) do
+          child(restart_type: rt)
           when rt === :temporary or
-                 r_state(state, :strategy) === :simple_one_for_one ->
+                 state(state, :strategy) === :simple_one_for_one ->
             {:reply, :ok, state_del_child(child, state)}
 
           n_child ->
@@ -342,7 +454,7 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   def handle_call({_req, _data}, _from, state)
-      when r_state(state, :strategy) === :simple_one_for_one do
+      when state(state, :strategy) === :simple_one_for_one do
     {:reply, {:error, :simple_one_for_one}, state}
   end
 
@@ -359,24 +471,24 @@ defmodule BrodMimic.Supervisor3 do
 
   def handle_call({:restart_child, name}, _from, state) do
     case get_child(name, state) do
-      {:value, child} when r_child(child, :pid) === :undefined ->
-        case do_start_child(r_state(state, :name), child) do
+      {:value, child} when child(child, :pid) === :undefined ->
+        case do_start_child(state(state, :name), child) do
           {:ok, pid} ->
-            n_state = replace_child(r_child(child, pid: pid), state)
+            n_state = replace_child(child(child, pid: pid), state)
             {:reply, {:ok, pid}, n_state}
 
           {:ok, pid, extra} ->
-            n_state = replace_child(r_child(child, pid: pid), state)
+            n_state = replace_child(child(child, pid: pid), state)
             {:reply, {:ok, pid, extra}, n_state}
 
           error ->
             {:reply, error, state}
         end
 
-      {:value, r_child(pid: {:restarting, _})} ->
+      {:value, child(pid: {:restarting, _})} ->
         {:reply, {:error, :restarting}, state}
 
-      {:value, r_child(pid: {:delayed_restart, _})} ->
+      {:value, child(pid: {:delayed_restart, _})} ->
         {:reply, {:error, :restarting}, state}
 
       {:value, _} ->
@@ -389,14 +501,14 @@ defmodule BrodMimic.Supervisor3 do
 
   def handle_call({:delete_child, name}, _from, state) do
     case get_child(name, state) do
-      {:value, child} when r_child(child, :pid) === :undefined ->
+      {:value, child} when child(child, :pid) === :undefined ->
         n_state = remove_child(child, state)
         {:reply, :ok, n_state}
 
-      {:value, r_child(pid: {:restarting, _})} ->
+      {:value, child(pid: {:restarting, _})} ->
         {:reply, {:error, :restarting}, state}
 
-      {:value, r_child(pid: {:delayed_restart, _})} ->
+      {:value, child(pid: {:delayed_restart, _})} ->
         {:reply, {:error, :restarting}, state}
 
       {:value, _} ->
@@ -410,10 +522,9 @@ defmodule BrodMimic.Supervisor3 do
   def handle_call(
         :which_children,
         _from,
-        r_state(children: [r_child(restart_type: :temporary, child_type: ct, modules: mods)]) =
-          state
+        state(children: [child(restart_type: :temporary, child_type: ct, modules: mods)]) = state
       )
-      when r_state(state, :strategy) === :simple_one_for_one do
+      when state(state, :strategy) === :simple_one_for_one do
     reply =
       :lists.map(
         fn pid ->
@@ -422,7 +533,7 @@ defmodule BrodMimic.Supervisor3 do
         :sets.to_list(
           dynamics_db(
             :temporary,
-            r_state(state, :dynamics)
+            state(state, :dynamics)
           )
         )
       )
@@ -433,9 +544,9 @@ defmodule BrodMimic.Supervisor3 do
   def handle_call(
         :which_children,
         _from,
-        r_state(children: [r_child(restart_type: r_type, child_type: ct, modules: mods)]) = state
+        state(children: [child(restart_type: r_type, child_type: ct, modules: mods)]) = state
       )
-      when r_state(state, :strategy) === :simple_one_for_one do
+      when state(state, :strategy) === :simple_one_for_one do
     reply =
       :lists.map(
         fn
@@ -445,7 +556,7 @@ defmodule BrodMimic.Supervisor3 do
           {pid, _} ->
             {:undefined, pid, ct, mods}
         end,
-        :dict.to_list(dynamics_db(r_type, r_state(state, :dynamics)))
+        :dict.to_list(dynamics_db(r_type, state(state, :dynamics)))
       )
 
     {:reply, reply, state}
@@ -455,16 +566,16 @@ defmodule BrodMimic.Supervisor3 do
     resp =
       :lists.map(
         fn
-          r_child(pid: {:restarting, _}, name: name, child_type: child_type, modules: mods) ->
+          child(pid: {:restarting, _}, name: name, child_type: child_type, modules: mods) ->
             {name, :restarting, child_type, mods}
 
-          r_child(pid: {:delayed_restart, _}, name: name, child_type: child_type, modules: mods) ->
+          child(pid: {:delayed_restart, _}, name: name, child_type: child_type, modules: mods) ->
             {name, :restarting, child_type, mods}
 
-          r_child(pid: pid, name: name, child_type: child_type, modules: mods) ->
+          child(pid: pid, name: name, child_type: child_type, modules: mods) ->
             {name, pid, child_type, mods}
         end,
-        r_state(state, :children)
+        state(state, :children)
       )
 
     {:reply, resp, state}
@@ -473,23 +584,23 @@ defmodule BrodMimic.Supervisor3 do
   def handle_call(
         :count_children,
         _from,
-        r_state(
+        state(
           children: [
-            r_child(
+            child(
               restart_type: :temporary,
               child_type: ct
             )
           ]
         ) = state
       )
-      when r_state(state, :strategy) === :simple_one_for_one do
+      when state(state, :strategy) === :simple_one_for_one do
     {active, count} =
       :sets.fold(
         fn pid, {alive, tot} ->
           count_if_alive(pid, alive, tot)
         end,
         {0, 0},
-        dynamics_db(:temporary, r_state(state, :dynamics))
+        dynamics_db(:temporary, state(state, :dynamics))
       )
 
     reply = child_type(ct, active, count)
@@ -499,23 +610,23 @@ defmodule BrodMimic.Supervisor3 do
   def handle_call(
         :count_children,
         _from,
-        r_state(
+        state(
           children: [
-            r_child(
+            child(
               restart_type: r_type,
               child_type: ct
             )
           ]
         ) = state
       )
-      when r_state(state, :strategy) === :simple_one_for_one do
+      when state(state, :strategy) === :simple_one_for_one do
     {active, count} =
       :dict.fold(
         fn pid, _val, {alive, tot} ->
           count_if_alive(pid, alive, tot)
         end,
         {0, 0},
-        dynamics_db(r_type, r_state(state, :dynamics))
+        dynamics_db(r_type, state(state, :dynamics))
       )
 
     reply = child_type(ct, active, count)
@@ -529,7 +640,7 @@ defmodule BrodMimic.Supervisor3 do
           count_child(child, counts)
         end,
         {0, 0, 0, 0},
-        r_state(state, :children)
+        state(state, :children)
       )
 
     reply = [{:specs, specs}, {:active, active}, {:supervisors, supers}, {:workers, workers}]
@@ -555,7 +666,7 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp count_child(
-         r_child(pid: pid, child_type: :worker),
+         child(pid: pid, child_type: :worker),
          {specs, active, supers, workers}
        ) do
     case is_pid(pid) and Process.alive?(pid) do
@@ -568,7 +679,7 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp count_child(
-         r_child(pid: pid, child_type: :supervisor),
+         child(pid: pid, child_type: :supervisor),
          {specs, active, supers, workers}
        ) do
     case is_pid(pid) and Process.alive?(pid) do
@@ -582,17 +693,17 @@ defmodule BrodMimic.Supervisor3 do
 
   def handle_cast(
         {:try_again_restart, pid, reason},
-        r_state(children: [child]) = state
+        state(children: [child]) = state
       )
-      when r_state(state, :strategy) === :simple_one_for_one do
-    rt = r_child(child, :restart_type)
+      when state(state, :strategy) === :simple_one_for_one do
+    rt = child(child, :restart_type)
     r_pid = restarting(pid)
 
-    case dynamic_child_args(r_pid, dynamics_db(rt, r_state(state, :dynamics))) do
+    case dynamic_child_args(r_pid, dynamics_db(rt, state(state, :dynamics))) do
       {:ok, args} ->
-        {m, f, _} = r_child(child, :mfargs)
-        n_child = r_child(child, pid: r_pid, mfargs: {m, f, args})
-        try_restart(r_child(child, :restart_type), reason, n_child, state)
+        {m, f, _} = child(child, :mfargs)
+        n_child = child(child, pid: r_pid, mfargs: {m, f, args})
+        try_restart(child(child, :restart_type), reason, n_child, state)
 
       :error ->
         {:noreply, state}
@@ -600,10 +711,10 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   def handle_cast({:try_again_restart, name, reason}, state) do
-    case :lists.keysearch(name, r_child(:name), r_state(state, :children)) do
+    case :lists.keysearch(name, child(:name), state(state, :children)) do
       {:value,
        child =
-           r_child(
+           child(
              pid: {:restarting, _},
              restart_type: restart_type
            )} ->
@@ -611,7 +722,7 @@ defmodule BrodMimic.Supervisor3 do
 
       {:value,
        child =
-           r_child(
+           child(
              pid: {:delayed_restart, _},
              restart_type: restart_type
            )} ->
@@ -636,9 +747,9 @@ defmodule BrodMimic.Supervisor3 do
         {:delayed_restart, {restart_type, _reason, child}},
         state
       )
-      when r_state(state, :strategy) === :simple_one_for_one do
+      when state(state, :strategy) === :simple_one_for_one do
     reason = {BrodSupervisor3, :delayed_restart}
-    try_restart(restart_type, reason, child, r_state(state, restarts: []))
+    try_restart(restart_type, reason, child, state(state, restarts: []))
   end
 
   def handle_info(
@@ -647,9 +758,9 @@ defmodule BrodMimic.Supervisor3 do
       ) do
     reason = {BrodSupervisor3, :delayed_restart}
 
-    case get_child(r_child(child, :name), state) do
+    case get_child(child(child, :name), state) do
       {:value, child1} ->
-        try_restart(restart_type, reason, child1, r_state(state, restarts: []))
+        try_restart(restart_type, reason, child1, state(state, restarts: []))
 
       _what ->
         {:noreply, state}
@@ -680,24 +791,24 @@ defmodule BrodMimic.Supervisor3 do
     {:noreply, state}
   end
 
-  def terminate(_reason, r_state(children: [child]) = state)
-      when r_state(state, :strategy) === :simple_one_for_one do
+  def terminate(_reason, state(children: [child]) = state)
+      when state(state, :strategy) === :simple_one_for_one do
     terminate_dynamic_children(
       child,
       dynamics_db(
-        r_child(child, :restart_type),
-        r_state(state, :dynamics)
+        child(child, :restart_type),
+        state(state, :dynamics)
       ),
-      r_state(state, :name)
+      state(state, :name)
     )
   end
 
   def terminate(_reason, state) do
-    terminate_children(r_state(state, :children), r_state(state, :name))
+    terminate_children(state(state, :children), state(state, :name))
   end
 
   def code_change(_, state, _) do
-    case r_state(state, :module).init(r_state(state, :args)) do
+    case state(state, :module).init(state(state, :args)) do
       {:ok, {sup_flags, start_spec}} ->
         case (try do
                 check_flags(sup_flags)
@@ -710,7 +821,7 @@ defmodule BrodMimic.Supervisor3 do
             {strategy, max_intensity, period} = sup_flags
 
             update_childspec(
-              r_state(state,
+              state(state,
                 strategy: strategy,
                 intensity: max_intensity,
                 period: period
@@ -735,7 +846,7 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   def format_status(_, [_PDict, state]) do
-    [{:data, [{'State', state}]}, {:supervisor, [{'Callback', r_state(state, :module)}]}]
+    [{:data, [{'State', state}]}, {:supervisor, [{'Callback', state(state, :module)}]}]
   end
 
   defp check_flags({strategy, max_intensity, period}) do
@@ -750,10 +861,10 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp update_childspec(state, start_spec)
-       when r_state(state, :strategy) === :simple_one_for_one do
+       when state(state, :strategy) === :simple_one_for_one do
     case check_startspec(start_spec) do
       {:ok, [child]} ->
-        {:ok, r_state(state, children: [child])}
+        {:ok, state(state, children: [child])}
 
       error ->
         {:error, error}
@@ -763,9 +874,9 @@ defmodule BrodMimic.Supervisor3 do
   defp update_childspec(state, start_spec) do
     case check_startspec(start_spec) do
       {:ok, children} ->
-        old_c = r_state(state, :children)
+        old_c = state(state, :children)
         new_c = update_childspec1(old_c, children, [])
-        {:ok, r_state(state, children: new_c)}
+        {:ok, state(state, children: new_c)}
 
       error ->
         {:error, error}
@@ -790,8 +901,8 @@ defmodule BrodMimic.Supervisor3 do
     case :lists.map(
            fn
              ch
-             when r_child(old_ch, :name) === r_child(ch, :name) ->
-               r_child(ch, pid: r_child(old_ch, :pid))
+             when child(old_ch, :name) === child(ch, :name) ->
+               child(ch, pid: child(old_ch, :pid))
 
              ch ->
                ch
@@ -807,45 +918,45 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp handle_start_child(child, state) do
-    case get_child(r_child(child, :name), state) do
+    case get_child(child(child, :name), state) do
       false ->
-        case do_start_child(r_state(state, :name), child) do
+        case do_start_child(state(state, :name), child) do
           {:ok, :undefined}
-          when r_child(child, :restart_type) === :temporary ->
+          when child(child, :restart_type) === :temporary ->
             {{:ok, :undefined}, state}
 
           {:ok, pid} ->
-            {{:ok, pid}, save_child(r_child(child, pid: pid), state)}
+            {{:ok, pid}, save_child(child(child, pid: pid), state)}
 
           {:ok, pid, extra} ->
-            {{:ok, pid, extra}, save_child(r_child(child, pid: pid), state)}
+            {{:ok, pid, extra}, save_child(child(child, pid: pid), state)}
 
           {:error, what} ->
             {{:error, {what, child}}, state}
         end
 
-      {:value, old_child} when is_pid(r_child(old_child, :pid)) ->
-        {{:error, {:already_started, r_child(old_child, :pid)}}, state}
+      {:value, old_child} when is_pid(child(old_child, :pid)) ->
+        {{:error, {:already_started, child(old_child, :pid)}}, state}
 
       {:value, _old_child} ->
         {{:error, :already_present}, state}
     end
   end
 
-  defp restart_child(pid, reason, r_state(children: [child]) = state)
-       when r_state(state, :strategy) === :simple_one_for_one do
-    restart_type = r_child(child, :restart_type)
+  defp restart_child(pid, reason, state(children: [child]) = state)
+       when state(state, :strategy) === :simple_one_for_one do
+    restart_type = child(child, :restart_type)
 
     case dynamic_child_args(
            pid,
            dynamics_db(
              restart_type,
-             r_state(state, :dynamics)
+             state(state, :dynamics)
            )
          ) do
       {:ok, args} ->
-        {m, f, _} = r_child(child, :mfargs)
-        n_child = r_child(child, pid: pid, mfargs: {m, f, args})
+        {m, f, _} = child(child, :mfargs)
+        n_child = child(child, pid: pid, mfargs: {m, f, args})
         do_restart(restart_type, reason, n_child, state)
 
       :error ->
@@ -854,10 +965,10 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp restart_child(pid, reason, state) do
-    children = r_state(state, :children)
+    children = state(state, :children)
 
-    case :lists.keysearch(pid, r_child(:pid), children) do
-      {:value, r_child(restart_type: restart_type) = child} ->
+    case :lists.keysearch(pid, child(:pid), children) do
+      {:value, child(restart_type: restart_type) = child} ->
         do_restart(restart_type, reason, child, state)
 
       false ->
@@ -899,7 +1010,7 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp report_child_termination(reason, child, state) do
-    report_error(:child_terminated, reason, child, r_state(state, :name))
+    report_error(:child_terminated, reason, child, state(state, :name))
   end
 
   defp handle_restart(:permanent, _reason, child, state) do
@@ -999,7 +1110,7 @@ defmodule BrodMimic.Supervisor3 do
 
     case add_restart(state, is_clean_retry) do
       {:ok, n_state} ->
-        maybe_restart(r_state(n_state, :strategy), child, n_state)
+        maybe_restart(state(n_state, :strategy), child, n_state)
 
       {:terminate, _n_state} ->
         t_ref =
@@ -1010,13 +1121,13 @@ defmodule BrodMimic.Supervisor3 do
           )
 
         n_state =
-          case r_state(state, :strategy) === :simple_one_for_one do
+          case state(state, :strategy) === :simple_one_for_one do
             true ->
               state_del_child(child, state)
 
             false ->
               replace_child(
-                r_child(child, pid: {:delayed_restart, t_ref}),
+                child(child, pid: {:delayed_restart, t_ref}),
                 state
               )
           end
@@ -1028,10 +1139,10 @@ defmodule BrodMimic.Supervisor3 do
   defp restart(child, state) do
     case add_restart(state) do
       {:ok, n_state} ->
-        maybe_restart(r_state(n_state, :strategy), child, n_state)
+        maybe_restart(state(n_state, :strategy), child, n_state)
 
       {:terminate, n_state} ->
-        report_error(:shutdown, :reached_max_restart_intensity, child, r_state(state, :name))
+        report_error(:shutdown, :reached_max_restart_intensity, child, state(state, :name))
         {:shutdown, remove_child(child, n_state)}
     end
   end
@@ -1040,9 +1151,9 @@ defmodule BrodMimic.Supervisor3 do
     case restart(strategy, child, state) do
       {:try_again, reason, n_state2} ->
         id =
-          case r_state(state, :strategy) === :simple_one_for_one do
-            true -> r_child(child, :pid)
-            false -> r_child(child, :name)
+          case state(state, :strategy) === :simple_one_for_one do
+            true -> child(child, :pid)
+            false -> child(child, :name)
           end
 
         :timer.apply_after(0, BrodSupervisor3, :try_again_restart, [self(), id, reason])
@@ -1054,53 +1165,53 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp restart(:simple_one_for_one, child, state) do
-    r_child(pid: old_pid, mfargs: {m, f, a}) = child
+    child(pid: old_pid, mfargs: {m, f, a}) = child
 
     dynamics =
       :dict.erase(
         old_pid,
         dynamics_db(
-          r_child(child, :restart_type),
-          r_state(state, :dynamics)
+          child(child, :restart_type),
+          state(state, :dynamics)
         )
       )
 
     case do_start_child_i(m, f, a) do
       {:ok, pid} ->
-        n_state = r_state(state, dynamics: :dict.store(pid, a, dynamics))
+        n_state = state(state, dynamics: :dict.store(pid, a, dynamics))
         {:ok, n_state}
 
       {:ok, pid, _extra} ->
-        n_state = r_state(state, dynamics: :dict.store(pid, a, dynamics))
+        n_state = state(state, dynamics: :dict.store(pid, a, dynamics))
         {:ok, n_state}
 
       {:error, error} ->
-        n_state = r_state(state, dynamics: :dict.store(restarting(old_pid), a, dynamics))
-        report_error(:start_error, error, child, r_state(state, :name))
+        n_state = state(state, dynamics: :dict.store(restarting(old_pid), a, dynamics))
+        report_error(:start_error, error, child, state(state, :name))
         {:try_again, error, n_state}
     end
   end
 
   defp restart(:one_for_one, child, state) do
-    old_pid = r_child(child, :pid)
+    old_pid = child(child, :pid)
 
-    case do_start_child(r_state(state, :name), child) do
+    case do_start_child(state(state, :name), child) do
       {:ok, pid} ->
-        n_state = replace_child(r_child(child, pid: pid), state)
+        n_state = replace_child(child(child, pid: pid), state)
         {:ok, n_state}
 
       {:ok, pid, _extra} ->
-        n_state = replace_child(r_child(child, pid: pid), state)
+        n_state = replace_child(child(child, pid: pid), state)
         {:ok, n_state}
 
       {:error, reason} ->
         n_state =
           replace_child(
-            r_child(child, pid: restarting(old_pid)),
+            child(child, pid: restarting(old_pid)),
             state
           )
 
-        report_error(:start_error, reason, child, r_state(state, :name))
+        report_error(:start_error, reason, child, state(state, :name))
         {:try_again, reason, n_state}
     end
   end
@@ -1108,19 +1219,19 @@ defmodule BrodMimic.Supervisor3 do
   defp restart(:rest_for_one, child, state) do
     {ch_after, ch_before} =
       split_child(
-        r_child(child, :pid),
-        r_state(state, :children)
+        child(child, :pid),
+        state(state, :children)
       )
 
-    ch_after2 = terminate_children(ch_after, r_state(state, :name))
+    ch_after2 = terminate_children(ch_after, state(state, :name))
 
-    case start_children(ch_after2, r_state(state, :name)) do
+    case start_children(ch_after2, state(state, :name)) do
       {:ok, ch_after3} ->
-        {:ok, r_state(state, children: ch_after3 ++ ch_before)}
+        {:ok, state(state, children: ch_after3 ++ ch_before)}
 
       {:error, ch_after3, reason} ->
-        n_child = r_child(child, pid: restarting(r_child(child, :pid)))
-        n_state = r_state(state, children: ch_after3 ++ ch_before)
+        n_child = child(child, pid: restarting(child(child, :pid)))
+        n_state = state(state, children: ch_after3 ++ ch_before)
         {:try_again, reason, replace_child(n_child, n_state)}
     end
   end
@@ -1128,23 +1239,23 @@ defmodule BrodMimic.Supervisor3 do
   defp restart(:one_for_all, child, state) do
     children1 =
       del_child(
-        r_child(child, :pid),
-        r_state(state, :children)
+        child(child, :pid),
+        state(state, :children)
       )
 
     children2 =
       terminate_children(
         children1,
-        r_state(state, :name)
+        state(state, :name)
       )
 
-    case start_children(children2, r_state(state, :name)) do
+    case start_children(children2, state(state, :name)) do
       {:ok, n_chs} ->
-        {:ok, r_state(state, children: n_chs)}
+        {:ok, state(state, children: n_chs)}
 
       {:error, n_chs, reason} ->
-        n_child = r_child(child, pid: restarting(r_child(child, :pid)))
-        n_state = r_state(state, children: n_chs)
+        n_child = child(child, pid: restarting(child(child, :pid)))
+        n_state = state(state, children: n_chs)
         {:try_again, reason, replace_child(n_child, n_state)}
     end
   end
@@ -1163,7 +1274,7 @@ defmodule BrodMimic.Supervisor3 do
 
   defp terminate_children(
          [
-           child = r_child(restart_type: :temporary)
+           child = child(restart_type: :temporary)
            | children
          ],
          sup_name,
@@ -1182,18 +1293,18 @@ defmodule BrodMimic.Supervisor3 do
     res
   end
 
-  defp do_terminate(child, sup_name) when is_pid(r_child(child, :pid)) do
-    case shutdown(r_child(child, :pid), r_child(child, :shutdown)) do
+  defp do_terminate(child, sup_name) when is_pid(child(child, :pid)) do
+    case shutdown(child(child, :pid), child(child, :shutdown)) do
       :ok ->
         :ok
 
       {:error, :normal}
-      when not (r_child(child, :restart_type) === :permanent or
-                    (is_tuple(r_child(child, :restart_type)) and
-                       tuple_size(r_child(child, :restart_type)) == 2 and
+      when not (child(child, :restart_type) === :permanent or
+                    (is_tuple(child(child, :restart_type)) and
+                       tuple_size(child(child, :restart_type)) == 2 and
                        :erlang.element(
                          1,
-                         r_child(child, :restart_type)
+                         child(child, :restart_type)
                        ) === :permanent)) ->
         :ok
 
@@ -1201,16 +1312,16 @@ defmodule BrodMimic.Supervisor3 do
         report_error(:shutdown_error, otherreason, child, sup_name)
     end
 
-    r_child(child, pid: :undefined)
+    child(child, pid: :undefined)
   end
 
-  defp do_terminate(r_child(pid: {:delayed_restart, t_ref}) = child, _sup_name) do
+  defp do_terminate(child(pid: {:delayed_restart, t_ref}) = child, _sup_name) do
     Process.cancel_timer(t_ref)
-    r_child(child, pid: :undefined)
+    child(child, pid: :undefined)
   end
 
   defp do_terminate(child, _sup_name) do
-    r_child(child, pid: :undefined)
+    child(child, pid: :undefined)
   end
 
   defp shutdown(pid, :brutal_kill) do
@@ -1283,7 +1394,7 @@ defmodule BrodMimic.Supervisor3 do
     sz = :sets.size(pids)
 
     e_stack =
-      case r_child(child, :shutdown) do
+      case child(child, :shutdown) do
         :brutal_kill ->
           :sets.fold(
             fn p, _ ->
@@ -1321,14 +1432,14 @@ defmodule BrodMimic.Supervisor3 do
 
     :dict.fold(
       fn reason, ls, _ ->
-        report_error(:shutdown_error, reason, r_child(child, pid: ls), sup_name)
+        report_error(:shutdown_error, reason, child(child, pid: ls), sup_name)
       end,
       :ok,
       e_stack
     )
   end
 
-  defp monitor_dynamic_children(r_child(restart_type: :temporary), dynamics) do
+  defp monitor_dynamic_children(child(restart_type: :temporary), dynamics) do
     :sets.fold(
       fn p, {pids, e_stack} ->
         case monitor_child(p) do
@@ -1347,7 +1458,7 @@ defmodule BrodMimic.Supervisor3 do
     )
   end
 
-  defp monitor_dynamic_children(r_child(restart_type: r_type), dynamics) do
+  defp monitor_dynamic_children(child(restart_type: r_type), dynamics) do
     :dict.fold(
       fn
         p, _, {pids, e_stack} when is_pid(p) ->
@@ -1392,7 +1503,7 @@ defmodule BrodMimic.Supervisor3 do
     end
   end
 
-  defp wait_dynamic_children(r_child(shutdown: :brutal_kill) = child, pids, sz, t_ref, e_stack) do
+  defp wait_dynamic_children(child(shutdown: :brutal_kill) = child, pids, sz, t_ref, e_stack) do
     receive do
       {:DOWN, _mref, :process, pid, :killed} ->
         wait_dynamic_children(child, :sets.del_element(pid, pids), sz - 1, t_ref, e_stack)
@@ -1408,7 +1519,7 @@ defmodule BrodMimic.Supervisor3 do
     end
   end
 
-  defp wait_dynamic_children(r_child(restart_type: r_type) = child, pids, sz, t_ref, e_stack) do
+  defp wait_dynamic_children(child(restart_type: r_type) = child, pids, sz, t_ref, e_stack) do
     receive do
       {:DOWN, _mref, :process, pid, :shutdown} ->
         wait_dynamic_children(child, :sets.del_element(pid, pids), sz - 1, t_ref, e_stack)
@@ -1445,26 +1556,26 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp save_child(
-         r_child(
+         child(
            restart_type: :temporary,
            mfargs: {m, f, _}
          ) = child,
-         r_state(children: children) = state
+         state(children: children) = state
        ) do
-    r_state(state,
+    state(state,
       children: [
-        r_child(child, mfargs: {m, f, :undefined})
+        child(child, mfargs: {m, f, :undefined})
         | children
       ]
     )
   end
 
-  defp save_child(child, r_state(children: children) = state) do
-    r_state(state, children: [child | children])
+  defp save_child(child, state(children: children) = state) do
+    state(state, children: [child | children])
   end
 
-  defp save_dynamic_child(:temporary, pid, _, r_state(dynamics: dynamics) = state) do
-    r_state(state,
+  defp save_dynamic_child(:temporary, pid, _, state(dynamics: dynamics) = state) do
+    state(state,
       dynamics:
         :sets.add_element(
           pid,
@@ -1473,8 +1584,8 @@ defmodule BrodMimic.Supervisor3 do
     )
   end
 
-  defp save_dynamic_child(restart_type, pid, args, r_state(dynamics: dynamics) = state) do
-    r_state(state, dynamics: :dict.store(pid, args, dynamics_db(restart_type, dynamics)))
+  defp save_dynamic_child(restart_type, pid, args, state(dynamics: dynamics) = state) do
+    state(state, dynamics: :dict.store(pid, args, dynamics_db(restart_type, dynamics)))
   end
 
   defp dynamics_db(:temporary, :undefined) do
@@ -1499,64 +1610,64 @@ defmodule BrodMimic.Supervisor3 do
     end
   end
 
-  defp state_del_child(r_child(pid: pid, restart_type: :temporary), state)
-       when r_state(state, :strategy) === :simple_one_for_one do
+  defp state_del_child(child(pid: pid, restart_type: :temporary), state)
+       when state(state, :strategy) === :simple_one_for_one do
     n_dynamics =
       :sets.del_element(
         pid,
         dynamics_db(
           :temporary,
-          r_state(state, :dynamics)
+          state(state, :dynamics)
         )
       )
 
-    r_state(state, dynamics: n_dynamics)
+    state(state, dynamics: n_dynamics)
   end
 
-  defp state_del_child(r_child(pid: pid, restart_type: r_type), state)
-       when r_state(state, :strategy) === :simple_one_for_one do
+  defp state_del_child(child(pid: pid, restart_type: r_type), state)
+       when state(state, :strategy) === :simple_one_for_one do
     n_dynamics =
       :dict.erase(
         pid,
-        dynamics_db(r_type, r_state(state, :dynamics))
+        dynamics_db(r_type, state(state, :dynamics))
       )
 
-    r_state(state, dynamics: n_dynamics)
+    state(state, dynamics: n_dynamics)
   end
 
   defp state_del_child(child, state) do
     n_children =
       del_child(
-        r_child(child, :name),
-        r_state(state, :children)
+        child(child, :name),
+        state(state, :children)
       )
 
-    r_state(state, children: n_children)
+    state(state, children: n_children)
   end
 
-  defp del_child(name, [ch = r_child(pid: {:restarting, _}) | _] = chs)
-       when r_child(ch, :name) === name do
+  defp del_child(name, [ch = child(pid: {:restarting, _}) | _] = chs)
+       when child(ch, :name) === name do
     chs
   end
 
   defp del_child(name, [ch | chs])
-       when r_child(ch, :name) === name and
-              r_child(ch, :restart_type) === :temporary do
+       when child(ch, :name) === name and
+              child(ch, :restart_type) === :temporary do
     chs
   end
 
-  defp del_child(name, [ch | chs]) when r_child(ch, :name) === name do
-    [r_child(ch, pid: :undefined) | chs]
+  defp del_child(name, [ch | chs]) when child(ch, :name) === name do
+    [child(ch, pid: :undefined) | chs]
   end
 
   defp del_child(pid, [ch | chs])
-       when r_child(ch, :pid) === pid and
-              r_child(ch, :restart_type) === :temporary do
+       when child(ch, :pid) === pid and
+              child(ch, :restart_type) === :temporary do
     chs
   end
 
-  defp del_child(pid, [ch | chs]) when r_child(ch, :pid) === pid do
-    [r_child(ch, pid: :undefined) | chs]
+  defp del_child(pid, [ch | chs]) when child(ch, :pid) === pid do
+    [child(ch, pid: :undefined) | chs]
   end
 
   defp del_child(name, [ch | chs]) do
@@ -1572,13 +1683,13 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp split_child(name, [ch | chs], after__)
-       when r_child(ch, :name) === name do
-    {:lists.reverse([r_child(ch, pid: :undefined) | after__]), chs}
+       when child(ch, :name) === name do
+    {:lists.reverse([child(ch, pid: :undefined) | after__]), chs}
   end
 
   defp split_child(pid, [ch | chs], after__)
-       when r_child(ch, :pid) === pid do
-    {:lists.reverse([r_child(ch, pid: :undefined) | after__]), chs}
+       when child(ch, :pid) === pid do
+    {:lists.reverse([child(ch, pid: :undefined) | after__]), chs}
   end
 
   defp split_child(name, [ch | chs], after__) do
@@ -1598,29 +1709,29 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp get_child(name, state, _) do
-    :lists.keysearch(name, r_child(:name), r_state(state, :children))
+    :lists.keysearch(name, child(:name), state(state, :children))
   end
 
   defp get_dynamic_child(
          pid,
-         r_state(children: [child], dynamics: dynamics)
+         state(children: [child], dynamics: dynamics)
        ) do
     dynamics_db =
       dynamics_db(
-        r_child(child, :restart_type),
+        child(child, :restart_type),
         dynamics
       )
 
     case is_dynamic_pid(pid, dynamics_db) do
       true ->
-        {:value, r_child(child, pid: pid)}
+        {:value, child(child, pid: pid)}
 
       false ->
         r_pid = restarting(pid)
 
         case {is_dynamic_pid(r_pid, dynamics_db), :erlang.is_process_alive(pid)} do
           {true, _} ->
-            {:value, r_child(child, pid: r_pid)}
+            {:value, child(child, pid: r_pid)}
 
           {false, false} ->
             {:value, child}
@@ -1642,12 +1753,12 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp replace_child(child, state) do
-    chs = do_replace_child(child, r_state(state, :children))
-    r_state(state, children: chs)
+    chs = do_replace_child(child, state(state, :children))
+    state(state, children: chs)
   end
 
   defp do_replace_child(child, [ch | chs])
-       when r_child(ch, :name) === r_child(child, :name) do
+       when child(ch, :name) === child(child, :name) do
     [child | chs]
   end
 
@@ -1656,8 +1767,8 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp remove_child(child, state) do
-    chs = :lists.keydelete(r_child(child, :name), r_child(:name), r_state(state, :children))
-    r_state(state, children: chs)
+    chs = :lists.keydelete(child(child, :name), child(:name), state(state, :children))
+    state(state, children: chs)
   end
 
   defp do_init(sup_name, type, start_spec, mod, args) do
@@ -1669,7 +1780,7 @@ defmodule BrodMimic.Supervisor3 do
             e -> e
           end) do
       {:ok, state}
-      when r_state(state, :strategy) === :simple_one_for_one ->
+      when state(state, :strategy) === :simple_one_for_one ->
         init_dynamic(state, start_spec)
 
       {:ok, state} ->
@@ -1686,7 +1797,7 @@ defmodule BrodMimic.Supervisor3 do
     valid_period(period)
 
     {:ok,
-     r_state(
+     state(
        name: supname(sup_name, mod),
        strategy: strategy,
        intensity: max_intensity,
@@ -1753,9 +1864,9 @@ defmodule BrodMimic.Supervisor3 do
   defp check_startspec([child_spec | t], res) do
     case check_childspec(child_spec) do
       {:ok, child} ->
-        case :lists.keymember(r_child(child, :name), r_child(:name), res) do
+        case :lists.keymember(child(child, :name), child(:name), res) do
           true ->
-            {:duplicate_child_name, r_child(child, :name)}
+            {:duplicate_child_name, child(child, :name)}
 
           false ->
             check_startspec(t, [child | res])
@@ -1791,7 +1902,7 @@ defmodule BrodMimic.Supervisor3 do
     valid_mods(mods)
 
     {:ok,
-     r_child(
+     child(
        name: name,
        mfargs: func,
        restart_type: restart_type,
@@ -1908,9 +2019,9 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp add_restart(state, is_clean_retry) do
-    max_r = r_state(state, :intensity)
-    p = r_state(state, :period)
-    r = r_state(state, :restarts)
+    max_r = state(state, :intensity)
+    p = state(state, :period)
+    r = state(state, :restarts)
     now = :os.timestamp()
 
     r1 =
@@ -1922,7 +2033,7 @@ defmodule BrodMimic.Supervisor3 do
           delete_old_restarts([now | r], now, p)
       end
 
-    state1 = r_state(state, restarts: r1)
+    state1 = state(state, restarts: r1)
 
     case length(r1) do
       count when count <= max_r ->
@@ -1962,24 +2073,24 @@ defmodule BrodMimic.Supervisor3 do
     :error_logger.error_report(:supervisor_report, error_msg)
   end
 
-  defp extract_child(child) when is_list(r_child(child, :pid)) do
+  defp extract_child(child) when is_list(child(child, :pid)) do
     [
-      {:nb_children, length(r_child(child, :pid))}
+      {:nb_children, length(child(child, :pid))}
       | extract_child_common(child)
     ]
   end
 
   defp extract_child(child) do
-    [{:pid, r_child(child, :pid)} | extract_child_common(child)]
+    [{:pid, child(child, :pid)} | extract_child_common(child)]
   end
 
   defp extract_child_common(child) do
     [
-      {:id, r_child(child, :name)},
-      {:mfargs, r_child(child, :mfargs)},
-      {:restart_type, r_child(child, :restart_type)},
-      {:shutdown, r_child(child, :shutdown)},
-      {:child_type, r_child(child, :child_type)}
+      {:id, child(child, :name)},
+      {:mfargs, child(child, :mfargs)},
+      {:restart_type, child(child, :restart_type)},
+      {:shutdown, child(child, :shutdown)},
+      {:child_type, child(child, :child_type)}
     ]
   end
 

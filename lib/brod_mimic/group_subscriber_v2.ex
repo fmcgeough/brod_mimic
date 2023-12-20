@@ -419,8 +419,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
           topic: topic
         }
 
-        {:ok, pid} =
-          start_worker(client, topic, message_type, partition, consumer_config, start_options)
+        {:ok, pid} = start_worker(client, topic, message_type, partition, consumer_config, start_options)
 
         new_workers = Map.put(workers, topic_partition, pid)
         r_state(state, workers: new_workers)

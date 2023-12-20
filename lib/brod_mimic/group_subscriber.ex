@@ -225,9 +225,7 @@ defmodule BrodMimic.GroupSubscriber do
         cb_module,
         cb_init_arg
       ) do
-    args =
-      {client, group_id, topics, group_config, consumer_config, message_type, cb_module,
-       cb_init_arg}
+    args = {client, group_id, topics, group_config, consumer_config, message_type, cb_module, cb_init_arg}
 
     GenServer.start_link(__MODULE__, args, [])
   end
@@ -335,17 +333,13 @@ defmodule BrodMimic.GroupSubscriber do
 
   #### gen_server callbacks =====================================================
 
-  def init(
-        {client, group_id, topics, group_config, consumer_config, message_type, cb_module,
-         cb_init_arg}
-      ) do
+  def init({client, group_id, topics, group_config, consumer_config, message_type, cb_module, cb_init_arg}) do
     :ok = BrodUtils.assert_client(client)
     :ok = BrodUtils.assert_group_id(group_id)
     :ok = BrodUtils.assert_topics(topics)
     {:ok, cb_state} = cb_module.init(group_id, cb_init_arg)
 
-    {:ok, pid} =
-      BrodGroupCoordinator.start_link(client, group_id, topics, group_config, __MODULE__, self())
+    {:ok, pid} = BrodGroupCoordinator.start_link(client, group_id, topics, group_config, __MODULE__, self())
 
     state =
       state(
@@ -655,8 +649,7 @@ defmodule BrodMimic.GroupSubscriber do
   @spec handle_ack(ack_ref(), state(), boolean()) :: state()
   def handle_ack(
         ack_ref,
-        state(generation_id: generation_id, consumers: consumers, coordinator: coordinator) =
-          state,
+        state(generation_id: generation_id, consumers: consumers, coordinator: coordinator) = state,
         commit_now
       ) do
     {topic, partition, offset} = ack_ref

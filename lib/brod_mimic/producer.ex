@@ -250,11 +250,9 @@ defmodule BrodMimic.Producer do
   def init({client_pid, topic, partition, config}) do
     Process.flag(:trap_exit, true)
 
-    buffer_limit =
-      :proplists.get_value(:partition_buffer_limit, config, @default_partition_buffer_limit)
+    buffer_limit = :proplists.get_value(:partition_buffer_limit, config, @default_partition_buffer_limit)
 
-    on_wire_limit =
-      :proplists.get_value(:partition_onwire_limit, config, @default_partition_onwire_limit)
+    on_wire_limit = :proplists.get_value(:partition_onwire_limit, config, @default_partition_onwire_limit)
 
     max_batch_size = :proplists.get_value(:max_batch_size, config, @default_max_batch_size)
     max_retries = :proplists.get_value(:max_retries, config, @default_max_retries)

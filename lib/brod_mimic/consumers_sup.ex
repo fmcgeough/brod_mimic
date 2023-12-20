@@ -96,8 +96,7 @@ defmodule BrodMimic.ConsumersSup do
     # MODIFY: make it dynamic when consumer groups API is ready
     case get_partitions(client_pid, topic, config) do
       {:ok, partitions} ->
-        children =
-          for partition <- partitions, do: consumer_spec(client_pid, topic, partition, config)
+        children = for partition <- partitions, do: consumer_spec(client_pid, topic, partition, config)
 
         {:ok, {{:one_for_one, 0, 1}, children}}
 

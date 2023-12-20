@@ -447,9 +447,7 @@ defmodule BrodMimic.GroupCoordinator do
     end
   end
 
-  def discover_coordinator(
-        state(client: client, connection: connection0, group_id: group_id) = state
-      ) do
+  def discover_coordinator(state(client: client, connection: connection0, group_id: group_id) = state) do
     {endpoint, conn_config0} =
       (fn ->
          case BrodClient.get_group_coordinator(
@@ -711,8 +709,7 @@ defmodule BrodMimic.GroupCoordinator do
 
     topic_assignments = get_topic_assignments(state, assignment)
 
-    :ok =
-      member_module.assignments_received(member_pid, member_id, generation_id, topic_assignments)
+    :ok = member_module.assignments_received(member_pid, member_id, generation_id, topic_assignments)
 
     new_state = state(state, is_in_group: true)
 
@@ -930,8 +927,7 @@ defmodule BrodMimic.GroupCoordinator do
 
           [
             {:member_id, member_id},
-            {:assignment,
-             [{:version, 0}, {:topic_partitions, partition_assignments}, {:user_data, <<>>}]}
+            {:assignment, [{:version, 0}, {:topic_partitions, partition_assignments}, {:user_data, <<>>}]}
           ]
         end,
         assignments
@@ -957,8 +953,7 @@ defmodule BrodMimic.GroupCoordinator do
       topics = :kpro.find(:topics, meta)
       user_data = :kpro.find(:user_data, meta)
 
-      member_data =
-        kafka_group_member_metadata(version: version, topics: topics, user_data: user_data)
+      member_data = kafka_group_member_metadata(version: version, topics: topics, user_data: user_data)
 
       {member_id, member_data}
     end)
@@ -1111,8 +1106,7 @@ defmodule BrodMimic.GroupCoordinator do
           :undefined
       end
 
-    assignment =
-      brod_received_assignment(topic: topic, partition: partition, begin_offset: begin_offset)
+    assignment = brod_received_assignment(topic: topic, partition: partition, begin_offset: begin_offset)
 
     [assignment | resolve_begin_offsets(rest, committed_offsets, is_consumer_managed)]
   end

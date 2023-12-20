@@ -400,6 +400,7 @@ defmodule BrodMimic.Consumer do
     :ok
   end
 
+  @impl GenServer
   def code_change(_old_vsn, state, _extra) do
     {:ok, state}
   end
@@ -852,9 +853,7 @@ defmodule BrodMimic.Consumer do
       {:error, reason}
   end
 
-  defp reset_buffer(
-         state(pending_acks: pending_acks(queue: queue), begin_offset: begin_offset0) = state
-       ) do
+  defp reset_buffer(state(pending_acks: pending_acks(queue: queue), begin_offset: begin_offset0) = state) do
     begin_offset =
       case :queue.peek(queue) do
         {:value, {offset, _}} ->
@@ -879,8 +878,7 @@ defmodule BrodMimic.Consumer do
   end
 
   defp maybe_init_connection(
-         state(bootstrap: bootstrap, topic: topic, partition: partition, connection: :undefined) =
-           state0
+         state(bootstrap: bootstrap, topic: topic, partition: partition, connection: :undefined) = state0
        ) do
     case connect_leader(bootstrap, topic, partition) do
       {:ok, connection} ->
@@ -893,8 +891,7 @@ defmodule BrodMimic.Consumer do
               :undefined
           end
 
-        state =
-          state(state0, last_req_ref: :undefined, connection: connection, connection_mref: mref)
+        state = state(state0, last_req_ref: :undefined, connection: connection, connection_mref: mref)
 
         {:ok, state}
 
