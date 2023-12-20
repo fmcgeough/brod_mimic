@@ -913,14 +913,71 @@ defmodule BrodMimic.Brod do
     BrodUtils.delete_topics(hosts, topics, timeout, options)
   end
 
+  @doc """
+  Fetch broker metadata for all topics.
+
+  See `get_metadata/3` for more information.
+  """
+  @spec get_metadata([endpoint()]) :: {:ok, :kpro.struct()} | {:error, any()}
   def get_metadata(hosts) do
     BrodUtils.get_metadata(hosts)
   end
 
+  @doc """
+  Fetch broker metadata for the given topics (or for every topic is `:all` is
+  passed in)
+
+  See `get_metadata/3` for more information.
+  """
+  @spec get_metadata([endpoint()], :all | [topic()]) :: {:ok, :kpro.struct()} | {:error, any()}
   def get_metadata(hosts, topics) do
     BrodUtils.get_metadata(hosts, topics)
   end
 
+  @doc """
+  Fetch broker metadata for the given topics using the given connection options.
+
+  The response differs in each version of the `metadata` API call.
+  The last supported `metadata` API version is 2, so this will be
+  probably used (if your Kafka supports it too). See
+  [kafka.bnf](https://github.com/kafka4beam/kafka_protocol/blob/master/priv/kafka.bnf).
+  (search for `MetadataResponseV2`) for response schema with comments.
+
+  Beware that when `auto.create.topics.enable` is set to true in
+  the broker configuration, fetching metadata with a concrete
+  topic specified (in the `topics` parameter) may cause creation of
+  the topic when it does not exist. If you want a safe `get_metadata`
+  call, always pass `:all` as `topics` and then filter them.
+
+  ## Example
+
+  ```
+  iex> BrodMimic.Brod.get_metadata([{"localhost", 9092}], ["my_topic"], [])
+  {:ok,
+  %{
+    brokers: [%{host: "127.0.0.1", node_id: 0, port: 9092, rack: ""}],
+    cluster_id: "serqLrBPTBuq4Dp6Pb7Kdw",
+    controller_id: 0,
+    topics: [
+      %{
+        error_code: :no_error,
+        is_internal: false,
+        name: "my_topic",
+        partitions: [
+          %{
+            error_code: :no_error,
+            isr_nodes: [0],
+            leader_id: 0,
+            partition_index: 0,
+            replica_nodes: [0]
+          }
+        ]
+      }
+    ]
+  }}
+  ```
+  """
+  @spec get_metadata([endpoint()], :all | [topic()], conn_config()) :: {:ok, :kpro.struct()} | {:error, any()}
   def get_metadata(hosts, topics, options) do
     BrodUtils.get_metadata(hosts, topics, options)
   end
