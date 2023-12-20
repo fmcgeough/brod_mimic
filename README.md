@@ -83,7 +83,10 @@ Documentation can be generated with [ExDoc](https://github.com/elixir-lang/ex_do
 - code compiles with no warnings/errors
 - simple `iex` session can start a client
 - bringing up observer after starting simple `iex` session shows same processes started as
-  the brod library
+  the brod library. When the library is loaded `BrodMimic.Brod.start/2` is called (this is what
+  is defined in the mix.exs file). This, in turn, calls `BrodMimic.Sup.start_link/0`. That module
+  starts the `BrodMimic.KafkaApis` in it's init callback.
+  ![Startup](./doc/images/brod_mimic_startup.png)
 - simple publishing appears to work okay
 
 ## Sample Session
