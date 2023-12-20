@@ -1013,21 +1013,18 @@ defmodule BrodMimic.Brod do
   @doc """
   Resolve semantic offset or timestamp to real offset.
 
-  The function returns the offset of the first message
-  with the given timestamp, or of the first message after
-  the given timestamp (in case no message matches the
-  timestamp exactly), or -1 if the timestamp is newer
-  than (>) all messages in the topic.
+  The function returns the offset of the first message with the given timestamp,
+  or of the first message after the given timestamp (in case no message matches
+  the timestamp exactly), or -1 if the timestamp is newer than (>) all messages
+  in the topic.
 
-  You can also use two semantic offsets instead of
-  a timestamp: `:earliest` gives you the offset of the
-  first message in the topic and `:latest` gives you
+  You can also use two semantic offsets instead of a timestamp: `:earliest`
+  gives you the offset of the first message in the topic and `:latest` gives you
   the offset of the last message incremented by 1.
 
-  If the topic is empty, both `:earliest` and `:latest`
-  return the same value (which is 0 unless some messages
-  were deleted from the topic), and any timestamp returns
-  -1.
+  If the topic is empty, both `:earliest` and `:latest` return the same value
+  (which is 0 unless some messages were deleted from the topic), and any
+  timestamp returns -1.
 
    An example for illustration:
    ```
