@@ -112,12 +112,27 @@ defmodule BrodMimic.Macros do
       @type cg_protocol_type() :: binary()
 
       @typedoc """
+      Consumer group identifier
+      """
+      @type group_id() :: :kpro.group_id()
+
+      @typedoc """
+      Kafka time offset
+      """
+      @type offset_time() :: integer() | :earliest | :latest
+
+      @typedoc """
+      Kafka error code
+      """
+      @type error_code() :: :kpro.error_code()
+
+      @typedoc """
       Record defining consumer group data (id and protocol type)
       """
       @type cg() ::
               record(:brod_cg,
-                id: BrodMimic.Brod.group_id(),
-                protocol_type: BrodMimic.Brod.cg_protocol_type()
+                id: group_id(),
+                protocol_type: cg_protocol_type()
               )
 
       @type kafka_group_member_metadata ::
@@ -133,18 +148,18 @@ defmodule BrodMimic.Macros do
       @type brod_received_assignment ::
               record(:brod_received_assignment,
                 topic: topic(),
-                partition: BrodMimic.Brod.partition(),
+                partition: partition(),
                 begin_offset:
                   :undefined
                   | offset()
-                  | {:begin_offset, BrodMimic.Brod.offset_time()}
+                  | {:begin_offset, offset_time()}
               )
 
       @type kafka_fetch_error() ::
               record(:kafka_fetch_error,
                 topic: topic(),
                 partition: partition(),
-                error_code: BrodMimic.Brod.error_code(),
+                error_code: error_code(),
                 error_desc: String.t()
               )
 

@@ -94,7 +94,6 @@ defmodule BrodMimic.Client do
     socket performance. e.g. `[{Bitwise.bsl(sndbuf, 1, 20}]`. [More info](http://erlang.org/doc/man/gen_tcp.html#type-option).
   """
   @type config() :: :proplists.proplist()
-  @type group_id() :: Brod.group_id()
 
   @type partition_worker_key() ::
           {:producer, topic(), partition()} | {:consumer, topic(), partition()}

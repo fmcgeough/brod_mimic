@@ -34,7 +34,6 @@ defmodule BrodMimic.CgCommits do
   @nonexistent_partitions "Nonexisting partitions in input: ~p"
   @topic_not_in_assignment "Topic ~s is not received in assignment"
 
-  @type group_id() :: Brod.group_id()
   @type member_id() :: Brod.group_member_id()
   #  -1 to use whatever configured in kafka
   @type retention() :: integer()

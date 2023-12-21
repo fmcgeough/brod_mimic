@@ -18,8 +18,6 @@ defmodule BrodMimic.Utils do
   @type conn_config() :: Brod.conn_config()
   @type topic_config() :: Brod.topic_config()
   @type endpoint() :: Brod.endpoint()
-  @type offset_time() :: Brod.offset_time()
-  @type group_id() :: Brod.group_id()
 
   @doc """
   This is equivalent to the `create_topics(hosts, topic_configs, request_configs, [])`

@@ -58,8 +58,6 @@ defmodule BrodMimic.Brod do
   @type client_config() :: BrodMimic.Client.config()
   # default client config
   @type bootstrap() :: [endpoint()] | {[endpoint()], client_config()}
-  @type offset_time() :: integer() | :earliest | :latest
-  @type error_code() :: :kpro.error_code()
 
   ## producers
   @type producer_config() :: BrodMimic.Producer.config()
@@ -119,7 +117,6 @@ defmodule BrodMimic.Brod do
   @type conn_config() :: [{atom(), term()}] | :kpro.conn_config()
 
   ## consumer groups
-  @type group_id() :: :kpro.group_id()
   @type group_member_id() :: binary()
   @type group_member() :: {group_member_id(), kafka_group_member_metadata()}
   @type group_generation_id() :: non_neg_integer()
@@ -849,10 +846,26 @@ defmodule BrodMimic.Brod do
     BrodUtils.create_topics(hosts, topic_configs, request_configs, options)
   end
 
+  @doc """
+  Equivalent to calling `delete_topics/4` with final options parameter set to an empty
+  List.
+  """
+  @spec delete_topics([endpoint()], [topic()], pos_integer()) :: :ok | {:error, any()}
   def delete_topics(hosts, topics, timeout) do
     BrodUtils.delete_topics(hosts, topics, timeout)
   end
 
+  @doc """
+  Delete topic(s) from Kafka.
+
+  ## Example:
+
+  ```
+  iex> BrodMimic.Brod.delete_topics([{"localhost", 9092}], ["my_topic"], 5000, [])
+  :ok
+  ```
+  """
+  @spec delete_topics([endpoint()], [topic()], pos_integer(), conn_config()) :: :ok | {:error, any()}
   def delete_topics(hosts, topics, timeout, options) do
     BrodUtils.delete_topics(hosts, topics, timeout, options)
   end
