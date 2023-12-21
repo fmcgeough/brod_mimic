@@ -94,10 +94,14 @@ iex> :sys.get_state(pid)
  BrodMimic.Sup, :clients_sup}
 ```
 
-Finally, there are situations where the Erlang code converted directly to equivalent
-Elixir is extremely difficult to read. In this case, there may be helper functions created.
+### Erlang catch
 
-One example relates to the Erlang `catch` keyword. In Erlang you can do the following:
+There are situations where the Erlang code converted directly to equivalent
+Elixir is extremely difficult to read. In this case, there may be helper
+functions created.
+
+One example relates to the Erlang `catch` keyword. In Erlang you can do the following (as
+demonstrated in [Learn You Some Erlang](https://learnyousomeerlang.com/errors-and-exceptions)):
 
 ```
 catcher(X,Y) ->
