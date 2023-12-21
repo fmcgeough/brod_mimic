@@ -89,7 +89,7 @@ defmodule BrodMimic.Consumer do
   @typedoc """
   Type definition for the Record `:pending_acks` used internally
   """
-  @type pending_acks() :: record(:pending_acks, count: integer(), bytes: integer(), queue: any())
+  @type pending_acks() :: record(:pending_acks, count: integer(), bytes: integer(), queue: :queue.queue())
 
   @typedoc """
   Type definition for the `Record` used for `BrodMimic.Consumer` GenServer state
@@ -174,19 +174,15 @@ defmodule BrodMimic.Consumer do
   def init({bootstrap, topic, partition, config}) do
     Process.flag(:trap_exit, true)
 
-    cfg = fn name, default ->
-      :proplists.get_value(name, config, default)
-    end
-
-    min_bytes = cfg.(:min_bytes, @default_min_bytes)
-    max_bytes = cfg.(:max_bytes, @default_max_bytes)
-    max_wait_time = cfg.(:max_wait_time, @default_max_wait_time)
-    sleep_timeout = cfg.(:sleep_timeout, @default_sleep_timeout)
-    prefetch_count = :erlang.max(cfg.(:prefetch_count, @default_prefetch_count), 0)
-    prefetch_bytes = :erlang.max(cfg.(:prefetch_bytes, @default_prefetch_bytes), 0)
-    begin_offset = cfg.(:begin_offset, @default_begin_offset)
-    offset_reset_policy = cfg.(:offset_reset_policy, @default_offset_reset_policy)
-    isolation_level = cfg.(:isolation_level, @default_isolation_level)
+    min_bytes = :proplists.get_value(:min_bytes, config, @default_min_bytes)
+    max_bytes = :proplists.get_value(:max_bytes, config, @default_max_bytes)
+    max_wait_time = :proplists.get_value(:max_wait_time, config, @default_max_wait_time)
+    sleep_timeout = :proplists.get_value(:sleep_timeout, config, @default_sleep_timeout)
+    prefetch_count = max(:proplists.get_value(:prefetch_count, config, @default_prefetch_count), 0)
+    prefetch_bytes = max(:proplists.get_value(:prefetch_bytes, config, @default_prefetch_bytes), 0)
+    begin_offset = :proplists.get_value(:begin_offset, config, @default_begin_offset)
+    offset_reset_policy = :proplists.get_value(:offset_reset_policy, config, @default_offset_reset_policy)
+    isolation_level = :proplists.get_value(:isolation_level, config, @default_isolation_level)
 
     # If bootstrap is a client pid, register self to the client
     case is_shared_conn(bootstrap) do
@@ -215,7 +211,7 @@ defmodule BrodMimic.Consumer do
        offset_reset_policy: offset_reset_policy,
        avg_bytes: 0,
        max_bytes: max_bytes,
-       size_stat_window: cfg.(:size_stat_window, @default_avg_window),
+       size_stat_window: :proplists.get_value(:size_stat_window, config, @default_avg_window),
        connection_mref: :undefined,
        isolation_level: isolation_level
      )}
