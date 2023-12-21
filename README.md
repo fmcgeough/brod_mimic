@@ -94,10 +94,38 @@ iex> :sys.get_state(pid)
  BrodMimic.Sup, :clients_sup}
 ```
 
-Finally, there are situations where the Erlang code is extremely difficult to read.
-Converting it directly to Elixir doesn't really help people understand it. In this
-case, there may be helper functions created. For example, in Supervisor3 there is
-this code in the `code_change` function:
+Finally, there are situations where the Erlang code converted directly to equivalent
+Elixir is extremely difficult to read. In this case, there may be helper functions created.
+
+One example relates to the Erlang `catch` keyword. In Erlang you can do the following:
+
+```
+catcher(X,Y) ->
+  case catch X/Y of
+    {'EXIT', {badarith,_}} -> "uh oh";
+   N -> N
+end.
+```
+
+In Elixir you cannot use `catch` in this way. So the direct implementation to Elixir
+becomes something like:
+
+```
+def catcher(x, y) do
+  case (try do
+    x/y
+  catch
+    :error, e -> {:EXIT, {e, __STACKTRACE__}}
+    :exit, e -> {:EXIT, e}
+    e -> e
+  end) do
+    {:EXIT, {:badarith, _}} -> "uh oh"
+    n -> n
+  end
+```
+
+That's pretty hideous looking. So instead of doing this in Supervisor3 in
+the `code_change` function
 
 ```
 case (State#state.module):init(State#state.args) of
@@ -114,7 +142,7 @@ case (State#state.module):init(State#state.args) of
         end;
 ```
 
-In `BrodMimic.Supervisor3` this is converted to:
+In `BrodMimic.Supervisor3` this is:
 
 ```
 case state(state, :module).init(state(state, :args)) do
