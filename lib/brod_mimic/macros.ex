@@ -107,6 +107,11 @@ defmodule BrodMimic.Macros do
               )
 
       @typedoc """
+      Consumer group protocol type
+      """
+      @type cg_protocol_type() :: binary()
+
+      @typedoc """
       Record defining consumer group data (id and protocol type)
       """
       @type cg() ::

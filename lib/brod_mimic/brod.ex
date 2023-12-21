@@ -126,7 +126,6 @@ defmodule BrodMimic.Brod do
   @type group_config() :: keyword()
   @type partition_assignment() :: {topic(), [partition()]}
   @type received_assignments() :: [brod_received_assignment()]
-  @type cg_protocol_type() :: binary()
   @type fetch_opts() :: :kpro.fetch_opts()
   @type fold_acc() :: term()
   @type fold_stop_reason() ::
