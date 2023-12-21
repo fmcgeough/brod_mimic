@@ -78,6 +78,10 @@ defmodule BrodMimic.Brod do
   @type produce_result() :: :brod_produce_req_buffered | :brod_produce_req_acked
 
   ## consumers
+
+  @typedoc """
+  The types of options allowed for a consumer, see `t:consumer_config/0`
+  """
   @type consumer_option() ::
           :begin_offset
           | :min_bytes
@@ -333,6 +337,17 @@ defmodule BrodMimic.Brod do
     BrodClient.start_producer(client, topic_name, producer_config)
   end
 
+  @doc """
+  Dynamically start topic consumer(s) and register it in the client.
+
+  A `BrodMimic.Consumer` is started for each partition of the given topic.
+  Note that you can have only one consumer per client-topic.
+
+  See `t:consumer_config/0` for details about consumer config.
+
+  You can read more about consumers in the [brod consumers overview](https://hexdocs.pm/brod/readme.html#consumers).
+  """
+  @spec start_consumer(client(), topic(), consumer_config()) :: :ok | {:error, any()}
   def start_consumer(client, topic_name, consumer_config) do
     BrodClient.start_consumer(client, topic_name, consumer_config)
   end
