@@ -40,11 +40,18 @@ Klarna Bank AB (publ) (https://www.klarna.com)
 
 ## Porting Notes
 
-### Code matches brod
+### General
+
+The `.formatter.exs` file is setup to have a line length of 120. This allows the long lines
+in the `brod` Erlang code to be done on one line - which, hopefully, improves readability.
+
+### Erlang functions converted to Elixir where possible
 
 Erlang functions like `:application.get_env` were converted to their Elixir
 equivalents. In most cases the Elixir function has the same name so it's not too
 hard to compare the `brod` code with this converted code.
+
+### Doc
 
 The intention is to pull available doc from the `brod` code base and incorporate
 it into this library. When the doc is moved over its edited to align with Elixir
@@ -85,6 +92,53 @@ the keys:
 iex> :sys.get_state(pid)
 {:state, {:local, :brod_sup}, :one_for_one, [], :undefined, 0, 1, [],
  BrodMimic.Sup, :clients_sup}
+```
+
+Finally, there are situations where the Erlang code is extremely difficult to read.
+Converting it directly to Elixir doesn't really help people understand it. In this
+case, there may be helper functions created. For example, in Supervisor3 there is
+this code in the `code_change` function:
+
+```
+case (State#state.module):init(State#state.args) of
+    {ok, {SupFlags, StartSpec}} ->
+        case catch check_flags(SupFlags) of
+            ok ->
+                {Strategy, MaxIntensity, Period} = SupFlags,
+                update_childspec(State#state{strategy = Strategy,
+                                              intensity = MaxIntensity,
+                                              period = Period},
+                                  StartSpec);
+            Error ->
+                {error, Error}
+        end;
+```
+
+In `BrodMimic.Supervisor3` this is converted to:
+
+```
+case state(state, :module).init(state(state, :args)) do
+  {:ok, {sup_flags, start_spec}} ->
+    case check_flags_with_catch(sup_flags) do
+      :ok ->
+        {strategy, max_intensity, period} = sup_flags
+        update_childspec(state(state, strategy: strategy, intensity: max_intensity, period: period), start_spec)
+
+      error ->
+        {:error, error}
+    end
+```
+
+and the helper function `check_flags_with_catch` takes care of the exception handling.
+
+```
+  defp check_flags_with_catch(sup_flags) do
+    check_flags(sup_flags)
+  catch
+    :error, e -> {:EXIT, {e, __STACKTRACE__}}
+    :exit, e -> {:EXIT, e}
+    e -> e
+  end
 ```
 
 ### Records

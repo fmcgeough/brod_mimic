@@ -179,9 +179,7 @@ defmodule BrodMimic.Macros do
       defp brod_default_timeout, do: :timer.seconds(5)
       defp consumer_key(topic, partition), do: {:consumer, topic, partition}
       defp producer_key(topic, partition), do: {:producer, topic, partition}
-      # defp producer(pid), do: [{:producer, _, _}, pid]
       defp producer(topic, partition, pid), do: {producer_key(topic, partition), pid}
-      # defp consumer(pid), do: [{:consumer, _, _}, pid]
       defp consumer(topic, partition, pid), do: {consumer_key(topic, partition), pid}
       defp incomplete_batch(expected_size), do: {:incomplete_batch, expected_size}
     end
