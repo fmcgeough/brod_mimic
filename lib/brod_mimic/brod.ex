@@ -937,12 +937,22 @@ defmodule BrodMimic.Brod do
     BrodGroupSubscriberv2.start_link(config)
   end
 
+  @doc """
+  Equivalent to `start_link_topic_subscriber(client, topic, :all, consumer_config, cb_module, cb_init_arg`
+  """
   @deprecated "Please use `start_link_topic_subscriber/1` instead"
+  @spec start_link_topic_subscriber(client(), topic(), consumer_config(), module(), term()) ::
+          {:ok, pid()} | {:error, any()}
   def start_link_topic_subscriber(client, topic, consumer_config, cb_module, cb_init_arg) do
     start_link_topic_subscriber(client, topic, :all, consumer_config, cb_module, cb_init_arg)
   end
 
+  @doc """
+  Equivalent to `start_link_topic_subscriber(client, topic, partitions, consumer_config, :message, cb_module, cb_init_arg`
+  """
   @deprecated "Please use `start_link_topic_subscriber/1` instead"
+  @spec start_link_topic_subscriber(client(), topic(), :all | [partition()], consumer_config(), module(), term()) ::
+          {:ok, pid()} | {:error, any()}
   def start_link_topic_subscriber(
         client,
         topic,
@@ -962,7 +972,19 @@ defmodule BrodMimic.Brod do
     )
   end
 
+  @doc """
+  Deprecated
+  """
   @deprecated "Please use `start_link_topic_subscriber/1` instead"
+  @spec start_link_topic_subscriber(
+          client(),
+          topic(),
+          :all | [partition()],
+          consumer_config(),
+          :message | :message_set,
+          module(),
+          term()
+        ) :: {:ok, pid()} | {:error, any()}
   def start_link_topic_subscriber(
         client,
         topic,
