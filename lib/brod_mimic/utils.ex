@@ -151,11 +151,16 @@ defmodule BrodMimic.Utils do
   @doc """
   Check terminate reason for a GenServer
   """
+  @spec is_normal_reason(any()) :: boolean()
   def is_normal_reason(:normal), do: true
   def is_normal_reason(:shutdown), do: true
   def is_normal_reason({:shutdown, _}), do: true
   def is_normal_reason(_), do: false
 
+  @doc """
+  Is the process passed as argument alive?
+  """
+  @spec is_pid_alive(pid()) :: boolean()
   def is_pid_alive(pid) do
     is_pid(pid) && Process.alive?(pid)
   end
@@ -213,6 +218,10 @@ defmodule BrodMimic.Utils do
     )
   end
 
+  @doc """
+  Assert a list of topic names [binary()]
+  """
+  @spec assert_topics([topic()]) :: :ok | no_return()
   def assert_topics(topics) do
     pred = fn topic ->
       :ok === assert_topic(topic)
@@ -228,6 +237,10 @@ defmodule BrodMimic.Utils do
     )
   end
 
+  @doc """
+  Assert topic is a binary()
+  """
+  @spec assert_topic(topic()) :: :ok | no_return()
   def assert_topic(topic) do
     ok_when(
       is_binary(topic) and :erlang.size(topic) > 0,
@@ -235,7 +248,16 @@ defmodule BrodMimic.Utils do
     )
   end
 
+  @doc """
+  Make a flat message list from decoded batch list.
+
+  Return the next begin-offset together with the messages
+  """
+  @spec flatten_batches(offset(), map(), [:kpro.batch()]) :: {offset(), [:kpro.message()]}
   def flatten_batches(begin_offset, _, []) do
+    # empty batch implies we have reached the end of a partition,
+    # we do not want to advance begin-offset here,
+    # instead, we should try again (after a delay) with the same offset
     {begin_offset, []}
   end
 
