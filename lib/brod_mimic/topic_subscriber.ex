@@ -9,22 +9,18 @@ defmodule BrodMimic.TopicSubscriber do
   use BrodMimic.Macros
   use GenServer
 
-  import Record, only: [defrecordp: 3]
+  import Record, only: [defrecordp: 2]
 
   alias BrodMimic.Brod
   alias BrodMimic.Utils, as: BrodUtils
 
-  @type committed_offsets() :: [{partition(), offset()}]
-  @type cb_state() :: term()
-  @type cb_ret() :: {:ok, cb_state()} | {:ok, :ack, cb_state()}
-
-  defrecordp(:r_cbm_init_data, :cbm_init_data,
+  defrecordp(:cbm_init_data,
     committed_offsets: :undefined,
     cb_fun: :undefined,
     cb_data: :undefined
   )
 
-  defrecordp(:r_consumer, :consumer,
+  defrecordp(:consumer,
     partition: :undefined,
     consumer_pid: :undefined,
     consumer_mref: :undefined,
@@ -32,7 +28,7 @@ defmodule BrodMimic.TopicSubscriber do
     last_offset: :undefined
   )
 
-  defrecordp(:r_state, :state,
+  defrecordp(:state,
     client: :undefined,
     client_mref: :undefined,
     topic: :undefined,
@@ -41,6 +37,20 @@ defmodule BrodMimic.TopicSubscriber do
     cb_state: :undefined,
     message_type: :undefined
   )
+
+  @type committed_offsets() :: [{partition(), offset()}]
+  @type cb_state() :: term()
+  @type cb_ret() :: {:ok, cb_state()} | {:ok, :ack, cb_state()}
+  @type topic_subscriber_config() ::
+          %{
+            required(:client) => client(),
+            required(:topic) => topic(),
+            required(:cb_module) => module(),
+            required(:init_data) => term(),
+            required(:message_type) => :message | :message_set,
+            required(:consumer_config) => Brod.consumer_config(),
+            required(:partitions) => :all | [partition()]
+          }
 
   # behaviour callbacks ======================================================
 
@@ -121,12 +131,7 @@ defmodule BrodMimic.TopicSubscriber do
         cb_fun,
         cb_initial_state
       ) do
-    init_data =
-      r_cbm_init_data(
-        committed_offsets: committed_offsets,
-        cb_fun: cb_fun,
-        cb_data: cb_initial_state
-      )
+    init_data = cbm_init_data(committed_offsets: committed_offsets, cb_fun: cb_fun, cb_data: cb_initial_state)
 
     args = %{
       client: client,
@@ -185,7 +190,7 @@ defmodule BrodMimic.TopicSubscriber do
     send(self(), {:"$start_consumer", consumer_config, committed_offsets, partitions})
 
     state =
-      r_state(
+      state(
         client: client,
         client_mref: Process.monitor(client),
         topic: topic,
@@ -205,7 +210,7 @@ defmodule BrodMimic.TopicSubscriber do
 
   def handle_info(
         {:"$start_consumer", consumer_config, committed_offsets, partitions0},
-        r_state(client: client, topic: topic) = state
+        state(client: client, topic: topic) = state
       ) do
     :ok = Brod.start_consumer(client, topic, consumer_config)
 
@@ -231,55 +236,45 @@ defmodule BrodMimic.TopicSubscriber do
       end
 
     consumers =
-      :lists.map(
-        fn partition ->
-          acked_offset =
-            case :lists.keyfind(
-                   partition,
-                   1,
-                   committed_offsets
-                 ) do
-              {^partition, offset} ->
-                offset
+      Enum.map(partitions, fn partition ->
+        acked_offset =
+          case :lists.keyfind(partition, 1, committed_offsets) do
+            {^partition, offset} ->
+              offset
 
-              false ->
-                :undefined
-            end
+            false ->
+              :undefined
+          end
 
-          r_consumer(
-            partition: partition,
-            acked_offset: acked_offset
-          )
-        end,
-        partitions
-      )
+        consumer(partition: partition, acked_offset: acked_offset)
+      end)
 
-    new_state = r_state(state, consumers: consumers)
+    new_state = state(state, consumers: consumers)
     _ = send_lo_cmd(:"$subscribe_partitions")
     {:noreply, new_state}
   end
 
   def handle_info(:"$subscribe_partitions", state) do
-    {:ok, r_state() = new_state} = subscribe_partitions(state)
+    {:ok, state() = new_state} = subscribe_partitions(state)
     _ = send_lo_cmd(:"$subscribe_partitions", 2000)
     {:noreply, new_state}
   end
 
-  def handle_info({:DOWN, mref, :process, _pid, _reason}, r_state(client_mref: mref) = state) do
+  def handle_info({:DOWN, mref, :process, _pid, _reason}, state(client_mref: mref) = state) do
     {:stop, :client_down, state}
   end
 
-  def handle_info({:DOWN, _mref, :process, pid, reason}, r_state(consumers: consumers) = state) do
+  def handle_info({:DOWN, _mref, :process, pid, reason}, state(consumers: consumers) = state) do
     case get_consumer(pid, consumers) do
-      r_consumer() = c ->
+      consumer() = c ->
         consumer =
-          r_consumer(c,
+          consumer(c,
             consumer_pid: {:down, BrodUtils.os_time_utc_str(), reason},
             consumer_mref: :undefined
           )
 
         new_consumers = put_consumer(consumer, consumers)
-        new_state = r_state(state, consumers: new_consumers)
+        new_state = state(state, consumers: new_consumers)
         {:noreply, new_state}
 
       false ->
@@ -317,17 +312,14 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   @impl GenServer
-  def terminate(
-        reason,
-        r_state(cb_module: cb_module, cb_state: cb_state)
-      ) do
+  def terminate(reason, state(cb_module: cb_module, cb_state: cb_state)) do
     BrodUtils.optional_callback(cb_module, :terminate, [reason, cb_state], :ok)
     :ok
   end
 
   defp handle_consumer_delivery(
          kafka_message_set(topic: topic, partition: partition, messages: messages) = msg_set,
-         r_state(topic: topic, message_type: msg_type) = state0
+         state(topic: topic, message_type: msg_type) = state0
        ) do
     state = update_last_offset(partition, messages, state0)
 
@@ -340,14 +332,14 @@ defmodule BrodMimic.TopicSubscriber do
     end
   end
 
-  defp update_last_offset(partition, messages, r_state(consumers: consumers) = state) do
+  defp update_last_offset(partition, messages, state(consumers: consumers) = state) do
     last_offset = messages |> :lists.last() |> kafka_message(:offset)
     c = get_consumer(partition, consumers)
-    consumer = r_consumer(c, last_offset: last_offset)
-    r_state(state, consumers: put_consumer(consumer, consumers))
+    consumer = consumer(c, last_offset: last_offset)
+    state(state, consumers: put_consumer(consumer, consumers))
   end
 
-  defp subscribe_partitions(r_state(client: client, topic: topic, consumers: consumers0) = state) do
+  defp subscribe_partitions(state(client: client, topic: topic, consumers: consumers0) = state) do
     consumers =
       :lists.map(
         fn c ->
@@ -356,11 +348,11 @@ defmodule BrodMimic.TopicSubscriber do
         consumers0
       )
 
-    {:ok, r_state(state, consumers: consumers)}
+    {:ok, state(state, consumers: consumers)}
   end
 
   defp subscribe_partition(client, topic, consumer) do
-    r_consumer(
+    consumer(
       partition: partition,
       consumer_pid: pid,
       acked_offset: acked_offset,
@@ -382,10 +374,10 @@ defmodule BrodMimic.TopicSubscriber do
           {:ok, consumer_pid} ->
             mref = Process.monitor(consumer_pid)
 
-            r_consumer(consumer, consumer_pid: consumer_pid, consumer_mref: mref)
+            consumer(consumer, consumer_pid: consumer_pid, consumer_mref: mref)
 
           {:error, reason} ->
-            r_consumer(consumer,
+            consumer(consumer,
               consumer_pid: {:down, BrodUtils.os_time_utc_str(), reason},
               consumer_mref: :undefined
             )
@@ -410,7 +402,7 @@ defmodule BrodMimic.TopicSubscriber do
 
   defp handle_message_set(message_set, state) do
     kafka_message_set(partition: partition, messages: messages) = message_set
-    r_state(cb_module: cb_module, cb_state: cb_state) = state
+    state(cb_module: cb_module, cb_state: cb_state) = state
 
     {ack_now, new_cb_state} =
       case cb_module.handle_message(partition, message_set, cb_state) do
@@ -421,7 +413,7 @@ defmodule BrodMimic.TopicSubscriber do
           {true, new_cb_state_}
       end
 
-    state1 = r_state(state, cb_state: new_cb_state)
+    state1 = state(state, cb_state: new_cb_state)
 
     case ack_now do
       true ->
@@ -441,7 +433,7 @@ defmodule BrodMimic.TopicSubscriber do
 
   defp handle_messages(partition, [msg | rest], state) do
     offset = kafka_message(msg, :offset)
-    r_state(cb_module: cb_module, cb_state: cb_state) = state
+    state(cb_module: cb_module, cb_state: cb_state) = state
     ack_ref = {partition, offset}
 
     {ack_now, new_cb_state} =
@@ -453,7 +445,7 @@ defmodule BrodMimic.TopicSubscriber do
           {true, new_cb_state_}
       end
 
-    state1 = r_state(state, cb_state: new_cb_state)
+    state1 = state(state, cb_state: new_cb_state)
 
     new_state =
       case ack_now do
@@ -467,10 +459,10 @@ defmodule BrodMimic.TopicSubscriber do
     handle_messages(partition, rest, new_state)
   end
 
-  defp handle_ack(ack_ref, r_state(consumers: consumers) = state) do
+  defp handle_ack(ack_ref, state(consumers: consumers) = state) do
     {partition, offset} = ack_ref
 
-    r_consumer(consumer_pid: pid) =
+    consumer(consumer_pid: pid) =
       consumer =
       get_consumer(
         partition,
@@ -478,22 +470,22 @@ defmodule BrodMimic.TopicSubscriber do
       )
 
     :ok = consume_ack(pid, offset)
-    new_consumer = r_consumer(consumer, acked_offset: offset)
+    new_consumer = consumer(consumer, acked_offset: offset)
     new_consumers = put_consumer(new_consumer, consumers)
-    r_state(state, consumers: new_consumers)
+    state(state, consumers: new_consumers)
   end
 
   defp get_consumer(partition, consumers)
        when is_integer(partition) do
-    :lists.keyfind(partition, r_consumer(:partition), consumers)
+    :lists.keyfind(partition, consumer(:partition), consumers)
   end
 
   defp get_consumer(pid, consumers) when is_pid(pid) do
-    :lists.keyfind(pid, r_consumer(:consumer_pid), consumers)
+    :lists.keyfind(pid, consumer(:consumer_pid), consumers)
   end
 
-  defp put_consumer(r_consumer(partition: p) = consumer, consumers) do
-    :lists.keyreplace(p, r_consumer(:partition), consumers, consumer)
+  defp put_consumer(consumer(partition: p) = consumer, consumers) do
+    :lists.keyreplace(p, consumer(:partition), consumers, consumer)
   end
 
   defp consume_ack(pid, offset) do

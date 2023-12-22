@@ -1007,6 +1007,10 @@ defmodule BrodMimic.Brod do
     BrodTopicSubscriber.start_link(args)
   end
 
+  @doc """
+  See `BrodMimic.TopSubscriber.start_link/1`
+  """
+  @spec start_link_topic_subscriber(BrodTopicSubscriber.topic_subscriber_config()) :: {:ok, pid()} | {:error, any()}
   def start_link_topic_subscriber(config) do
     BrodTopicSubscriber.start_link(config)
   end
