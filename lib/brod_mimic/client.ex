@@ -46,6 +46,11 @@ defmodule BrodMimic.Client do
 
   ## Keys
 
+  There are keys that are specific to this library and others that are meaningful
+  to the underlying Kafka protocol library.
+
+  ### Library Related Keys
+
   - `:restart_delay_seconds` (optional, default=10).  How long to wait
     between attempts to restart `BrodMimic.Client` process when it crashes
   - `:get_metadata_timeout_seconds` (optional, default=5) Return `{:error,
@@ -68,8 +73,13 @@ defmodule BrodMimic.Client do
   - `:default_producer_config` (optional, default=`[]`).  Producer configuration
     to use when `auto_start_producers` is true. See
     `BrodMimic.Producer.start_link/4` for details about producer config.
-    Connection options can be added to the same proplist. See
-    `kpro_connection.erl` in `kafka_protocol` for the details.
+
+
+  ### Kafka Protocol Keys
+
+  Connection options can be added to the same proplist. See
+  `kpro_connection.erl` in `kafka_protocol` for the details.
+
   - `:ssl` (optional, default=false). `true | false | ssl:ssl_option()` `true`
     is translated to `[]` as `ssl:ssl_option()` i.e. all default.
   - `:sasl` (optional, default=`:undefined`).  Credentials for SASL/Plain

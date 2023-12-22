@@ -212,7 +212,11 @@ defmodule BrodMimic.Brod do
 
   @doc """
   Start the BrodMimic application
+
+  The `no_return()` as possible return is used since if `Application.ensure_all_started/2`
+  returns anything other than `{:ok, _}` the code raises an exception.
   """
+  @spec start() :: :ok | no_return()
   def start do
     {:ok, _apps} = Application.ensure_all_started(:brod_mimic)
     :ok
@@ -221,6 +225,7 @@ defmodule BrodMimic.Brod do
   @doc """
   Stop the BrodMimic application
   """
+  @spec stop() :: :ok
   def stop do
     Application.stop(:brod_mimic)
   end
@@ -241,10 +246,18 @@ defmodule BrodMimic.Brod do
     :ok
   end
 
+  @doc """
+  Equivalent to `start_client(bootstrap_endpoints, :brod_default_client)`
+  """
+  @spec start_client([endpoint()]) :: :ok | {:error, any()}
   def start_client(bootstrap_endpoints) do
     start_client(bootstrap_endpoints, :brod_default_client)
   end
 
+  @doc """
+  Equivalent to `start_client(bootstrap_endpoints, client_id, [])`
+  """
+  @spec start_client([endpoint()], client_id()) :: :ok | {:error, any()}
   def start_client(bootstrap_endpoints, client_id) do
     start_client(bootstrap_endpoints, client_id, [])
   end
@@ -257,7 +270,11 @@ defmodule BrodMimic.Brod do
       partition, e.g. a load-balanced entrypoint to the remote Kafka cluster.
    - `client_id`: Atom to identify the client process
    - `config` is a proplist. See `t:client_config/0`
+
+  You can read more about clients in the [brod Clients
+  Overview](https://hexdocs.pm/brod/readme.html#clients).
   """
+  @spec start_client([endpoint()], client_id(), client_config()) :: :ok | {:error, any()}
   def start_client(bootstrap_endpoints, client_id, config) do
     case BrodSup.start_client(bootstrap_endpoints, client_id, config) do
       :ok ->
@@ -416,6 +433,44 @@ defmodule BrodMimic.Brod do
     BrodProducer.produce(producer_pid, key, value)
   end
 
+  @doc """
+  Produce one or more messages.
+
+  ## Parameters
+
+  - `value` can have many different forms:
+    - `binary()`: Single message with key from the `key` argument
+    - `{Brod.msg_ts(), binary()}`: Single message with its create-time timestamp and key from `key`
+    - `{ts: Brod.msg_ts(), value: binary(), headers: [{_, _}]}`: Single message. If this map does not have a `key`
+      field, `key` is used instead.
+    - `[{k, v} | {t, k, v}]`: A batch, where `v` could be a nested list of such representation
+    - `[%{key: k, value: v, ts: t, headers: [{_, _}]}]`: A batch
+
+    When `value` is a batch, the `key` argument is only used as partitioner input and all messages are written on the
+    same partition.
+
+    `ts` field is dropped for Kafka prior to version `0.10` (produce API version 0, magic version 0). `headers` field
+     is dropped for Kafka prior to version `0.11` (produce API version 0-2, magic version 0-1).
+
+     `partition` may be either a concrete partition (an integer) or a partitioner (see `t:partitioner/0` for more info).
+
+     A producer for the particular topic has to be already started (by calling {`start_producer/3`}), unless you have specified
+     `auto_start_producers: true` when starting the client.
+
+     This function first looks up the producer pid, then calls `produce/3` to do the real work.
+
+     The return value is a call reference of type `t:call_ref/0`, so the caller can used it to expect (match)
+     a `#brod_produce_reply{result: :brod_produce_req_acked}` (see the `t:produce_reply/0` type) message after the
+     produce request has been acked by Kafka.
+
+  ## Example:
+
+  ```
+  iex> BrodMimic.Brod.produce(my_client, "my_topic", 0, "key", "Hello from BrodMimic!")
+  {:ok, {brod_call_ref,<0.83.0>,<0.133.0>,#Ref<0.3024768151.2556690436.92841>}}
+  ```
+  """
+  @spec produce(client(), topic(), partition() | partitioner(), key(), value()) :: {:ok, call_ref()} | {:error, any()}
   def produce(client, topic, partition, key, value) when is_integer(partition) do
     case get_producer(client, topic, partition) do
       {:ok, pid} ->
@@ -426,47 +481,6 @@ defmodule BrodMimic.Brod do
     end
   end
 
-  @doc """
-  Produce one or more messages.
-
-  ## Parameters
-
-  - value - can have many different forms:
-    - `binary()`: Single message with key from the `key` argument
-    - `{Brod.msg_ts(), binary()}`: Single message with its create-time timestamp and key from `key`
-  - `{ts: Brod.msg_ts(), value: binary(), headers: [{_, _}]}`: Single message. If this map does not have a `key`
-    field, `key` is used instead.
-  - `[{k, v} | {t, k, v}]`: A batch, where `v` could be a nested list of such representation
-  - `[{key: k, value: v, ts: t, headers: [{_, _}]}]`: A batch
-
-   When `value` is a batch, the `key` argument is only used as partitioner input
-   and all messages are written on the same partition.
-
-   `ts` field is dropped for Kafka prior to version `0.10` (produce API version
-   0, magic version 0). `headers` field is dropped for Kafka prior to version
-   `0.11` (produce API version 0-2, magic version 0-1).
-
-   `partition` may be either a concrete partition (an integer) or a partitioner
-   (see `partitioner/0` for more info).
-
-   A producer for the particular topic has to be already started (by calling
-   `start_producer/3`, unless you have specified `auto_start_producers: true`
-   when starting the client.
-
-   This function first looks up the producer pid, then calls `produce/3` to do
-   the real work.
-
-   The return value is a call reference of type `t:call_ref/0`, so the caller
-   can used it to expect (match) a `#brod_produce_reply{result =
-   brod_produce_req_acked}` (see `t:produce_reply/0`) message after the produce
-   request has been acked by Kafka.
-
-   Example:
-   ```
-   > BrodMimic.Brod.produce(my_client, "my_topic", 0, "key", "Hello from BrodMimic!")
-   {:ok, {brod_call_ref,<0.83.0>,<0.133.0>,#Ref<0.3024768151.2556690436.92841>}}
-   ```
-  """
   def produce(client, topic, partitioner, key, value) do
     part_fun = BrodUtils.make_part_fun(partitioner)
 
@@ -483,6 +497,16 @@ defmodule BrodMimic.Brod do
     end
   end
 
+  @doc """
+  Same as `produce/5` only the ack is not delivered as a message,
+  instead, the callback is evaluated by producer worker when ack is received
+  from Kafka (see the `t:produce_ack_cb/0` type).
+
+  Return the partition to caller as `{ok, partition}` for caller
+  to correlate the callback when the 3rd arg is not a partition number.
+  """
+  @spec produce_cb(client(), topic(), partition() | partitioner(), key(), value(), produce_ack_cb()) ::
+          :ok | {:ok, partition()} | {:error, any()}
   def produce_cb(producer_pid, key, value, ack_cb) do
     BrodProducer.produce_cb(producer_pid, key, value, ack_cb)
   end
@@ -517,10 +541,24 @@ defmodule BrodMimic.Brod do
     end
   end
 
-  defp produce_no_ack(producer_pid, key, value) do
+  @doc """
+  Send the message to partition worker without any ack.
+
+  _This call has no back-pressure to the caller, excessive usage may cause BEAM
+  to run out of memory_.
+  """
+  @spec produce_no_ack(pid(), key(), value()) :: :ok | {:error, any()}
+  def produce_no_ack(producer_pid, key, value) do
     BrodProducer.produce_no_ack(producer_pid, key, value)
   end
 
+  @doc """
+  Find the partition worker and send message without any ack.
+
+  _This call has no back-pressure to the caller, excessive usage may cause BEAM
+  to run out of memory_.
+  """
+  @spec produce_no_ack(client(), topic(), partition() | partitioner(), key(), value()) :: :ok | {:error, any()}
   def produce_no_ack(client, topic, part, key, value) when is_integer(part) do
     case get_producer(client, topic, part) do
       {:ok, pid} ->
@@ -544,10 +582,23 @@ defmodule BrodMimic.Brod do
     end
   end
 
+  @doc """
+  Equivalent to `produce_sync(pid, <<>>, value)`
+  """
+  @spec produce_sync(pid(), value()) :: :ok | {:error, any()}
   def produce_sync(pid, value) do
     produce_sync(pid, _key = <<>>, value)
   end
 
+  @doc """
+  Sync version of `produce/3`.
+
+  This function will not return until the response is received from
+  Kafka. But when producer is started with `:required_acks` set to 0,
+  this function will return once the messages are buffered in the
+  producer process.
+  """
+  @spec produce_sync(pid(), key(), value()) :: :ok | {:error, any()}
   def produce_sync(pid, key, value) do
     case produce(pid, key, value) do
       {:ok, call_ref} ->
@@ -558,6 +609,14 @@ defmodule BrodMimic.Brod do
     end
   end
 
+  @doc """
+  Sync version of `produce/5`
+
+  This function will not return until a response is received from kafka,
+  however if producer is started with `:required_acks` set to 0, this function
+  will return once the messages are buffered in the producer process.
+  """
+  @spec produce_sync(client(), topic(), partition() | partitioner(), key(), value()) :: :ok | {:error, any()}
   def produce_sync(client, topic, partition, key, value) do
     case produce_sync_offset(client, topic, partition, key, value) do
       {:ok, _} ->
@@ -568,6 +627,12 @@ defmodule BrodMimic.Brod do
     end
   end
 
+  @doc """
+  Version of `produce_sync/5` that returns the offset assigned by Kafka.
+
+  If producer is started with `:required_acks` set to 0, the offset will be
+  -1 (unknown offset)
+  """
   def produce_sync_offset(client, topic, partition, key, value) do
     case produce(client, topic, partition, key, value) do
       {:ok, call_ref} ->
@@ -578,10 +643,29 @@ defmodule BrodMimic.Brod do
     end
   end
 
+  @doc """
+  Equivalent to `sync_produce_request(call_ref, :infinity)`
+  """
+  @spec sync_produce_request(call_ref()) :: :ok | {:error, any()}
   def sync_produce_request(call_ref) do
     sync_produce_request(call_ref, :infinity)
   end
 
+  @doc """
+    Block wait for sent produced request to be acked by kafka.
+
+    This way, you can turn asynchronous requests, made by {@link produce/5}
+    and friends, into synchronous ones.
+
+    ## Example
+
+    ```
+    {:ok, call_ref} = BrodMimic.produce(:brod_client_1, "my_topic", 0, "some-key", "some-value")
+    # the following call waits and returns after the ack is received or timed out
+    BrodMimic.Brod.sync_produce_request(call_ref, 5_000)
+  ```
+  """
+  @spec sync_produce_request(call_ref(), timeout()) :: :ok | {:error, any()}
   def sync_produce_request(call_ref, timeout) do
     case sync_produce_request_offset(call_ref, timeout) do
       {:ok, _} ->
@@ -592,10 +676,20 @@ defmodule BrodMimic.Brod do
     end
   end
 
+  @doc """
+  Equivalent to `sync_produce_request_offset(call_ref, :infinity)`
+  """
+  @spec sync_produce_request_offset(call_ref()) :: {:ok, offset()} | {:error, any()}
   def sync_produce_request_offset(call_ref) do
     sync_produce_request_offset(call_ref, :infinity)
   end
 
+  @doc """
+  As `sync_produce_request/2`, but also returning assigned offset.
+
+  See `produce_sync_offset/5`.
+  """
+  @spec sync_produce_request_offset(call_ref(), timeout()) :: {:ok, offset()} | {:error, any()}
   def sync_produce_request_offset(call_ref, timeout) do
     BrodProducer.sync_produce_request(call_ref, timeout)
   end

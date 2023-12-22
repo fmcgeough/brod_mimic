@@ -183,6 +183,7 @@ defmodule BrodMimic.Macros do
 
       defp offset_earliest, do: :earliest
       defp offset_latest, do: :latest
+      defp produce_unknown_offset, do: -1
       defp unknown_topic_cache_expire_seconds, do: 120
       defp topic_metadata_key(topic), do: {:topic_metadata, topic}
       defp is_error(ec), do: ec != :no_error
