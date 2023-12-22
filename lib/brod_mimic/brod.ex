@@ -304,6 +304,9 @@ defmodule BrodMimic.Brod do
     start_link_client(bootstrap_endpoints, client_id, [])
   end
 
+  @doc """
+  Start the client with caller's options in `t:client_config/0`
+  """
   @spec start_link_client([endpoint()], client_id(), client_config()) ::
           {:ok, pid()} | {:error, any()}
   def start_link_client(bootstrap_endpoints, client_id, config) do
@@ -313,6 +316,7 @@ defmodule BrodMimic.Brod do
   @doc """
   Stop a client
   """
+  @spec stop_client(atom() | pid()) :: :ok | {:error, any()}
   def stop_client(client) when is_atom(client) do
     case BrodSup.find_client(client) do
       [_pid] ->
@@ -350,6 +354,7 @@ defmodule BrodMimic.Brod do
    :ok
    ```
   """
+  @spec start_producer(client(), topic(), producer_config()) :: :ok | {:error, any()}
   def start_producer(client, topic_name, producer_config) do
     BrodClient.start_producer(client, topic_name, producer_config)
   end
@@ -395,6 +400,9 @@ defmodule BrodMimic.Brod do
     BrodClient.get_partitions_count_safe(client, topic)
   end
 
+  @doc """
+  Return the consumer process for a topic / partition
+  """
   @spec get_consumer(client(), topic(), partition()) ::
           {:ok, pid()} | {:error, get_consumer_error()}
   def get_consumer(client, topic, partition) do
@@ -498,6 +506,16 @@ defmodule BrodMimic.Brod do
   end
 
   @doc """
+  Same as `produce/3`, only the ack is not delivered as a message,
+  instead, the callback is evaluated by producer worker when ack is received
+  from Kafka (see the `t:produce_ack_cb/0` type).
+  """
+  @spec produce_cb(pid(), key(), value(), produce_ack_cb()) :: :ok | {:error, any()}
+  def produce_cb(producer_pid, key, value, ack_cb) do
+    BrodProducer.produce_cb(producer_pid, key, value, ack_cb)
+  end
+
+  @doc """
   Same as `produce/5` only the ack is not delivered as a message,
   instead, the callback is evaluated by producer worker when ack is received
   from Kafka (see the `t:produce_ack_cb/0` type).
@@ -507,10 +525,6 @@ defmodule BrodMimic.Brod do
   """
   @spec produce_cb(client(), topic(), partition() | partitioner(), key(), value(), produce_ack_cb()) ::
           :ok | {:ok, partition()} | {:error, any()}
-  def produce_cb(producer_pid, key, value, ack_cb) do
-    BrodProducer.produce_cb(producer_pid, key, value, ack_cb)
-  end
-
   def produce_cb(client, topic, part, key, value, ack_cb) when is_integer(part) do
     case get_producer(client, topic, part) do
       {:ok, pid} ->
@@ -633,6 +647,8 @@ defmodule BrodMimic.Brod do
   If producer is started with `:required_acks` set to 0, the offset will be
   -1 (unknown offset)
   """
+  @spec produce_sync_offset(client(), topic(), partition() | partitioner(), key(), value()) ::
+          {:ok, offset()} | {:error, any()}
   def produce_sync_offset(client, topic, partition, key, value) do
     case produce(client, topic, partition, key, value) do
       {:ok, call_ref} ->
@@ -694,6 +710,42 @@ defmodule BrodMimic.Brod do
     BrodProducer.sync_produce_request(call_ref, timeout)
   end
 
+  @doc """
+  Subscribe to a data stream from the given topic-partition.
+
+  A client has to be already started (by calling `start_client/3`,
+  one client per multiple topics is enough) and a corresponding consumer
+  for the topic and partition as well (by calling `start_consumer/3`),
+  before calling this function.
+
+   Caller may specify a set of options extending consumer config.
+   See `BrodMimic.Consumer..subscribe/3` for more info on that.
+
+   If `{:error, reason}` is returned, the caller should perhaps retry later.
+
+   `{:ok, consumer_pid}` is returned on success. The caller may want to
+   monitor the consumer pid and re-subscribe should the `consumer_pid' crash.
+
+   Upon successful subscription the subscriber process should expect messages
+   of pattern:
+
+   `{consumer_pid, kafka_message_set()}` and
+   `{consumer_pid, kafka_fetch_error()}'.
+
+   In case `kafka_fetch_error()` is received the subscriber should
+   re-subscribe itself to resume the data stream.
+
+   To provide a mechanism to handle backpressure, brod requires all messages
+   sent to a subscriber to be acked by calling `consume_ack/4` after
+   they are processed. If there are too many not-acked messages received by
+   the subscriber, the consumer will stop to fetch new ones so the subscriber
+   won't get overwhelmed.
+
+   Only one process can be subscribed to a consumer. This means that if
+   you want to read at different places (or at different paces), you have
+   to create separate consumers (and thus also separate clients).
+  """
+  @spec subscribe(client(), pid(), topic(), partition(), consumer_config()) :: {:ok, pid()} | {:error, any()}
   def subscribe(client, subscriber_pid, topic, partition, options) do
     case BrodClient.get_consumer(client, topic, partition) do
       {:ok, consumer_pid} ->
@@ -710,14 +762,30 @@ defmodule BrodMimic.Brod do
     end
   end
 
+  @doc """
+  Subscribe to a data stream from the given consumer.
+
+  See `subscribe/5` for more information.
+  """
+  @spec subscribe(pid(), pid(), consumer_config()) :: :ok | {:error, any()}
   def subscribe(consumer_pid, subscriber_pid, options) do
     BrodConsumer.subscribe(consumer_pid, subscriber_pid, options)
   end
 
+  @doc """
+  Unsubscribe the current subscriber.
+
+  Assuming the subscriber is `self()`
+  """
+  @spec unsubscribe(client(), topic(), partition()) :: :ok | {:error, any()}
   def unsubscribe(client, topic, partition) do
     unsubscribe(client, topic, partition, self())
   end
 
+  @doc """
+  Unsubscribe the current subscriber.
+  """
+  @spec unsubscribe(client(), topic(), partition(), pid()) :: :ok | {:error, any()}
   def unsubscribe(client, topic, partition, subscriber_pid) do
     case BrodClient.get_consumer(client, topic, partition) do
       {:ok, consumer_pid} ->
@@ -728,10 +796,20 @@ defmodule BrodMimic.Brod do
     end
   end
 
+  @doc """
+  Unsubscribe the current subscriber.
+
+  Assuming the subscriber is `self()`.
+  """
+  @spec unsubscribe(pid()) :: :ok | {:error, any()}
   def unsubscribe(consumer_pid) do
     unsubscribe(consumer_pid, self())
   end
 
+  @doc """
+  Unsubscribe the current subscriber
+  """
+  @spec unsubscribe(pid(), pid()) :: :ok | {:error, any()}
   def unsubscribe(consumer_pid, subscriber_pid) do
     BrodConsumer.unsubscribe(consumer_pid, subscriber_pid)
   end
@@ -816,17 +894,18 @@ defmodule BrodMimic.Brod do
   end
 
   @doc """
-  Start `BrodMimic.GroupSubscriberv2`
+  See `BrodMimic.GroupSubscriber.start_link/8`
   """
-  @spec start_link_group_subscriber_v2(BrodGroupSubscriberv2.subscriber_config()) ::
-          {:ok, pid()} | {:error, any()}
-  def start_link_group_subscriber_v2(config) do
-    BrodGroupSubscriberv2.start_link(config)
-  end
-
-  @doc """
-  Start `BrodMimic.GroupSubscriber`
-  """
+  @spec start_link_group_subscriber(
+          client(),
+          group_id(),
+          [topic()],
+          group_config(),
+          consumer_config(),
+          :message | :message_set,
+          module(),
+          term()
+        ) :: {:ok, pid()} | {:error, any()}
   def start_link_group_subscriber(
         client,
         group_id,
@@ -847,6 +926,15 @@ defmodule BrodMimic.Brod do
       cb_module,
       cb_init_arg
     )
+  end
+
+  @doc """
+  Start `BrodMimic.GroupSubscriberv2`
+  """
+  @spec start_link_group_subscriber_v2(BrodGroupSubscriberv2.subscriber_config()) ::
+          {:ok, pid()} | {:error, any()}
+  def start_link_group_subscriber_v2(config) do
+    BrodGroupSubscriberv2.start_link(config)
   end
 
   @deprecated "Please use `start_link_topic_subscriber/1` instead"
@@ -904,6 +992,7 @@ defmodule BrodMimic.Brod do
   @doc """
   Create topics equivalent to `create_topics(host, topic_configs, request_configs, [])`
   """
+  @spec create_topics([endpoint()], [topic_config()], request_configs()) :: :ok | {:error, any()}
   def create_topics(hosts, topic_configs, request_configs) do
     BrodUtils.create_topics(hosts, topic_configs, request_configs)
   end
@@ -1114,6 +1203,19 @@ defmodule BrodMimic.Brod do
     BrodUtils.resolve_offset(hosts, topic, partition, time, conn_cfg, opts)
   end
 
+  @doc """
+  Fetch a single message set from the given topic-partition.
+
+  Calls `fetch/5` with the default options:
+
+  - `:max_wait_time`  1 second,
+  - `:min_bytes` 1 byte
+  - `:max_bytes`  2^20 B (1 MB)
+
+  See `fetch/5` for more information.
+  """
+  @spec fetch(connection() | client_id() | bootstrap(), topic(), partition(), integer()) ::
+          {:ok, {offset(), [message()]}} | {:error, any()}
   def fetch(conn_or_bootstrap, topic, partition, offset) do
     opts = %{max_wait_time: 1000, min_bytes: 1, max_bytes: bsl(1, 20)}
     fetch(conn_or_bootstrap, topic, partition, offset, opts)
