@@ -153,11 +153,18 @@ defmodule BrodMimic.Consumer do
     GenServer.start_link(__MODULE__, args, [{:debug, debug}])
   end
 
+  @doc """
+  Stop the consumer process
+  """
   @spec stop(pid()) :: :ok | {:error, any()}
   def stop(pid) do
     safe_gen_call(pid, :stop, :infinity)
   end
 
+  @doc """
+  Stop the consumer process using a timeout. If the timeout expires then
+  the process is killed.
+  """
   @spec stop_maybe_kill(pid(), timeout()) :: :ok
   def stop_maybe_kill(pid, timeout) do
     GenServer.call(pid, :stop, timeout)
@@ -232,14 +239,33 @@ defmodule BrodMimic.Consumer do
     safe_gen_call(pid, {:subscribe, subscriber_pid, consumer_options}, :infinity)
   end
 
+  @doc """
+  Unsubscribe the current subscriber
+  """
+  @spec unsubscribe(pid(), pid()) :: :ok | {:error, any()}
   def unsubscribe(pid, subscriber_pid) do
     safe_gen_call(pid, {:unsubscribe, subscriber_pid}, :infinity)
   end
 
+  @doc """
+  Subscriber confirms that a message (identified by offset) has been
+  consumed, consumer process now may continue to fetch more messages.
+  """
+  @spec ack(pid(), offset()) :: :ok
   def ack(pid, offset) do
     GenServer.cast(pid, {:ack, offset})
   end
 
+  @doc """
+  Enable/disable debugging on the consumer process.
+
+  - prints debug info to stdout.
+  `debug(pid, :print)`
+
+  - prints debug info to the file `file`.
+  `debug(pid, file)`
+  """
+  @spec debug(pid(), :print | charlist() | :none) :: :ok
   def debug(pid, :none) do
     do_debug(pid, :no_debug)
   end
@@ -252,6 +278,10 @@ defmodule BrodMimic.Consumer do
     do_debug(pid, {:log_to_file, file})
   end
 
+  @doc """
+  Get connection pid. Test/debug only.
+  """
+  @spec get_connection(pid()) :: :undefined | pid()
   def get_connection(pid) do
     GenServer.call(pid, :get_connection)
   end
@@ -444,7 +474,7 @@ defmodule BrodMimic.Consumer do
     end
   end
 
-  def handle_batches(:undefined, [], state0) do
+  defp handle_batches(:undefined, [], state0) do
     # It is only possible to end up here in a incremental
     # fetch session, empty fetch response implies no
     # new messages to fetch, and no changes in partition
@@ -455,7 +485,7 @@ defmodule BrodMimic.Consumer do
     {:noreply, state}
   end
 
-  def handle_batches(_header, {:incomplete_batch, size}, state(max_bytes: max_bytes) = state0) do
+  defp handle_batches(_header, {:incomplete_batch, size}, state(max_bytes: max_bytes) = state0) do
     # max_bytes is too small to fetch ONE complete batch
     true = size > max_bytes
     state1 = state(state0, max_bytes: size)
@@ -463,7 +493,7 @@ defmodule BrodMimic.Consumer do
     {:noreply, state}
   end
 
-  def handle_batches(header, [], state(begin_offset: begin_offset) = state0) do
+  defp handle_batches(header, [], state(begin_offset: begin_offset) = state0) do
     stable_offset = BrodUtils.get_stable_offset(header)
 
     state =
@@ -486,17 +516,17 @@ defmodule BrodMimic.Consumer do
     {:noreply, state}
   end
 
-  def handle_batches(
-        header,
-        batches,
-        state(
-          subscriber: subscriber,
-          pending_acks: pending_acks,
-          begin_offset: begin_offset,
-          topic: topic,
-          partition: partition
-        ) = state0
-      ) do
+  defp handle_batches(
+         header,
+         batches,
+         state(
+           subscriber: subscriber,
+           pending_acks: pending_acks,
+           begin_offset: begin_offset,
+           topic: topic,
+           partition: partition
+         ) = state0
+       ) do
     stable_offset = BrodUtils.get_stable_offset(header)
     {new_begin_offset, messages} = BrodUtils.flatten_batches(begin_offset, header, batches)
     state1 = state(state0, begin_offset: new_begin_offset)
@@ -525,14 +555,14 @@ defmodule BrodMimic.Consumer do
     {:noreply, maybe_send_fetch_request(state)}
   end
 
-  def add_pending_acks(pending_acks, messages) do
+  defp add_pending_acks(pending_acks, messages) do
     :lists.foldl(&add_pending_ack/2, pending_acks, messages)
   end
 
-  def add_pending_ack(
-        kafka_message(offset: offset, key: key, value: value),
-        pending_acks(queue: queue, count: count, bytes: bytes) = pending_acks
-      ) do
+  defp add_pending_ack(
+         kafka_message(offset: offset, key: key, value: value),
+         pending_acks(queue: queue, count: count, bytes: bytes) = pending_acks
+       ) do
     size = :erlang.size(key) + :erlang.size(value)
     new_queue = :queue.in({offset, size}, queue)
     pending_acks(pending_acks, queue: new_queue, count: count + 1, bytes: bytes + size)
@@ -568,29 +598,29 @@ defmodule BrodMimic.Consumer do
     state(state, max_bytes: :erlang.min(new_max_bytes, max_bytes))
   end
 
-  def update_avg_size(state() = state, []) do
+  defp update_avg_size(state() = state, []) do
     state
   end
 
-  def update_avg_size(
-        state(
-          avg_bytes: avg_bytes,
-          size_stat_window: window_size
-        ) = state,
-        [kafka_message(key: key, value: value) | rest]
-      ) do
+  defp update_avg_size(
+         state(
+           avg_bytes: avg_bytes,
+           size_stat_window: window_size
+         ) = state,
+         [kafka_message(key: key, value: value) | rest]
+       ) do
     msg_bytes = :erlang.size(key) + :erlang.size(value) + 40
     new_avg_bytes = ((window_size - 1) * avg_bytes + msg_bytes) / window_size
     update_avg_size(state(state, avg_bytes: new_avg_bytes), rest)
   end
 
-  def err_op(:request_timed_out), do: :retry
-  def err_op(:invalid_topic_exception), do: :stop
-  def err_op(:offset_out_of_range), do: :reset_offset
-  def err_op(:leader_not_available), do: :reset_connection
-  def err_op(:not_leader_for_partition), do: :reset_connection
-  def err_op(:unknown_topic_or_partition), do: :reset_connection
-  def err_op(_), do: :restart
+  defp err_op(:request_timed_out), do: :retry
+  defp err_op(:invalid_topic_exception), do: :stop
+  defp err_op(:offset_out_of_range), do: :reset_offset
+  defp err_op(:leader_not_available), do: :reset_connection
+  defp err_op(:not_leader_for_partition), do: :reset_connection
+  defp err_op(:unknown_topic_or_partition), do: :reset_connection
+  defp err_op(_), do: :restart
 
   defp handle_fetch_error(
          kafka_fetch_error(error_code: error_code) = error,

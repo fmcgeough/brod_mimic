@@ -16,6 +16,8 @@ defmodule BrodMimic.GroupSubscriber do
     * Send acknowledged offsets to group coordinator which will be committed
       to Kafka periodically.
   """
+  @behaviour BrodMimic.GroupMember
+
   use BrodMimic.Macros
   use GenServer
 
@@ -90,7 +92,7 @@ defmodule BrodMimic.GroupSubscriber do
             message_type: :message | :message_set
           )
 
-  # Initialize the callback module s state.
+  # Initialize the callback module's state.
   @callback init(Brod.group_id(), term()) :: {:ok, cb_state()}
 
   @doc """
@@ -287,52 +289,29 @@ defmodule BrodMimic.GroupSubscriber do
 
   ### APIs for group coordinator ===============================================
 
-  @doc """
-  Called by group coordinator when there is new assignment received.
-  """
-  @spec assignments_received(pid(), member_id(), integer(), Brod.received_assignments()) :: :ok
+  @impl BrodMimic.GroupMember
   def assignments_received(pid, member_id, generation_id, topic_assignments) do
     GenServer.cast(pid, {:new_assignments, member_id, generation_id, topic_assignments})
   end
 
-  @doc """
-  Called by group coordinator before re-joining the consumer group.
-  """
-  @spec assignments_revoked(pid()) :: :ok
+  @impl BrodMimic.GroupMember
   def assignments_revoked(pid) do
     GenServer.call(pid, :unsubscribe_all_partitions, :infinity)
   end
 
-  @doc """
-  This function is called only when `partition_assignment_strategy'
-  is set for `callback_implemented' in group config.
-  """
-  @spec assign_partitions(pid(), [Brod.group_member()], [{topic(), partition()}]) :: [
-          {member_id(), [Brod.partition_assignment()]}
-        ]
+  @impl BrodMimic.GroupMember
   def assign_partitions(pid, members, topic_partition_list) do
     call = {:assign_partitions, members, topic_partition_list}
     GenServer.call(pid, call, :infinity)
   end
 
-  @doc """
-  Called by group coordinator when initializing the assignments
-  for subscriber
-
-   NOTE: This function is called only when `offset_commit_policy' is set to
-         `consumer_managed' in group config.
-
-   NOTE: The committed offsets should be the offsets for successfully processed
-         (acknowledged) messages, not the `begin_offset' to start fetching from.
-  """
-  @spec get_committed_offsets(pid(), [{topic(), partition()}]) ::
-          {:ok, [{{topic(), partition()}, offset()}]}
+  @impl BrodMimic.GroupMember
   def get_committed_offsets(pid, topic_partitions) do
     GenServer.call(pid, {:get_committed_offsets, topic_partitions}, :infinity)
   end
 
   #### gen_server callbacks =====================================================
-
+  @impl GenServer
   def init({client, group_id, topics, group_config, consumer_config, message_type, cb_module, cb_init_arg}) do
     :ok = BrodUtils.assert_client(client)
     :ok = BrodUtils.assert_group_id(group_id)
@@ -356,6 +335,7 @@ defmodule BrodMimic.GroupSubscriber do
     {:ok, state}
   end
 
+  @impl GenServer
   def handle_info({_consumer_pid, kafka_message_set() = msg_set}, state0) do
     state = handle_consumer_delivery(msg_set, state0)
     {:noreply, state}
@@ -411,6 +391,7 @@ defmodule BrodMimic.GroupSubscriber do
     {:noreply, state}
   end
 
+  @impl GenServer
   def handle_call(
         {:get_committed_offsets, topic_partitions},
         _from,
@@ -461,6 +442,7 @@ defmodule BrodMimic.GroupSubscriber do
     {:reply, {:error, {:unknown_call, call}}, state}
   end
 
+  @impl GenServer
   def handle_cast({:ack, topic, partition, offset, commit}, state) do
     ack_ref = {topic, partition, offset}
     new_state = handle_ack(ack_ref, state, commit)
@@ -530,20 +512,22 @@ defmodule BrodMimic.GroupSubscriber do
     {:noreply, state}
   end
 
+  @impl GenServer
   def code_change(_old_vsn, state, _extra) do
     {:ok, state}
   end
 
+  @impl GenServer
   def terminate(_reason, _state) do
     :ok
   end
 
   # @ %%%_* Internal Functions =======================================================
 
-  def handle_consumer_delivery(
-        kafka_message_set(topic: topic, partition: partition, messages: messages) = msg_set,
-        state(message_type: message_type, consumers: consumers0) = state0
-      ) do
+  defp handle_consumer_delivery(
+         kafka_message_set(topic: topic, partition: partition, messages: messages) = msg_set,
+         state(message_type: message_type, consumers: consumers0) = state0
+       ) do
     case get_consumer({topic, partition}, consumers0) do
       consumer() = c ->
         consumers = update_last_offset(messages, c, consumers0)
@@ -559,7 +543,7 @@ defmodule BrodMimic.GroupSubscriber do
     end
   end
 
-  def update_last_offset(messages, consumer0, consumers) do
+  defp update_last_offset(messages, consumer0, consumers) do
     # brod_consumer never delivers empty message set, lists:last is safe
     kafka_message(offset: last_offset) = :lists.last(messages)
     consumer = consumer(consumer0, last_offset: last_offset)
@@ -567,17 +551,17 @@ defmodule BrodMimic.GroupSubscriber do
   end
 
   @spec start_subscribe_timer(:undefined | reference(), timeout()) :: reference()
-  def start_subscribe_timer(:undefined, delay) do
+  defp start_subscribe_timer(:undefined, delay) do
     Process.send_after(self(), @lo_cmd_subscribe_partitions, delay)
   end
 
-  def start_subscribe_timer(ref, _delay) when is_reference(ref) do
+  defp start_subscribe_timer(ref, _delay) when is_reference(ref) do
     # The old timer is not expired, keep waiting
     # A bit delay on subscribing to brod_consumer is fine
     ref
   end
 
-  def handle_message_set(message_set, state) do
+  defp handle_message_set(message_set, state) do
     kafka_message_set(topic: topic, partition: partition, messages: messages) = message_set
     state(cb_module: cb_module, cb_state: cb_state) = state
 
@@ -611,11 +595,11 @@ defmodule BrodMimic.GroupSubscriber do
     end
   end
 
-  def handle_messages(_topic, _partition, [], state) do
+  defp handle_messages(_topic, _partition, [], state) do
     state
   end
 
-  def handle_messages(topic, partition, [msg | rest], state) do
+  defp handle_messages(topic, partition, [msg | rest], state) do
     kafka_message(offset: offset) = msg
     state(cb_module: cb_module, cb_state: cb_state) = state
     ack_ref = {topic, partition, offset}
@@ -647,11 +631,11 @@ defmodule BrodMimic.GroupSubscriber do
   end
 
   @spec handle_ack(ack_ref(), state(), boolean()) :: state()
-  def handle_ack(
-        ack_ref,
-        state(generation_id: generation_id, consumers: consumers, coordinator: coordinator) = state,
-        commit_now
-      ) do
+  defp handle_ack(
+         ack_ref,
+         state(generation_id: generation_id, consumers: consumers, coordinator: coordinator) = state,
+         commit_now
+       ) do
     {topic, partition, offset} = ack_ref
 
     case get_consumer({topic, partition}, consumers) do
@@ -673,22 +657,22 @@ defmodule BrodMimic.GroupSubscriber do
   end
 
   # Tell consumer process to fetch more (if pre-fetch count/byte limit allows).
-  def consume_ack(pid, offset) do
+  defp consume_ack(pid, offset) do
     is_pid(pid) and Brod.consume_ack(pid, offset)
     :ok
   end
 
   # Send an async message to group coordinator for offset commit.
-  def do_commit_ack(pid, generation_id, topic, partition, offset) do
+  defp do_commit_ack(pid, generation_id, topic, partition, offset) do
     :ok = BrodGroupCoordinator.ack(pid, generation_id, topic, partition, offset)
   end
 
-  def subscribe_partitions(state(client: client, consumers: consumers0) = state) do
+  defp subscribe_partitions(state(client: client, consumers: consumers0) = state) do
     consumers = Enum.map(consumers0, fn c -> subscribe_partition(client, c) end)
     {:ok, state(state, consumers: consumers)}
   end
 
-  def subscribe_partition(client, consumer) do
+  defp subscribe_partition(client, consumer) do
     consumer(
       consumer_pid: pid,
       acked_offset: acked_offset,
