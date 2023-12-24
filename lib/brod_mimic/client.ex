@@ -47,29 +47,29 @@ defmodule BrodMimic.Client do
 
   ## Keys
 
-  There are keys that are specific to this library and others that are meaningful
-  to the underlying Kafka protocol library.
+  There are keys that are specific to this library and others that are
+  meaningful to the underlying Kafka protocol library.
 
   ### Library Related Keys
 
-  - `:restart_delay_seconds` (optional, default=10).  How long to wait
-    between attempts to restart `BrodMimic.Client` process when it crashes
+  - `:restart_delay_seconds` (optional, default=10).  How long to wait between
+    attempts to restart `BrodMimic.Client` process when it crashes
   - `:get_metadata_timeout_seconds` (optional, default=5) Return `{:error,
-    timeout}` from `BrodMimic.Client` `get_xxx` calls if responses for APIs such as
-    `metadata`, `find_coordinator` are not received in time.
-  - `:reconnect_cool_down_seconds` (optional, default=1). Delay this
-    configured number of seconds before retrying to establish a new
-    connection to the Kafka partition leader.
+    timeout}` from `BrodMimic.Client` `get_xxx` calls if responses for APIs such
+    as `metadata`, `find_coordinator` are not received in time.
+  - `:reconnect_cool_down_seconds` (optional, default=1). Delay this configured
+    number of seconds before retrying to establish a new connection to the Kafka
+    partition leader.
   - `:allow_topic_auto_creation` (optional, default=true). By default, brod
     respects what is configured in the broker about topic auto-creation. i.e.
     whether `auto.create.topics.enable` is set in the broker configuration.
-    However if `allow_topic_auto_creation` is set to `false` in client
-    config, BrodMimic will avoid sending metadata requests that may cause an
+    However if `allow_topic_auto_creation` is set to `false` in client config,
+    BrodMimic will avoid sending metadata requests that may cause an
     auto-creation of the topic regardless of what broker config is.
   - `:auto_start_producers` (optional, default=false).  If true, BrodMimic
     client will spawn a producer automatically when user is trying to call
-    `produce` but did not call `BrodMimic.Brod.start_producer` explicitly. Can be
-    useful for applications which don't know beforehand which topics they
+    `produce` but did not call `BrodMimic.Brod.start_producer` explicitly. Can
+    be useful for applications which don't know beforehand which topics they
     will be working with.
   - `:default_producer_config` (optional, default=`[]`).  Producer configuration
     to use when `auto_start_producers` is true. See
@@ -87,22 +87,22 @@ defmodule BrodMimic.Client do
     authentication. `{mechanism(), filename}` or `{mechanism(), user_name,
     password}` where mechanism can be atoms: `:plain` (for "PLAIN"),
     `:scram_sha_256` (for "SCRAM-SHA-256") or `:scram_sha_512` (for
-    SCRAM-SHA-512). `filename` should be a file consisting two lines, first
-    line is the username and the second line is the password. Both
-    `user_name` and `password` should be `String.t() | binary()`
+    SCRAM-SHA-512). `filename` should be a file consisting two lines, first line
+    is the username and the second line is the password. Both `user_name` and
+    `password` should be `String.t() | binary()`
   - `:connect_timeout` (optional, default=`5_000`). Timeout when trying to
     connect to an endpoint.
   - `:request_timeout` (optional, default=`240_000`, constraint: >= `1_000`).
     Timeout when waiting for a response, connection restart when timed out.
-  - `:query_api_versions` (optional, default=true). Must be set to false to
-    work with Kafka versions prior to 0.10, When set to `true`, at connection
-    start, BrodMimic will send a query request to get the broker supported API
-    version ranges. When set to `false`, BrodMimic will always use the lowest
-    supported API version when sending requests to Kafka. Supported API
-    version ranges can be found in:
-    `BrodMimic.KafkaApis.supported_versions/1`
+  - `:query_api_versions` (optional, default=true). Must be set to false to work
+    with Kafka versions prior to 0.10, When set to `true`, at connection start,
+    BrodMimic will send a query request to get the broker supported API version
+    ranges. When set to `false`, BrodMimic will always use the lowest supported
+    API version when sending requests to Kafka. Supported API version ranges can
+    be found in: `BrodMimic.KafkaApis.supported_versions/1`
   - `:extra_sock_opts` (optional, default=[]). Extra socket options to tune
-    socket performance. e.g. `[{Bitwise.bsl(sndbuf, 1, 20}]`. [More info](http://erlang.org/doc/man/gen_tcp.html#type-option).
+    socket performance. e.g. `[{Bitwise.bsl(sndbuf, 1, 20}]`. [More
+    info](http://erlang.org/doc/man/gen_tcp.html#type-option).
   """
   @type config() :: :proplists.proplist()
 
@@ -129,10 +129,8 @@ defmodule BrodMimic.Client do
           | {:consumer_not_found, topic(), partition()}
 
   @type get_worker_error :: get_producer_error() | get_consumer_error()
-
   @type connection() :: :kpro.connection()
-  @type timestamp() ::
-          {mega_secs :: non_neg_integer(), secs :: non_neg_integer(), micro_secs :: non_neg_integer()}
+  @type timestamp() :: {mega_secs :: non_neg_integer(), secs :: non_neg_integer(), micro_secs :: non_neg_integer()}
   @type dead_conn() :: {:dead_since, timestamp(), any()}
   @type conn :: record(:conn, endpoint: endpoint(), pid: connection() | dead_conn())
 
@@ -189,8 +187,7 @@ defmodule BrodMimic.Client do
 
   The producer is started if `:auto_start_producers` is enabled in client config
   """
-  @spec get_producer(client(), topic(), partition()) ::
-          {:ok, pid()} | {:error, get_producer_error()}
+  @spec get_producer(client(), topic(), partition()) :: {:ok, pid()} | {:error, get_producer_error()}
   def get_producer(client, topic, partition) do
     case get_partition_worker(client, producer_key(topic, partition)) do
       {:ok, pid} ->
@@ -209,8 +206,7 @@ defmodule BrodMimic.Client do
   @doc """
   Get consumer of the given topic-partition
   """
-  @spec get_consumer(client(), topic(), partition()) ::
-          {:ok, pid()} | {:error, get_consumer_error()}
+  @spec get_consumer(client(), topic(), partition()) :: {:ok, pid()} | {:error, get_consumer_error()}
   def get_consumer(client, topic, partition) do
     get_partition_worker(client, {:consumer, topic, partition})
   end
@@ -288,13 +284,11 @@ defmodule BrodMimic.Client do
   @doc """
   Get connection to a Kafka broker
 
-  Return already established connection towards the broker,
-  otherwise a new one is established and cached in client state.
-  If the old connection was dead less than a configurable N seconds ago,
-  `{error, last_reason}` is returned.
+  Return already established connection towards the broker, otherwise a new one
+  is established and cached in client state. If the old connection was dead less
+  than a configurable N seconds ago, `{error, last_reason}` is returned.
   """
-  @spec get_connection(client(), Brod.hostname(), Brod.portnum()) ::
-          {:ok, pid()} | {:error, any()}
+  @spec get_connection(client(), Brod.hostname(), Brod.portnum()) :: {:ok, pid()} | {:error, any()}
   def get_connection(client, host, port) do
     safe_gen_call(client, {:get_connection, host, port}, :infinity)
   end
@@ -302,8 +296,7 @@ defmodule BrodMimic.Client do
   @doc """
   Get topic metadata, if topic is undefined (`:undef`) it will fetch ALL metadata
   """
-  @spec get_metadata(client(), :all | :undefined | topic()) ::
-          {:ok, :kpro.struct()} | {:error, any()}
+  @spec get_metadata(client(), :all | :undefined | topic()) :: {:ok, :kpro.struct()} | {:error, any()}
   def get_metadata(client, :undefined) do
     get_metadata(client, :all)
   end
@@ -362,8 +355,7 @@ defmodule BrodMimic.Client do
   @doc """
   Get broker endpoint and connection config for connecting a group coordinator.
   """
-  @spec get_group_coordinator(client(), group_id()) ::
-          {:ok, {endpoint(), Brod.conn_config()}} | {:error, any()}
+  @spec get_group_coordinator(client(), group_id()) :: {:ok, {endpoint(), Brod.conn_config()}} | {:error, any()}
   def get_group_coordinator(client, group_id) do
     safe_gen_call(client, {:get_group_coordinator, group_id}, :infinity)
   end
@@ -416,7 +408,7 @@ defmodule BrodMimic.Client do
     GenServer.cast(client, {:deregister, key})
   end
 
-  @impl true
+  @impl GenServer
   def init({bootstrap_endpoints, client_id, config}) do
     Process.flag(:trap_exit, true)
     ets_options = [:named_table, :protected, {:read_concurrency, true}]
@@ -433,7 +425,7 @@ defmodule BrodMimic.Client do
      )}
   end
 
-  @impl true
+  @impl GenServer
   def handle_info(:init, state0) do
     endpoints = state(state0, :bootstrap_endpoints)
     state1 = ensure_metadata_connection(state0)
@@ -450,19 +442,13 @@ defmodule BrodMimic.Client do
     {:noreply, state}
   end
 
-  def handle_info(
-        {:EXIT, pid, reason},
-        state(client_id: client_id, producers_sup: pid) = state
-      ) do
+  def handle_info({:EXIT, pid, reason}, state(client_id: client_id, producers_sup: pid) = state) do
     error_string = :io_lib.format(@producer_supervisor_down, [client_id, pid, reason])
     Logger.error(error_string, %{domain: [:brod]})
     {:stop, {:producers_sup_down, reason}, state}
   end
 
-  def handle_info(
-        {:EXIT, pid, reason},
-        state(client_id: client_id, consumers_sup: pid) = state
-      ) do
+  def handle_info({:EXIT, pid, reason}, state(client_id: client_id, consumers_sup: pid) = state) do
     error_string = :io_lib.format(@consumer_supervisor_down, [client_id, pid, reason])
     Logger.error(error_string, %{domain: [:brod]})
     {:stop, {:consumers_sup_down, reason}, state}
@@ -480,7 +466,7 @@ defmodule BrodMimic.Client do
     {:noreply, state}
   end
 
-  @impl true
+  @impl GenServer
   def handle_call({:stop_producer, topic}, _from, state) do
     :ok = BrodProducersSup.stop_producer(state(state, :producers_sup), topic)
     {:reply, :ok, state}
@@ -555,7 +541,7 @@ defmodule BrodMimic.Client do
     {:reply, {:error, {:unknown_call, call}}, state}
   end
 
-  @impl true
+  @impl GenServer
   def handle_cast({:register, key, pid}, state(workers_tab: tab) = state) do
     :ets.insert(tab, {key, pid})
     {:noreply, state}
@@ -899,9 +885,7 @@ defmodule BrodMimic.Client do
   @spec do_get_partitions_count(client(), :ets.tab(), topic(), %{
           required(:allow_topic_auto_creation) => boolean()
         }) :: {:ok, pos_integer()} | {:error, any()}
-  defp do_get_partitions_count(client, ets, topic, %{
-         allow_topic_auto_creation: allow_auto_creation
-       }) do
+  defp do_get_partitions_count(client, ets, topic, %{allow_topic_auto_creation: allow_auto_creation}) do
     case lookup_partitions_count_cache(ets, topic) do
       {:ok, result} ->
         {:ok, result}
@@ -925,7 +909,6 @@ defmodule BrodMimic.Client do
 
   defp find_partition_count_in_metadata({:ok, meta}, topic) do
     topic_metadata_arrary = kf(:topics, meta)
-
     find_partition_count_in_topic_metadata_array(topic_metadata_arrary, topic)
   end
 
@@ -955,9 +938,7 @@ defmodule BrodMimic.Client do
   Looks up the partition count in [ETS](https://erlang.org/doc/man/ets.html)
   """
   @spec lookup_partitions_count_cache(:ets.table(), :undefined | topic()) ::
-          {:ok, pos_integer()}
-          | {:error, any()}
-          | false
+          {:ok, pos_integer()} | {:error, any()} | false
   def lookup_partitions_count_cache(_ets, :undefined) do
     false
   end
@@ -992,8 +973,7 @@ defmodule BrodMimic.Client do
   # Try to start a producer for the given topic if `:auto_start_producers option`
   # is enabled for the client
   # --------------------------------------------------------------------------------
-  @spec maybe_start_producer(client(), topic(), partition(), {:error, any()}) ::
-          :ok | {:error, any()}
+  @spec maybe_start_producer(client(), topic(), partition(), {:error, any()}) :: :ok | {:error, any()}
   defp maybe_start_producer(client, topic, partition, error) do
     case safe_gen_call(client, {:auto_start_producer, topic}, :infinity) do
       :ok ->
@@ -1108,10 +1088,7 @@ defmodule BrodMimic.Client do
   end
 
   @spec connect(state(), endpoint()) :: {{:ok, pid()} | {:error, any()}, state()}
-  defp connect(
-         state(client_id: client_id, payload_conns: conns) = state,
-         {host, port} = endpoint
-       ) do
+  defp connect(state(client_id: client_id, payload_conns: conns) = state, {host, port} = endpoint) do
     conn =
       case do_connect(endpoint, state) do
         {:ok, pid} ->
@@ -1120,7 +1097,6 @@ defmodule BrodMimic.Client do
 
         {:error, reason} ->
           Logger.info("client #{client_id} failed to connect to #{host}:#{port}\nreason: #{inspect(reason)}")
-
           conn(endpoint: endpoint, pid: mark_dead(reason))
       end
 
