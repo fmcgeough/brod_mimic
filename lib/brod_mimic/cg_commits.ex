@@ -49,8 +49,8 @@ defmodule BrodMimic.CgCommits do
   """
   @type state() ::
           record(:state,
-            client: Brod.client(),
-            group_id: Brod.group_id(),
+            client: client(),
+            group_id: group_id(),
             member_id: :undefined | member_id(),
             generation_id: :undefined | Brod.group_generation_id(),
             coordinator: pid(),
@@ -64,6 +64,7 @@ defmodule BrodMimic.CgCommits do
   @doc """
   Force commit offsets
   """
+  @spec run(client(), group_input()) :: :ok
   def run(client_id, group_input) do
     {:ok, pid} = start_link(client_id, group_input)
     :ok = sync(pid)
@@ -77,7 +78,7 @@ defmodule BrodMimic.CgCommits do
   given topic-partitions, then commit given offsets to Kafka. In case not all
   given partitions are assigned to it, it will terminate with an exit exception
   """
-  @spec start_link(Brod.client(), group_input()) :: {:ok, pid()} | {:error, any()}
+  @spec start_link(client(), group_input()) :: {:ok, pid()} | {:error, any()}
   def start_link(client, group_input) do
     GenServer.start_link(__MODULE__, {client, group_input}, [])
   end
@@ -232,12 +233,7 @@ defmodule BrodMimic.CgCommits do
   @impl GenServer
   def handle_cast(
         {:new_assignments, _member_id, generation_id, assignments},
-        state(
-          is_elected: is_leader,
-          offsets: offsets_to_commit,
-          coordinator: pid,
-          topic: my_topic
-        ) = state
+        state(is_elected: is_leader, offsets: offsets_to_commit, coordinator: pid, topic: my_topic) = state
       ) do
     # Write a log if I am not a leader,
     # hope the desired partitions are all assigned to me

@@ -76,10 +76,7 @@ defmodule BrodMimic.ConsumersSup do
     end
   end
 
-  @doc """
-  supervisor3 callback
-  """
-  @impl true
+  @impl BrodMimic.Supervisor3
   def init(@topics_sup) do
     {:ok, {{:one_for_one, 0, 1}, []}}
   end
@@ -88,7 +85,7 @@ defmodule BrodMimic.ConsumersSup do
     post_init(args)
   end
 
-  @impl true
+  @impl BrodMimic.Supervisor3
   def post_init({@partitions_sup, client_pid, topic, config}) do
     # spawn consumer process for every partition
     # in a topic if partitions are not set explicitly
@@ -105,12 +102,12 @@ defmodule BrodMimic.ConsumersSup do
     end
   end
 
-  @impl true
+  @impl BrodMimic.Supervisor3
   def post_init(_) do
     :ignore
   end
 
-  def get_partitions(client_pid, topic, config) do
+  defp get_partitions(client_pid, topic, config) do
     case :proplists.get_value(:partitions, config, []) do
       [] ->
         get_all_partitions(client_pid, topic)
@@ -120,7 +117,7 @@ defmodule BrodMimic.ConsumersSup do
     end
   end
 
-  def get_all_partitions(client_pid, topic) do
+  defp get_all_partitions(client_pid, topic) do
     case BrodClient.get_partitions_count(
            client_pid,
            topic
@@ -133,7 +130,7 @@ defmodule BrodMimic.ConsumersSup do
     end
   end
 
-  def consumers_sup_spec(client_pid, topic_name, config0) do
+  defp consumers_sup_spec(client_pid, topic_name, config0) do
     delay_secs =
       :proplists.get_value(
         :topic_restart_delay_seconds,
@@ -155,7 +152,7 @@ defmodule BrodMimic.ConsumersSup do
     }
   end
 
-  def consumer_spec(client_pid, topic, partition, config0) do
+  defp consumer_spec(client_pid, topic, partition, config0) do
     delay_secs =
       :proplists.get_value(
         :partition_restart_delay_seconds,
