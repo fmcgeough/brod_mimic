@@ -16,6 +16,7 @@ defmodule BrodMimic.Client do
   alias BrodMimic.ConsumersSup, as: BrodConsumersSup
   alias BrodMimic.KafkaRequest
   alias BrodMimic.ProducersSup, as: BrodProducersSup
+  alias BrodMimic.Utils, as: BrodUtils
 
   require Logger
 
@@ -160,6 +161,9 @@ defmodule BrodMimic.Client do
           | {:producer_not_found, topic()}
           | {:producer_not_found, topic(), partition()}
 
+  @doc """
+  Start the Client GenServer using the caller's client_id as the GenServer name
+  """
   @spec start_link([endpoint()], client_id(), config()) :: {:ok, pid()} | {:error, any()}
   def start_link(bootstrap_endpoints, client_id, config) when is_atom(client_id) do
     args = {bootstrap_endpoints, client_id, config}
@@ -309,7 +313,7 @@ defmodule BrodMimic.Client do
   end
 
   @doc """
-  Ensure not topic auto creation even if Kafka has it enabled.
+  Ensure there is no topic auto creation even if Kafka has it enabled.
   """
   @spec get_metadata_safe(client(), topic()) :: {:ok, :kpro.struct()} | {:error, any()}
   def get_metadata_safe(client, topic) do
@@ -326,6 +330,10 @@ defmodule BrodMimic.Client do
     get_partitions_count(client, topic, %{allow_topic_auto_creation: true})
   end
 
+  @doc """
+  Get partition count with options
+  """
+  @spec get_partitions_count(client(), topic(), map()) :: {:ok, pos_integer()} | {:error, any()}
   def get_partitions_count(client, topic, opts) when is_atom(client) do
     do_get_partitions_count(client, client, topic, opts)
   end
@@ -565,11 +573,45 @@ defmodule BrodMimic.Client do
     {:noreply, state}
   end
 
+  @impl GenServer
+  def code_change(_old_vsn, state, _extra) do
+    {:ok, state}
+  end
+
+  @impl GenServer
+  def terminate(
+        reason,
+        state(
+          client_id: client_id,
+          meta_conn: meta_conn,
+          payload_conns: payload_conns,
+          producers_sup: producers_sup,
+          consumers_sup: consumers_sup
+        )
+      ) do
+    case BrodUtils.is_normal_reason(reason) do
+      true ->
+        :ok
+
+      false ->
+        Logger.warning(
+          :io_lib.format("~p [~p] ~p is terminating\nreason: ~p~n", [__MODULE__, self(), client_id, reason])
+        )
+    end
+
+    # stop producers and consumers first because they are monitoring connections
+    shutdown_pid(producers_sup)
+    shutdown_pid(consumers_sup)
+    shutdown = fn conn(pid: pid) -> shutdown_pid(pid) end
+    :lists.foreach(shutdown, payload_conns)
+    shutdown_pid(meta_conn)
+  end
+
   ### Internal use
 
   @spec get_partition_worker(client(), partition_worker_key()) ::
           {:ok, pid()} | {:error, get_worker_error()}
-  def get_partition_worker(client_pid, key) when is_pid(client_pid) do
+  defp get_partition_worker(client_pid, key) when is_pid(client_pid) do
     case Process.info(client_pid, :registered_name) do
       {:registered_name, client_id} when is_atom(client_id) ->
         get_partition_worker(client_id, key)
@@ -585,7 +627,7 @@ defmodule BrodMimic.Client do
     end
   end
 
-  def get_partition_worker(client_id, key) when is_atom(client_id) do
+  defp get_partition_worker(client_id, key) when is_atom(client_id) do
     case lookup_partition_worker(client_id, client_id, key) do
       {:ok, pid} ->
         case Process.alive?(pid) do
@@ -645,6 +687,9 @@ defmodule BrodMimic.Client do
     find_consumer(client, topic, partition)
   end
 
+  @doc """
+  Find the producer process for a topic's partition
+  """
   @spec find_producer(client(), topic(), partition()) ::
           {:ok, pid()} | {:error, get_producer_error()}
   def find_producer(client, topic, partition) do
@@ -675,7 +720,8 @@ defmodule BrodMimic.Client do
     end
   end
 
-  def validate_topic_existence(topic, state(workers_tab: ets) = state, is_retry) do
+  @spec validate_topic_existence(topic(), state(), boolean()) :: {:ok | {:error, any()}, state()}
+  defp validate_topic_existence(topic, state(workers_tab: ets) = state, is_retry) do
     case lookup_partitions_count_cache(ets, topic) do
       {:ok, _count} ->
         {:ok, state}
@@ -761,10 +807,10 @@ defmodule BrodMimic.Client do
     end
   end
 
-  @doc """
-  Ensure there is at least one metadata connection
-  """
-  def ensure_metadata_connection(state(bootstrap_endpoints: endpoints, meta_conn: :undefined) = state) do
+  # --------------------------------------------------------------------------------
+  # Ensure there is at least one metadata connection
+  # --------------------------------------------------------------------------------
+  defp ensure_metadata_connection(state(bootstrap_endpoints: endpoints, meta_conn: :undefined) = state) do
     conn_config = conn_config(state)
 
     pid =
@@ -776,7 +822,7 @@ defmodule BrodMimic.Client do
     state(state, meta_conn: pid)
   end
 
-  def ensure_metadata_connection(state) do
+  defp ensure_metadata_connection(state) do
     state
   end
 
@@ -794,7 +840,7 @@ defmodule BrodMimic.Client do
     end
   end
 
-  def do_get_group_coordinator(state0, group_id) do
+  defp do_get_group_coordinator(state0, group_id) do
     state = ensure_metadata_connection(state0)
     meta_conn = get_metadata_connection(state)
     timeout = timeout(state)
@@ -817,12 +863,12 @@ defmodule BrodMimic.Client do
     :timer.seconds(t)
   end
 
-  @doc """
-  Catch `:noproc` exit exception when making GenServer.call
-  """
+  # --------------------------------------------------------------------------------
+  # Catch `:noproc` exit exception when making GenServer.call
+  # --------------------------------------------------------------------------------
   @spec safe_gen_call(pid() | atom(), call :: term(), timeout :: :infinity | integer()) ::
           :ok | {:ok, term()} | {:error, :client_down | term()}
-  def safe_gen_call(server, call, timeout) do
+  defp safe_gen_call(server, call, timeout) do
     GenServer.call(server, call, timeout)
   catch
     :exit, {:noproc, _} ->
@@ -832,18 +878,18 @@ defmodule BrodMimic.Client do
       {:error, {:client_down, reason}}
   end
 
-  @doc """
-  `Process.exit/2` for client GenServer
-
-  Note: Stop producers and consumers first because they are monitoring
-  connections
-  """
-  def shutdown_pid(pid) when is_pid(pid) do
+  # --------------------------------------------------------------------------------
+  # `Process.exit/2` for client GenServer
+  #
+  # Note: Stop producers and consumers first because they are monitoring
+  # connections
+  # --------------------------------------------------------------------------------
+  defp shutdown_pid(pid) when is_pid(pid) do
     Process.exit(pid, :shutdown)
     :ok
   end
 
-  def shutdown_pid(_) do
+  defp shutdown_pid(_) do
     :ok
   end
 
@@ -938,17 +984,17 @@ defmodule BrodMimic.Client do
   end
 
   @spec kf(:kpro.field_name(), :kpro.struct()) :: :kpro.field_value()
-  def kf(field_name, struct) do
+  defp kf(field_name, struct) do
     :kpro.find(field_name, struct)
   end
 
-  @doc """
-  Try to start a producer for the given topic if `:auto_start_producers option`
-  is enabled for the client
-  """
+  # --------------------------------------------------------------------------------
+  # Try to start a producer for the given topic if `:auto_start_producers option`
+  # is enabled for the client
+  # --------------------------------------------------------------------------------
   @spec maybe_start_producer(client(), topic(), partition(), {:error, any()}) ::
           :ok | {:error, any()}
-  def maybe_start_producer(client, topic, partition, error) do
+  defp maybe_start_producer(client, topic, partition, error) do
     case safe_gen_call(client, {:auto_start_producer, topic}, :infinity) do
       :ok ->
         producer_key = producer_key(topic, partition)
@@ -963,7 +1009,7 @@ defmodule BrodMimic.Client do
   end
 
   @spec get_partitions_count_in_metadata(:kpro.struct()) :: {:ok, pos_integer()} | {:error, any()}
-  def get_partitions_count_in_metadata(topic_metadata) do
+  defp get_partitions_count_in_metadata(topic_metadata) do
     error_code = kf(:error_code, topic_metadata)
     partitions = kf(:partitions, topic_metadata)
 
@@ -973,19 +1019,19 @@ defmodule BrodMimic.Client do
     end
   end
 
-  def request_sync(state, request) do
+  defp request_sync(state, request) do
     pid = get_metadata_connection(state)
     timeout = timeout(state)
     :kpro.request_sync(pid, request, timeout)
   end
 
-  def do_start_producer(topic_name, producer_config, state) do
+  defp do_start_producer(topic_name, producer_config, state) do
     sup_pid = state(state, :producers_sup)
     f = fn -> BrodProducersSup.start_producer(sup_pid, self(), topic_name, producer_config) end
     ensure_partition_workers(topic_name, state, f)
   end
 
-  def do_start_consumer(topic_name, consumer_config, state) do
+  defp do_start_consumer(topic_name, consumer_config, state) do
     sup_pid = state(state, :consumers_sup)
     f = fn -> BrodConsumersSup.start_consumer(sup_pid, self(), topic_name, consumer_config) end
     ensure_partition_workers(topic_name, state, f)
@@ -1006,14 +1052,14 @@ defmodule BrodMimic.Client do
     end)
   end
 
-  def conn_config(state(client_id: client_id, config: config)) do
+  defp conn_config(state(client_id: client_id, config: config)) do
     cfg = conn_config(config, :kpro_connection.all_cfg_keys(), [])
     Map.new([{:client_id, ensure_binary(client_id)} | cfg])
   end
 
-  def conn_config([], _conn_cfg_keys, acc), do: acc
+  defp conn_config([], _conn_cfg_keys, acc), do: acc
 
-  def conn_config([{k, v} | rest], conn_cfg_keys, acc) do
+  defp conn_config([{k, v} | rest], conn_cfg_keys, acc) do
     new_acc =
       case :lists.member(k, conn_cfg_keys) do
         true -> [{k, v} | acc]
@@ -1023,13 +1069,13 @@ defmodule BrodMimic.Client do
     conn_config(rest, conn_cfg_keys, new_acc)
   end
 
-  def conn_config([k | rest], conn_cfg_keys, acc) when is_atom(k) do
+  defp conn_config([k | rest], conn_cfg_keys, acc) when is_atom(k) do
     # translate proplist boolean mark to tuple
     conn_config([{k, true} | rest], conn_cfg_keys, acc)
   end
 
   @spec maybe_connect(state(), endpoint()) :: {{:ok, pid()} | {:error, any()}, state()}
-  def maybe_connect(state, endpoint) do
+  defp maybe_connect(state, endpoint) do
     case find_conn(endpoint, state(state, :payload_conns)) do
       {:ok, pid} -> {{:ok, pid}, state}
       {:error, reason} -> maybe_connect(state, endpoint, reason)
@@ -1038,17 +1084,17 @@ defmodule BrodMimic.Client do
 
   @spec maybe_connect(state(), endpoint(), :not_found | dead_conn()) ::
           {{:ok, pid()} | {:error, any()}, state()}
-  def maybe_connect(state, endpoint, :not_found) do
+  defp maybe_connect(state, endpoint, :not_found) do
     # connect for the first time
     connect(state, endpoint)
   end
 
   # state{client_id = ClientId} = State,
-  def maybe_connect(
-        state(client_id: client_id) = state,
-        {host, port} = endpoint,
-        {:dead_since, ts, reason}
-      ) do
+  defp maybe_connect(
+         state(client_id: client_id) = state,
+         {host, port} = endpoint,
+         {:dead_since, ts, reason}
+       ) do
     case is_cooled_down(ts, state) do
       true ->
         connect(state, endpoint)
@@ -1062,10 +1108,10 @@ defmodule BrodMimic.Client do
   end
 
   @spec connect(state(), endpoint()) :: {{:ok, pid()} | {:error, any()}, state()}
-  def connect(
-        state(client_id: client_id, payload_conns: conns) = state,
-        {host, port} = endpoint
-      ) do
+  defp connect(
+         state(client_id: client_id, payload_conns: conns) = state,
+         {host, port} = endpoint
+       ) do
     conn =
       case do_connect(endpoint, state) do
         {:ok, pid} ->
@@ -1089,18 +1135,18 @@ defmodule BrodMimic.Client do
     {result, state(state, payload_conns: new_conns)}
   end
 
-  def do_connect(endpoint, state) do
+  defp do_connect(endpoint, state) do
     conn_config = conn_config(state)
     :kpro.connect(endpoint, conn_config)
   end
 
-  @doc """
-  Handle connection pid EXIT event, for payload sockets keep the timestamp,
-  but do not restart yet. Payload connection will be re-established when a
-  per-partition worker restarts and requests for a connection after
-  it is cooled down.
-  """
-  def handle_connection_down(state, pid, reason) do
+  # --------------------------------------------------------------------------------
+  # Handle connection pid EXIT event, for payload sockets keep the timestamp,
+  # but do not restart yet. Payload connection will be re-established when a
+  # per-partition worker restarts and requests for a connection after it is
+  # cooled down.
+  # --------------------------------------------------------------------------------
+  defp handle_connection_down(state, pid, reason) do
     if state(state, :meta_conn) == pid do
       state(state, meta_conn: :undefined)
     else
@@ -1124,13 +1170,13 @@ defmodule BrodMimic.Client do
     end
   end
 
-  def mark_dead(reason) do
+  defp mark_dead(reason) do
     {:dead_since, :os.timestamp(), reason}
   end
 
   @spec find_conn(endpoint(), [conn_state()]) ::
           {:ok, pid()} | {:error, :not_found} | {:error, dead_conn()}
-  def find_conn(endpoint, conns) do
+  defp find_conn(endpoint, conns) do
     case :lists.keyfind(endpoint, conn(:endpoint), conns) do
       false ->
         {:error, :not_found}
@@ -1148,7 +1194,7 @@ defmodule BrodMimic.Client do
   end
 
   # Check if the connection is down for long enough to retry.
-  def is_cooled_down(ts, state) do
+  defp is_cooled_down(ts, state) do
     config = state(state, :config)
     threshold = config(:reconnect_cool_down_seconds, config, @default_reconnect_cool_down_seconds)
     now = :os.timestamp()
@@ -1176,15 +1222,15 @@ defmodule BrodMimic.Client do
     update_partitions_count_cache(ets, rest)
   end
 
-  def config(key, config, default) do
+  defp config(key, config, default) do
     :proplists.get_value(key, config, default)
   end
 
-  def ensure_binary(client_id) when is_atom(client_id) do
+  defp ensure_binary(client_id) when is_atom(client_id) do
     Atom.to_string(client_id)
   end
 
-  def ensure_binary(client_id) when is_binary(client_id) do
+  defp ensure_binary(client_id) when is_binary(client_id) do
     client_id
   end
 end
