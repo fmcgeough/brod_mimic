@@ -991,7 +991,7 @@ defmodule BrodMimic.GroupCoordinator do
 
   # Extract the partition assignemts from SyncGroupResponse
   # then fetch the committed offsets of each partition.
-  @spec get_topic_assignments(state(), binary() | [:kpro.struct()]) :: Brod.received_assignments()
+  @spec get_topic_assignments(state(), :undefined | binary() | [:kpro.struct()]) :: Brod.received_assignments()
   defp get_topic_assignments(_state, :undefined), do: []
   defp get_topic_assignments(_state, %{topic_partitions: []}), do: []
 
@@ -1020,7 +1020,7 @@ defmodule BrodMimic.GroupCoordinator do
   # Fetch committed offsets from kafka,
   # or call the consumer callback to read committed offsets.
   @spec get_committed_offsets(state(), [{topic(), partition()}]) :: [
-          {{topic(), partition()}, offset() | {Brod.begin_offset(), offset_time()}}
+          {{topic(), partition()}, offset() | {:begin_offset, offset_time()}}
         ]
   defp get_committed_offsets(
          state(offset_commit_policy: :consumer_managed, member_pid: member_pid, member_module: member_module),
@@ -1047,7 +1047,7 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   @spec resolve_begin_offsets(
-          Brod.topic_partitions(),
+          [Brod.topic_partition()],
           [{Brod.topic_partition(), offset() | {:begin_offset, Brod.offset_time()}}],
           boolean()
         ) :: Brod.received_assignments()
@@ -1061,11 +1061,12 @@ defmodule BrodMimic.GroupCoordinator do
         {_, {:begin_offset, offset}} ->
           resolve_special_offset(offset)
 
-        {_, offset} when is_consumer_managed ->
-          offset + 1
-
         {_, offset} ->
-          offset
+          if is_consumer_managed do
+            offset + 1
+          else
+            offset
+          end
 
         false ->
           :undefined
