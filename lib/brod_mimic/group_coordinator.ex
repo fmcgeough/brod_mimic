@@ -431,10 +431,7 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   @impl GenServer
-  def terminate(
-        reason,
-        state(connection: connection, group_id: group_id, member_id: member_id) = state
-      ) do
+  def terminate(reason, state(connection: connection, group_id: group_id, member_id: member_id) = state) do
     Logger.info(fn -> log_string(state, @leaving_group, [reason]) end)
     body = [{:group_id, group_id}, {:member_id, member_id}]
     _ = try_commit_offsets(state)
@@ -449,7 +446,8 @@ defmodule BrodMimic.GroupCoordinator do
     end
   end
 
-  def discover_coordinator(state(client: client, connection: connection0, group_id: group_id) = state) do
+  @spec discover_coordinator(state()) :: {:ok, state()}
+  defp discover_coordinator(state(client: client, connection: connection0, group_id: group_id) = state) do
     {endpoint, conn_config0} =
       (fn ->
          case BrodClient.get_group_coordinator(
@@ -518,16 +516,17 @@ defmodule BrodMimic.GroupCoordinator do
     end
   end
 
-  def stabilize(
-        state(
-          rejoin_delay_seconds: rejoin_delay_seconds,
-          member_module: member_module,
-          member_pid: member_pid,
-          offset_commit_timer: offset_commit_timer
-        ) = state0,
-        attempt_num,
-        reason
-      ) do
+  @spec stabilize(state(), integer(), any()) :: {:ok, state()}
+  defp stabilize(
+         state(
+           rejoin_delay_seconds: rejoin_delay_seconds,
+           member_module: member_module,
+           member_pid: member_pid,
+           offset_commit_timer: offset_commit_timer
+         ) = state0,
+         attempt_num,
+         reason
+       ) do
     is_reference(offset_commit_timer) and Process.cancel_timer(offset_commit_timer)
 
     if reason != :undefined do
@@ -581,12 +580,7 @@ defmodule BrodMimic.GroupCoordinator do
 
         false ->
           milliseconds = :timer.seconds(rejoin_delay_seconds)
-
-          Process.send_after(
-            self(),
-            {:lo_cmd_stabilize, attempt_num + 1, new_reason},
-            milliseconds
-          )
+          Process.send_after(self(), {:lo_cmd_stabilize, attempt_num + 1, new_reason}, milliseconds)
       end
 
       {:ok, state_in}
@@ -618,16 +612,16 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   # we are likely kicked out from the group, rejoin with empty member id
-  def should_reset_member_id(:unknown_member_id), do: true
+  defp should_reset_member_id(:unknown_member_id), do: true
 
   # the coordinator have moved to another broker, set it to :undefined to trigger a re-discover
-  def should_reset_member_id(:not_coordinator), do: true
+  defp should_reset_member_id(:not_coordinator), do: true
 
   # old connection was down, new connection will lead
   # to a new member id
-  def should_reset_member_id({:connection_down, _reason}), do: true
+  defp should_reset_member_id({:connection_down, _reason}), do: true
 
-  def should_reset_member_id(_), do: false
+  defp should_reset_member_id(_), do: false
 
   defp join_group(
          state(
@@ -675,13 +669,7 @@ defmodule BrodMimic.GroupCoordinator do
     members = ensure_leader_at_hd(leader_id, members1)
     is_group_leader = leader_id === member_id
 
-    state =
-      state(state0,
-        member_id: member_id,
-        leader_id: leader_id,
-        generation_id: generation_id,
-        members: members
-      )
+    state = state(state0, member_id: member_id, leader_id: leader_id, generation_id: generation_id, members: members)
 
     Logger.info(fn -> log_string(state, @elected, [is_group_leader]) end)
     {:ok, state}
@@ -727,13 +715,7 @@ defmodule BrodMimic.GroupCoordinator do
     state
   end
 
-  defp handle_ack(
-         state(acked_offsets: acked_offsets) = state,
-         _generation_id,
-         topic,
-         partition,
-         offset
-       ) do
+  defp handle_ack(state(acked_offsets: acked_offsets) = state, _generation_id, topic, partition, offset) do
     new_acked_offsets = merge_acked_offsets(acked_offsets, [{{topic, partition}, offset}])
     state(state, acked_offsets: new_acked_offsets)
   end
@@ -845,11 +827,7 @@ defmodule BrodMimic.GroupCoordinator do
       {:topics, topic_offsets}
     ]
 
-    req =
-      BrodKafkaRequest.offset_commit(
-        connection,
-        req_body
-      )
+    req = BrodKafkaRequest.offset_commit(connection, req_body)
 
     rsp_body = send_sync(connection, req)
     topics = :kpro.find(:topics, rsp_body)
@@ -902,30 +880,16 @@ defmodule BrodMimic.GroupCoordinator do
         case state(state, :partition_assignment_strategy) == :callback_implemented do
           true ->
             member_module = state(state, :member_module)
-
-            member_module.assign_partitions(
-              state(state, :member_pid),
-              state(state, :members),
-              all_partitions
-            )
+            member_module.assign_partitions(state(state, :member_pid), state(state, :members), all_partitions)
 
           false ->
-            do_assign_partitions(
-              state(state, :partition_assignment_strategy),
-              state(state, :members),
-              all_partitions
-            )
+            do_assign_partitions(state(state, :partition_assignment_strategy), state(state, :members), all_partitions)
         end
 
       :lists.map(
         fn {member_id, topics_} ->
           partition_assignments =
-            :lists.map(
-              fn {topic, partitions} ->
-                [{:topic, topic}, {:partitions, partitions}]
-              end,
-              topics_
-            )
+            :lists.map(fn {topic, partitions} -> [{:topic, topic}, {:partitions, partitions}] end, topics_)
 
           [
             {:member_id, member_id},
@@ -962,16 +926,7 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   defp all_topics(members) do
-    :lists.usort(
-      :lists.append(
-        :lists.map(
-          fn {_member_id, m} ->
-            kafka_group_member_metadata(m, :topics)
-          end,
-          members
-        )
-      )
-    )
+    :lists.usort(:lists.append(:lists.map(fn {_member_id, m} -> kafka_group_member_metadata(m, :topics) end, members)))
   end
 
   defp get_partitions(client, topic) do
@@ -1002,8 +957,7 @@ defmodule BrodMimic.GroupCoordinator do
 
     member_assignment = :lists.map(f, members)
 
-    for {member_id, _validation_fun, assignments} <-
-          roundrobin_assign_loop(all_partitions, member_assignment, []) do
+    for {member_id, _validation_fun, assignments} <- roundrobin_assign_loop(all_partitions, member_assignment, []) do
       {member_id, assignments}
     end
   end
@@ -1035,10 +989,13 @@ defmodule BrodMimic.GroupCoordinator do
     end
   end
 
-  def get_topic_assignments(_state, :undefined), do: []
-  def get_topic_assignments(_state, %{topic_partitions: []}), do: []
+  # Extract the partition assignemts from SyncGroupResponse
+  # then fetch the committed offsets of each partition.
+  @spec get_topic_assignments(state(), binary() | [:kpro.struct()]) :: Brod.received_assignments()
+  defp get_topic_assignments(_state, :undefined), do: []
+  defp get_topic_assignments(_state, %{topic_partitions: []}), do: []
 
-  def get_topic_assignments(state, assignment) do
+  defp get_topic_assignments(state, assignment) do
     partition_assignments = :kpro.find(:topic_partitions, assignment)
 
     topic_partitions0 =
@@ -1055,27 +1012,28 @@ defmodule BrodMimic.GroupCoordinator do
       )
 
     topic_partitions = :lists.append(topic_partitions0)
-    committed_offsets = get_committed_offsets(state, :topic_partitions)
+    committed_offsets = get_committed_offsets(state, topic_partitions)
     is_consumer_managed = state(offset_commit_policy: :consumer_managed)
     resolve_begin_offsets(topic_partitions, committed_offsets, is_consumer_managed)
   end
 
-  def get_committed_offsets(
-        state(
-          offset_commit_policy: :consumer_managed,
-          member_pid: member_pid,
-          member_module: member_module
-        ),
-        topic_partitions
-      ) do
+  # Fetch committed offsets from kafka,
+  # or call the consumer callback to read committed offsets.
+  @spec get_committed_offsets(state(), [{topic(), partition()}]) :: [
+          {{topic(), partition()}, offset() | {Brod.begin_offset(), offset_time()}}
+        ]
+  defp get_committed_offsets(
+         state(offset_commit_policy: :consumer_managed, member_pid: member_pid, member_module: member_module),
+         topic_partitions
+       ) do
     {:ok, r} = member_module.get_committed_offsets(member_pid, topic_partitions)
     r
   end
 
-  def get_committed_offsets(
-        state(offset_commit_policy: :commit_to_kafka_v2, group_id: group_id, connection: conn),
-        topic_partitions
-      ) do
+  defp get_committed_offsets(
+         state(offset_commit_policy: :commit_to_kafka_v2, group_id: group_id, connection: conn),
+         topic_partitions
+       ) do
     groupped_partitions = BrodUtils.group_per_key(topic_partitions)
     req = BrodKafkaRequest.offset_fetch(conn, group_id, groupped_partitions)
     rsp_body = send_sync(conn, req)
@@ -1088,11 +1046,16 @@ defmodule BrodMimic.GroupCoordinator do
     :lists.append(committed_offsets0)
   end
 
-  def resolve_begin_offsets([], _committed_offsets, _is_consumer_managed) do
+  @spec resolve_begin_offsets(
+          Brod.topic_partitions(),
+          [{Brod.topic_partition(), offset() | {:begin_offset, Brod.offset_time()}}],
+          boolean()
+        ) :: Brod.received_assignments()
+  defp resolve_begin_offsets([], _committed_offsets, _is_consumer_managed) do
     []
   end
 
-  def resolve_begin_offsets([{topic, partition} | rest], committed_offsets, is_consumer_managed) do
+  defp resolve_begin_offsets([{topic, partition} | rest], committed_offsets, is_consumer_managed) do
     begin_offset =
       case :lists.keyfind({topic, partition}, 1, committed_offsets) do
         {_, {:begin_offset, offset}} ->
@@ -1187,15 +1150,15 @@ defmodule BrodMimic.GroupCoordinator do
     end
   end
 
-  def maybe_send_heartbeat(
-        state(
-          is_in_group: true,
-          group_id: group_id,
-          member_id: member_id,
-          generation_id: generation_id,
-          connection: connection
-        ) = state
-      ) do
+  defp maybe_send_heartbeat(
+         state(
+           is_in_group: true,
+           group_id: group_id,
+           member_id: member_id,
+           generation_id: generation_id,
+           connection: connection
+         ) = state
+       ) do
     req_body = [{:group_id, group_id}, {:generation_id, generation_id}, {:member_id, member_id}]
     req = :kpro.make_request(:heartbeat, 0, req_body)
     :ok = :kpro.request_async(connection, req)
@@ -1203,7 +1166,7 @@ defmodule BrodMimic.GroupCoordinator do
     {:ok, new_state}
   end
 
-  def maybe_send_heartbeat(state() = state) do
+  defp maybe_send_heartbeat(state() = state) do
     {:ok, state(state, hb_ref: :undefined)}
   end
 
@@ -1259,6 +1222,7 @@ defmodule BrodMimic.GroupCoordinator do
   Here we try to recognize brod commits using a regexp,
   then check the +1 prefix to exclude roundrobin_v2.
   """
+  @spec is_roundrobin_v1_commit(:kpro_null | binary()) :: boolean()
   def is_roundrobin_v1_commit(:kpro_null), do: false
   # def is_roundrobin_v1_commit(<<"+1/", _ / binary>>), do: false
 
