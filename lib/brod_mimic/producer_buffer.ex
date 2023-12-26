@@ -123,6 +123,10 @@ defmodule BrodMimic.ProducerBuffer do
     )
   end
 
+  @doc """
+  Raise an exception
+  """
+  @spec bad_init_error() :: no_return()
   def bad_init_error do
     :erlang.error(:bad_init)
   end
@@ -182,25 +186,42 @@ defmodule BrodMimic.ProducerBuffer do
     ack(buf, ref, -1)
   end
 
-  def ack(
-        buf(onwire_count: on_wire_count, onwire: [{ref, reqs} | rest]) = buf,
-        ref,
-        base_offset
-      ) do
+  @doc """
+  Reply 'acked' with base offset to callers
+  """
+  @spec ack(buf(), reference(), offset()) :: buf()
+  def ack(buf(onwire_count: on_wire_count, onwire: [{ref, reqs} | rest]) = buf, ref, base_offset) do
     _ = :lists.foldl(&eval_acked/2, base_offset, reqs)
     buf(buf, onwire_count: on_wire_count - 1, onwire: rest)
   end
 
+  @doc """
+  'Negative' ack, put all sent requests back to the head of buffer.
+  An 'exit' exception is raised if any of the negative-acked requests
+  reached maximum retry limit.
+  """
+  @spec nack(buf(), reference(), any()) :: buf()
   def nack(buf(onwire: [{ref, _reqs} | _]) = buf, ref, reason) do
     nack_all(buf, reason)
   end
 
+  @doc """
+  'Negative' ack, put all sent requests back to the head of buffer.
+  An 'exit' exception is raised if any of the negative-acked requests
+  reached maximum retry limit.
+  """
+  @spec nack_all(buf(), any()) :: buf()
   def nack_all(buf(onwire: on_wire) = buf, reason) do
     all_on_wire_reqs = :lists.flatmap(fn {_ref, reqs} -> reqs end, on_wire)
     new_buf = buf(buf, onwire_count: 0, onwire: [])
     rebuffer_or_crash(all_on_wire_reqs, new_buf, reason)
   end
 
+  @doc """
+  Return true if there is no message pending,
+  buffered or waiting for ack.
+  """
+  @spec is_empty(buf()) :: boolean()
   def is_empty(buf(pending: pending, buffer: buffer, onwire: onwire)) do
     :queue.is_empty(pending) and :queue.is_empty(buffer) and onwire === []
   end
@@ -394,6 +415,10 @@ defmodule BrodMimic.ProducerBuffer do
     (m * 1_000_000 + s) * 1000 + div(micro, 1000)
   end
 
+  @doc """
+  return a buffer without the data in the queues but maintaining the counters
+  """
+  @spec empty_buffers(buf()) :: buf()
   def empty_buffers(buf() = buffer) do
     buf(buffer, pending: :queue.new(), buffer: :queue.new(), onwire: [])
   end

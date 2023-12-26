@@ -67,19 +67,34 @@ defmodule BrodMimic.GroupSubscriberv2 do
   @type workers() :: %{Brod.topic_partition() => worker()}
 
   # Callbacks
+  @doc """
+  Initialize the callback module's state.
+  """
   @callback init(init_info(), cb_config()) :: {:ok, state()}
+
+  @doc """
+  Callback to handle an incoming message
+  """
   @callback handle_message(Brod.message(), state()) ::
               {:ok, :commit, state()} | {:ok, :ack, state()} | {:ok, state()}
 
-  # Get committed offset (in case it is managed by the subscriber):
+  @doc """
+  Get committed offset (in case it is managed by the subscriber). Optional.
+  """
   @callback get_committed_offset(cb_config(), topic(), partition()) ::
               {:ok, offset() | {:begin_offset, Brod.offset_time()}} | :undefined
 
-  # Assign partitions (in case `partition_assignment_strategy` is set
-  # for `callback_implemented` in group config).
+  @doc """
+  Assign partitions (in case `partition_assignment_strategy` is set
+  for `callback_implemented` in group config). Optional.
+  """
   @callback assign_partitions(cb_config(), [Brod.group_member()], [Brod.topic_partition()]) :: [
               {member_id(), [Brod.partition_assignment()]}
             ]
+
+  @doc """
+  Let callback module know we are terminating. Optional.
+  """
   @callback terminate(reason(), state()) :: any()
   @optional_callbacks assign_partitions: 3, get_committed_offset: 3, terminate: 2
 
@@ -165,44 +180,21 @@ defmodule BrodMimic.GroupSubscriberv2 do
     GenServer.call(pid, :get_workers, timeout)
   end
 
-  @doc """
-  Called by group coordinator when there is new assignment received.
-  """
-  @spec assignments_received(pid(), member_id(), integer(), Brod.received_assignments()) :: :ok
   @impl BrodMimic.GroupMember
   def assignments_received(pid, member_id, generation_id, topic_assignments) do
     GenServer.cast(pid, {:new_assignments, member_id, generation_id, topic_assignments})
   end
 
-  @doc """
-  Called by group coordinator before re-joining the consumer group.
-  """
-  @spec assignments_revoked(pid()) :: :ok
   @impl BrodMimic.GroupMember
   def assignments_revoked(pid) do
     GenServer.call(pid, :unsubscribe_all_partitions, :infinity)
   end
 
-  @doc """
-  Called by group coordinator when initializing the assignments
-  for subscriber.
-
-  NOTE: This function is called only when `:offset_commit_policy` is set to
-  `:consumer_managed` in group config.
-  """
-  @spec get_committed_offsets(pid(), [Brod.topic_partition()]) :: {:ok, [{Brod.topic_partition(), offset()}]}
   @impl BrodMimic.GroupMember
   def get_committed_offsets(pid, topic_partitions) do
     GenServer.call(pid, {:get_committed_offsets, topic_partitions}, :infinity)
   end
 
-  @doc """
-  This function is called only when `:partition_assignment_strategy`
-  is set for `:callback_implemented` in group config.
-  """
-  @spec assign_partitions(pid(), [Brod.group_member()], [Brod.topic_partition()]) :: [
-          {member_id(), [Brod.partition_assignment()]}
-        ]
   @impl BrodMimic.GroupMember
   def assign_partitions(pid, members, topic_partition_list) do
     call = {:assign_partitions, members, topic_partition_list}

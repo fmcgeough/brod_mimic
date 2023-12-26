@@ -18,6 +18,23 @@ defmodule BrodMimic.Producer do
   require Logger
   require Record
 
+  defrecordp(:brod_call_ref, caller: :undefined, callee: :undefined, ref: :undefined)
+
+  defrecordp(:brod_produce_reply, call_ref: :undefined, base_offset: :undefined, result: :undefined)
+
+  defrecordp(:state,
+    client_pid: :undefined,
+    topic: :undefined,
+    partition: :undefined,
+    connection: :undefined,
+    conn_mref: :undefined,
+    buffer: :undefined,
+    retry_backoff_ms: :undefined,
+    retry_tref: :undefined,
+    delay_send_ref: :undefined,
+    produce_req_vsn: :undefined
+  )
+
   @retriable_errors [
     :unknown_topic_or_partition,
     :leader_not_available,
@@ -58,22 +75,19 @@ defmodule BrodMimic.Producer do
   @type conn() :: :kpro.connection()
   @type produce_request_error() :: :timeout | {:producer_down, any()}
 
-  defrecordp(:brod_call_ref, caller: :undefined, callee: :undefined, ref: :undefined)
-
-  defrecordp(:brod_produce_reply, call_ref: :undefined, base_offset: :undefined, result: :undefined)
-
-  defrecordp(:state,
-    client_pid: :undefined,
-    topic: :undefined,
-    partition: :undefined,
-    connection: :undefined,
-    conn_mref: :undefined,
-    buffer: :undefined,
-    retry_backoff_ms: :undefined,
-    retry_tref: :undefined,
-    delay_send_ref: :undefined,
-    produce_req_vsn: :undefined
-  )
+  @type state() ::
+          record(:state,
+            client_pid: pid(),
+            topic: topic(),
+            partition: partition(),
+            connection: :undefined | conn(),
+            conn_mref: :undefined | reference(),
+            buffer: ProducerBuffer.buf(),
+            retry_backoff_ms: non_neg_integer(),
+            retry_tref: :undefined | reference(),
+            delay_send_ref: delay_send_ref(),
+            produce_req_vsn: {:default | :resolved | :configured, BrodKafkaApis.vsn()}
+          )
 
   @doc """
   Start (link) a partition producer
@@ -153,6 +167,7 @@ defmodule BrodMimic.Producer do
   brod_produce_req_acked}` message after the produce request has been acked by
   Kafka.
   """
+  @spec produce(pid(), Brod.key(), Brod.value()) :: {:ok, call_ref()} | {:error, any()}
   def produce(pid, key, value) do
     produce_cb(pid, key, value, :undefined)
   end
@@ -231,6 +246,10 @@ defmodule BrodMimic.Producer do
     end
   end
 
+  @doc """
+  Stop the process
+  """
+  @spec stop(pid()) :: :ok
   def stop(pid) do
     :ok = GenServer.call(pid, :stop)
   end
@@ -396,10 +415,7 @@ defmodule BrodMimic.Producer do
   end
 
   @impl GenServer
-  def terminate(
-        reason,
-        state(client_pid: client_pid, topic: topic, partition: partition)
-      ) do
+  def terminate(reason, state(client_pid: client_pid, topic: topic, partition: partition)) do
     case BrodUtils.is_normal_reason(reason) do
       true ->
         BrodClient.deregister_producer(client_pid, topic, partition)
@@ -425,6 +441,9 @@ defmodule BrodMimic.Producer do
     {&__MODULE__.do_send_fun/4, extra_arg}
   end
 
+  @doc """
+  called to produce to Kafka
+  """
   def do_send_fun(extra_arg, conn, batch_input, vsn) do
     {topic, partition, required_acks, ack_timeout, compression} = extra_arg
 
@@ -451,18 +470,21 @@ defmodule BrodMimic.Producer do
     end
   end
 
+  @doc """
+  Return `:ok`
+  """
   def do_no_ack(_partition, _base_offset) do
     :ok
   end
 
-  def log_error_code(topic, partition, offset, error_code) do
+  defp log_error_code(topic, partition, offset, error_code) do
     "Produce error ~s-~B Offset: ~B Error: ~p"
     |> :io_lib.format([topic, partition, offset, error_code])
     |> to_string()
     |> Logger.error(%{domain: [:brod]})
   end
 
-  def make_bufcb(call_ref, ack_cb, partition) do
+  defp make_bufcb(call_ref, ack_cb, partition) do
     {&BrodMimic.Producer.do_bufcb/2, _extra_arg = {call_ref, ack_cb, partition}}
   end
 
@@ -486,16 +508,16 @@ defmodule BrodMimic.Producer do
     end
   end
 
-  def handle_produce(buf_cb, batch, state(retry_tref: ref) = state) when is_reference(ref) do
+  defp handle_produce(buf_cb, batch, state(retry_tref: ref) = state) when is_reference(ref) do
     do_handle_produce(buf_cb, batch, state)
   end
 
-  def handle_produce(buf_cb, batch, state(connection: pid) = state)
-      when is_pid(pid) do
+  defp handle_produce(buf_cb, batch, state(connection: pid) = state)
+       when is_pid(pid) do
     do_handle_produce(buf_cb, batch, state)
   end
 
-  def handle_produce(buf_cb, batch, state() = state) do
+  defp handle_produce(buf_cb, batch, state() = state) do
     {:ok, new_state} = maybe_reinit_connection(state)
     do_handle_produce(buf_cb, batch, new_state)
   end

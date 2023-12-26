@@ -73,6 +73,7 @@ defmodule BrodMimic.ProducersSup do
     end
   end
 
+  @impl BrodMimic.Supervisor3
   def init(__MODULE__) do
     {:ok, {{:one_for_one, 0, 1}, []}}
   end
@@ -81,6 +82,7 @@ defmodule BrodMimic.ProducersSup do
     :post_init
   end
 
+  @impl BrodMimic.Supervisor3
   def post_init({:brod_producers_sup2, client_pid, topic, config}) do
     case BrodClient.get_partitions_count(client_pid, topic) do
       {:ok, partitions_cnt} ->

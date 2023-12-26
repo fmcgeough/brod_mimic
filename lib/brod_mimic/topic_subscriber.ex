@@ -41,56 +41,90 @@ defmodule BrodMimic.TopicSubscriber do
   @type committed_offsets() :: [{partition(), offset()}]
   @type cb_state() :: term()
   @type cb_ret() :: {:ok, cb_state()} | {:ok, :ack, cb_state()}
+  @type cb_fun() :: (partition(), Brod.message() | Brod.message_set(), cb_state() -> cb_ret())
+
+  @typedoc """
+  Configuration for a topic subscriber
+
+  ## Possible Keys
+
+  - `client`: Client ID (or pid, but not recommended) of the brod client.
+    Mandatory
+  - `topic`: Topic to consume from. Mandatory
+  - `cb_module`: Callback module which should have the callback functions
+    implemented for message processing. Mandatory
+  - `consumer_config`: For partition consumer, See
+    BrodMimic.TopicSubscriber.start_link/6`. Optional, defaults to `[]`
+  - `message_type`: The type of message that is going to be handled by the
+    callback module. Can be either `:message` or `:message_set`. Optional,
+    defaults to `:message_set`
+  - `init_data`: The `term()' that is going to be passed to `CbModule:init/2`
+    when initializing the subscriber. Optional, defaults to `:undefined`
+  - `partitions`: List of partitions to consume from, or atom `:all`. Optional,
+    defaults to `:all`
+  """
   @type topic_subscriber_config() ::
           %{
             required(:client) => client(),
             required(:topic) => topic(),
             required(:cb_module) => module(),
-            required(:init_data) => term(),
-            required(:message_type) => :message | :message_set,
-            required(:consumer_config) => Brod.consumer_config(),
-            required(:partitions) => :all | [partition()]
+            optional(:init_data) => term(),
+            optional(:message_type) => :message | :message_set,
+            optional(:consumer_config) => Brod.consumer_config(),
+            optional(:partitions) => :all | [partition()]
           }
 
   # behaviour callbacks ======================================================
 
-  # Initialize the callback modules state.
-  # Return `{ok, CommittedOffsets, CbState}' where `CommitedOffset' is
-  # the "last seen" before start/restart offsets of each topic in a tuple list
-  # The offset+1 of each partition will be used as the start point when fetching
-  # messages from kafka.
-  #
-  # OBS: If there is no offset committed before for certain (or all) partitions
-  #      e.g. CommittedOffsets = [], the consumer will use 'latest' by default,
-  #      or `begin_offset' in consumer config (if found) to start fetching.
-  # cb_state is the user's looping state for message processing.
+  @doc """
+  Initialize the callback modules state.
+
+  Return `{ok, committed_offsets, cb_state}` where `commited_offset` is the "last
+  seen" before start/restart offsets of each topic in a tuple list The offset+1
+  of each partition will be used as the start point when fetching messages from
+  kafka.
+
+  OBS: If there is no offset committed before for certain (or all) partitions
+       e.g. CommittedOffsets = [], the consumer will use `latest` by default, or
+       `begin_offset` in consumer config (if found) to start fetching. cb_state
+  is the user's looping state for message processing.
+  """
   @callback init(topic(), term()) :: {:ok, committed_offsets(), cb_state()}
 
-  # Handle a message. Return one of:
-  #
-  # `{:ok, new_callback_state}`
-  #   The subscriber has received the message for processing async-ly.
-  #   It should call brod_topic_subscriber:ack/3 to acknowledge later.
-  #
-  # `{:ok, ack, new_callback_state}`
-  #   The subscriber has completed processing the message
-  #
-  # NOTE: While this callback function is being evaluated, the fetch-ahead
-  #       partition-consumers are polling for more messages behind the scene
-  #       unless prefetch_count and prefetch_bytes are set to 0 in consumer
-  #       config.
+  @doc """
+  Handle a message. Return one of:
+
+   `{:ok, new_callback_state}`
+     The subscriber has received the message for processing async-ly.
+     It should call brod_topic_subscriber:ack/3 to acknowledge later.
+
+   `{:ok, ack, new_callback_state}`
+     The subscriber has completed processing the message
+
+   NOTE: While this callback function is being evaluated, the fetch-ahead
+         partition-consumers are polling for more messages behind the scene
+         unless prefetch_count and prefetch_bytes are set to 0 in consumer
+         config.
+  """
   @callback handle_message(
               partition(),
               Brod.message() | message_set(),
               cb_state()
             ) :: cb_ret()
 
-  # This callback is called before stopping the subscriber
+  @doc """
+  This callback is called before stopping the subscriber
+  """
   @callback terminate(any(), cb_state()) :: any()
 
   @optional_callbacks [terminate: 2]
 
+  @doc """
+  Equivalent to `start_link(client, topic, partitions, consumer_config, :message, cb_module, cb_init_arg)`
+  """
   @deprecated "Please use `start_link/1` instead"
+  @spec start_link(client(), topic(), :all | [partition()], Brod.consumer_config(), module(), term()) ::
+          {:ok, pid()} | {:error, any()}
   def start_link(client, topic, partitions, consumer_config, cb_module, cb_init_arg) do
     args = %{
       client: client,
@@ -105,7 +139,21 @@ defmodule BrodMimic.TopicSubscriber do
     start_link(args)
   end
 
+  @doc """
+  Start (link) a topic subscriber which receives and processes the messages or
+  message sets from the given partition set. Use atom `:all` to subscribe to all
+  partitions. Messages are handled by calling `CbModule:handle_message`
+  """
   @deprecated "Please use `start_link/1` instead"
+  @spec start_link(
+          client(),
+          topic(),
+          :all | [partition()],
+          Brod.consumer_config(),
+          :message | :message_set,
+          module(),
+          term()
+        ) :: {:ok, pid()} | {:error, any()}
   def start_link(client, topic, partitions, consumer_config, message_type, cb_module, cb_init_arg) do
     args = %{
       client: client,
@@ -120,7 +168,26 @@ defmodule BrodMimic.TopicSubscriber do
     start_link(args)
   end
 
+  @doc """
+   Start (link) a topic subscriber which receives and processes the
+  messages from the given partition set. Use atom `:all` to subscribe to all
+  partitions. Messages are handled by calling the callback function.
+
+  NOTE: `committed_offsets` are the offsets for the messages that have
+  been successfully processed (acknowledged), not the begin-offset
+  to start fetching from.
+  """
   @deprecated "Please use `start_link/1` instead"
+  @spec start_link(
+          client(),
+          topic(),
+          :all | [partition()],
+          Brod.consumer_config(),
+          committed_offsets(),
+          :message | :message_set,
+          cb_fun(),
+          cb_state()
+        ) :: {:ok, pid()} | {:error, any()}
   def start_link(
         client,
         topic,
@@ -146,10 +213,21 @@ defmodule BrodMimic.TopicSubscriber do
     start_link(args)
   end
 
+  @doc """
+  Start (link) a topic subscriber which receives and processes the messages from
+  a given partition set.
+
+  See `t:topic_subscriber_config/0` for information on parameter.
+  """
+  @spec start_link(topic_subscriber_config()) :: {:ok, pid()} | {:error, any()}
   def start_link(config) do
     GenServer.start_link(BrodMimic.TopicSubscriber, config, [])
   end
 
+  @doc """
+  Stop the process
+  """
+  @spec stop(pid()) :: :ok
   def stop(pid) do
     mref = Process.monitor(pid)
     :ok = GenServer.cast(pid, :stop)
@@ -160,6 +238,10 @@ defmodule BrodMimic.TopicSubscriber do
     end
   end
 
+  @doc """
+  Acknowledge that message has been successfully consumed.
+  """
+  @spec ack(pid(), partition(), offset()) :: :ok
   def ack(pid, partition, offset) do
     GenServer.cast(pid, {:ack, partition, offset})
   end
