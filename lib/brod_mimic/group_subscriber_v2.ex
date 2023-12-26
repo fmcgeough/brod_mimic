@@ -155,31 +155,61 @@ defmodule BrodMimic.GroupSubscriberv2 do
     get_workers(pid, :infinity)
   end
 
+  @doc """
+  Returns a map from Topic-Partitions to worker PIDs for the
+  given group.  Useful for health checking.  This is a synchronous
+  call. Uses the caller's supplied timeout.
+  """
   @spec get_workers(pid(), timeout()) :: workers()
-  defp get_workers(pid, timeout) do
+  def get_workers(pid, timeout) do
     GenServer.call(pid, :get_workers, timeout)
   end
 
+  @doc """
+  Called by group coordinator when there is new assignment received.
+  """
+  @spec assignments_received(pid(), member_id(), integer(), Brod.received_assignments()) :: :ok
+  @impl BrodMimic.GroupMember
   def assignments_received(pid, member_id, generation_id, topic_assignments) do
-    GenServer.cast(
-      pid,
-      {:new_assignments, member_id, generation_id, topic_assignments}
-    )
+    GenServer.cast(pid, {:new_assignments, member_id, generation_id, topic_assignments})
   end
 
+  @doc """
+  Called by group coordinator before re-joining the consumer group.
+  """
+  @spec assignments_revoked(pid()) :: :ok
+  @impl BrodMimic.GroupMember
   def assignments_revoked(pid) do
     GenServer.call(pid, :unsubscribe_all_partitions, :infinity)
   end
 
+  @doc """
+  Called by group coordinator when initializing the assignments
+  for subscriber.
+
+  NOTE: This function is called only when `:offset_commit_policy` is set to
+  `:consumer_managed` in group config.
+  """
+  @spec get_committed_offsets(pid(), [Brod.topic_partition()]) :: {:ok, [{Brod.topic_partition(), offset()}]}
+  @impl BrodMimic.GroupMember
   def get_committed_offsets(pid, topic_partitions) do
     GenServer.call(pid, {:get_committed_offsets, topic_partitions}, :infinity)
   end
 
+  @doc """
+  This function is called only when `:partition_assignment_strategy`
+  is set for `:callback_implemented` in group config.
+  """
+  @spec assign_partitions(pid(), [Brod.group_member()], [Brod.topic_partition()]) :: [
+          {member_id(), [Brod.partition_assignment()]}
+        ]
+  @impl BrodMimic.GroupMember
   def assign_partitions(pid, members, topic_partition_list) do
     call = {:assign_partitions, members, topic_partition_list}
     GenServer.call(pid, call, :infinity)
   end
 
+  @impl GenServer
   def init(config) do
     %{client: client, group_id: group_id, topics: topics, cb_module: cb_module} = config
     Process.flag(:trap_exit, true)
@@ -215,6 +245,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
     {:ok, state}
   end
 
+  @impl GenServer
   def handle_call(
         {:get_committed_offsets, topic_partitions},
         _from,
@@ -253,24 +284,15 @@ defmodule BrodMimic.GroupSubscriberv2 do
     {:reply, {:error, {:unknown_call, call}}, state}
   end
 
-  def handle_cast(
-        {:commit_offset, topic, partition, offset},
-        state
-      ) do
-    state(
-      coordinator: coordinator,
-      generation_id: generation_id
-    ) = state
-
+  @impl GenServer
+  def handle_cast({:commit_offset, topic, partition, offset}, state) do
+    state(coordinator: coordinator, generation_id: generation_id) = state
     do_ack(topic, partition, offset, state)
     :ok = BrodGroupCoordinator.ack(coordinator, generation_id, topic, partition, offset)
     {:noreply, state}
   end
 
-  def handle_cast(
-        {:ack_offset, topic, partition, offset},
-        state
-      ) do
+  def handle_cast({:ack_offset, topic, partition, offset}, state) do
     do_ack(topic, partition, offset, state)
     {:noreply, state}
   end
@@ -297,6 +319,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
     {:noreply, state}
   end
 
+  @impl GenServer
   def handle_info({:EXIT, pid, _reason}, state(coordinator: pid) = state) do
     {:stop, {:shutdown, :coordinator_failure}, state(state, coordinator: :undefined)}
   end
@@ -320,6 +343,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
     {:noreply, state}
   end
 
+  @impl GenServer
   def terminate(_reason, state(workers: workers, coordinator: coordinator, group_id: group_id)) do
     :ok = terminate_all_workers(workers)
     :ok = flush_offset_commits(group_id, coordinator)

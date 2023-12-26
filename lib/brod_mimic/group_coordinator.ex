@@ -724,8 +724,9 @@ defmodule BrodMimic.GroupCoordinator do
     :lists.ukeymerge(1, offsets_to_ack, acked_offsets)
   end
 
+  @spec format_assignments(Brod.received_assignments()) :: iodata()
   defp format_assignments([]) do
-    '[]'
+    "[]"
   end
 
   defp format_assignments(assignments) do
@@ -739,19 +740,20 @@ defmodule BrodMimic.GroupCoordinator do
 
     :lists.map(
       fn {topic, partitions} ->
-        ['\n  ', topic, ':', format_partition_assignments(partitions)]
+        ["\n  ", topic, ":", format_partition_assignments(partitions)]
       end,
       groupped
     )
   end
 
+  @spec format_partition_assignments([{partition(), offset()}]) :: iodata()
   defp format_partition_assignments([]) do
     []
   end
 
   defp format_partition_assignments([{partition, begin_offset} | rest]) do
     [
-      :io_lib.format('\n    partition=~p begin_offset=~p', [partition, begin_offset]),
+      :io_lib.format("\n    partition=~p begin_offset=~p", [partition, begin_offset]),
       format_partition_assignments(rest)
     ]
   end
@@ -1047,8 +1049,8 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   @spec resolve_begin_offsets(
-          [Brod.topic_partition()],
-          [{Brod.topic_partition(), offset() | {:begin_offset, Brod.offset_time()}}],
+          [{topic(), partition()}],
+          [{{topic(), partition()}, offset() | {:begin_offset, Brod.offset_time()}}],
           boolean()
         ) :: Brod.received_assignments()
   defp resolve_begin_offsets([], _committed_offsets, _is_consumer_managed) do
@@ -1125,10 +1127,7 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   defp start_offset_commit_timer(state(offset_commit_timer: old_timer) = state) do
-    state(
-      offset_commit_policy: policy,
-      offset_commit_interval_seconds: seconds
-    ) = state
+    state(offset_commit_policy: policy, offset_commit_interval_seconds: seconds) = state
 
     case policy do
       :consumer_managed ->
