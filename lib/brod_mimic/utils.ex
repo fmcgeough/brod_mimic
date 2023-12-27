@@ -204,6 +204,10 @@ defmodule BrodMimic.Utils do
     DateTime.utc_now() |> DateTime.to_unix(:millisecond)
   end
 
+  @doc """
+  Assert client_id is an atom()
+  """
+  @spec assert_client(Brod.client_id() | pid()) :: :ok | no_return()
   def assert_client(client) do
     ok_when(
       is_atom(client) or is_pid(client),
@@ -211,10 +215,14 @@ defmodule BrodMimic.Utils do
     )
   end
 
-  def assert_group_id(groupId) do
+  @doc """
+  Assert group_id is a binary()
+  """
+  @spec assert_group_id(group_id()) :: :ok | no_return()
+  def assert_group_id(group_id) do
     ok_when(
-      is_binary(groupId) and :erlang.size(groupId) > 0,
-      {:bad_group_id, groupId}
+      is_binary(group_id) and :erlang.size(group_id) > 0,
+      {:bad_group_id, group_id}
     )
   end
 
@@ -286,6 +294,11 @@ defmodule BrodMimic.Utils do
     end
   end
 
+  @doc """
+  Fetch a single message set from the given topic-partition
+  """
+  @spec fetch(connection() | Brod.client_id() | Brod.bootstrap(), topic(), partition(), offset(), Brod.fetch_opts()) ::
+          {:ok, {offset(), [Brod.message()]}} | {:error, any()}
   def fetch(hosts, topic, partition, offset, opts)
       when is_list(hosts) do
     fetch({hosts, []}, topic, partition, offset, opts)
@@ -318,6 +331,16 @@ defmodule BrodMimic.Utils do
     fetch.(offset)
   end
 
+  @spec fold(
+          connection() | Brod.client_id() | Brod.bootstrap(),
+          topic(),
+          partition(),
+          offset(),
+          Brod.fetch_opts(),
+          Brod.fold_acc(),
+          Brod.fold_fun(),
+          Brod.fold_limits()
+        ) :: Brod.fold_result()
   def fold(hosts, topic, partition, offset, opts, acc, fun, limits)
       when is_list(hosts) do
     fold({hosts, []}, topic, partition, offset, opts, acc, fun, limits)
@@ -381,6 +404,10 @@ defmodule BrodMimic.Utils do
     fn offset -> __MODULE__.fetch(conn, req_fun, offset, max_bytes) end
   end
 
+  @doc """
+  Make a partition function
+  """
+  @spec make_part_fun(Brod.partitioner()) :: Brod.partition_fun()
   def make_part_fun(:random) do
     fn _, partition_count, _, _ ->
       {:ok, :rand.uniform(partition_count) - 1}
@@ -397,6 +424,11 @@ defmodule BrodMimic.Utils do
     f
   end
 
+  @doc """
+  Hide sasl plain password in an anonymous function to avoid
+  the plain text being dumped to crash logs
+  """
+  @spec init_sasl_opt(Brod.client_config()) :: Brod.client_config()
   def init_sasl_opt(config) do
     case get_sasl_opt(config) do
       {mechanism, user, pass} when mechanism !== :callback ->
@@ -407,6 +439,16 @@ defmodule BrodMimic.Utils do
     end
   end
 
+  @doc """
+  Fetch committed offsets for the given topics in a consumer group.
+
+  1. try find out the group coordinator broker from the bootstrap hosts
+  2. send `offset_fetch` request and wait for response.
+
+  If Topics is an empty list, fetch offsets for all topics in the group
+  """
+  @spec fetch_committed_offsets([endpoint()], conn_config(), group_id(), [topic()]) ::
+          {:ok, [:kpro.struct()]} | {:error, any()}
   def fetch_committed_offsets(bootstrap_endpoints, conn_cfg, group_id, topics) do
     kpro_opts = kpro_connection_options(conn_cfg)
 
@@ -420,6 +462,16 @@ defmodule BrodMimic.Utils do
     )
   end
 
+  @doc """
+   Fetch committed offsets for the given topics in a consumer group
+
+  1. Get broker endpoint by calling `BrodMimic.Client.get_group_coordinator`
+  2. Establish a connection to the discovered endpoint.
+  3. send `offset_fetch` request and wait for response.
+
+  If Topics is an empty list, fetch offsets for all topics in the group
+  """
+  @spec fetch_committed_offsets(Brod.client(), group_id(), [topic()]) :: {:ok, [:kpro.struct()]} | {:error, any()}
   def fetch_committed_offsets(client, group_id, topics) do
     case BrodClient.get_group_coordinator(client, group_id) do
       {:ok, {endpoint, conn_cfg}} ->
@@ -467,9 +519,10 @@ defmodule BrodMimic.Utils do
   end
 
   @doc """
-  Fetch a message-set. If the given MaxBytes is not enough to fetch a
+  Fetch a message-set. If the given `max_bytes` is not enough to fetch a
   single message, expand it to fetch exactly one message
   """
+  @spec fetch(connection(), req_fun(), offset(), :kpro.count()) :: {:ok, {offset(), [Brod.message()]}} | {:error, any()}
   def fetch(conn, req_fun, offset, max_bytes) do
     request = req_fun.(offset, max_bytes)
 
@@ -500,6 +553,12 @@ defmodule BrodMimic.Utils do
     end
   end
 
+  @doc """
+  List all groups in the given cluster
+
+  _Exception if failed against any of the coordinator brokers_.
+  """
+  @spec list_all_groups([endpoint()], conn_config()) :: [{endpoint(), [Brod.cg()] | {:error, any()}}]
   def list_all_groups(endpoints, options) do
     {:ok, metadata} = get_metadata(endpoints, [], options)
     brokers0 = :kpro.find(:brokers, metadata)
@@ -543,6 +602,10 @@ defmodule BrodMimic.Utils do
     end)
   end
 
+  @doc """
+  Send describe_groups_request and wait for describe_groups_response.
+  """
+  @spec describe_groups(endpoint(), conn_config(), [Brod.group_id()]) :: {:ok, :kpro.struct()} | {:error, any()}
   def describe_groups(coordinator_endpoint, conn_cfg, ids) do
     with_conn([coordinator_endpoint], conn_cfg, fn pid ->
       req = :kpro.make_request(:describe_groups, 0, [{:groups, ids}])
@@ -550,6 +613,13 @@ defmodule BrodMimic.Utils do
     end)
   end
 
+  @doc """
+  Return message set size in number of bytes.
+
+  _This does not include the overheads of encoding protocol.
+  such as magic bytes, attributes, and length tags etc_.
+  """
+  @spec bytes(Brod.batch_input()) :: non_neg_integer()
   def bytes(msgs) do
     f = fn %{key: key, value: value} = msg, acc ->
       header_size =
@@ -567,16 +637,18 @@ defmodule BrodMimic.Utils do
     :lists.foldl(f, 0, msgs)
   end
 
+  @doc """
+  Group values per-key in a key-value list
+  """
+  @spec group_per_key([{term(), term()}]) :: [{term(), [term()]}]
   def group_per_key(list) do
-    :lists.foldl(
-      fn {key, value}, acc ->
-        :orddict.append_list(key, [value], acc)
-      end,
-      [],
-      list
-    )
+    :lists.foldl(fn {key, value}, acc -> :orddict.append_list(key, [value], acc) end, [], list)
   end
 
+  @doc """
+  Group values per-key for the map result of a list
+  """
+  @spec group_per_key((term() -> {term(), term()}), [term()]) :: [{term(), [term()]}]
   def group_per_key(map_fun, list) do
     group_per_key(:lists.map(map_fun, list))
   end
@@ -627,6 +699,10 @@ defmodule BrodMimic.Utils do
     end
   end
 
+  @doc """
+  Make batch input for Kafka protocol library
+  """
+  @spec make_batch_input(Brod.key(), Brod.value()) :: Brod.batch_input()
   def make_batch_input(key, value) do
     case is_batch(value) do
       true ->
@@ -637,12 +713,23 @@ defmodule BrodMimic.Utils do
     end
   end
 
+  @doc """
+  last_stable_offset is added in fetch response version 4
+
+  This function takes high watermark offset as last_stable_offset
+  in case it's missing.
+  """
+  @spec get_stable_offset(struct()) :: :kpro.field_value()
   def get_stable_offset(header) do
     high_wm_offset = :kpro.find(:high_watermark, header)
     stable_offset = :kpro.find(:last_stable_offset, header, high_wm_offset)
     min(stable_offset, high_wm_offset)
   end
 
+  @doc """
+  Get kpro connection options from brod connection config
+  """
+  @spec kpro_connection_options(conn_config()) :: %{required(:timeout) => integer()}
   def kpro_connection_options(conn_cfg) do
     timeout =
       case conn_cfg do
@@ -846,12 +933,13 @@ defmodule BrodMimic.Utils do
     end
   end
 
-  def get_partition_rsp(struct) do
+  defp get_partition_rsp(struct) do
     [topic_rsp] = :kpro.find(:responses, struct)
     [partition_rsp] = :kpro.find(:partition_responses, topic_rsp)
     partition_rsp
   end
 
+  @spec replace_prop(term(), term(), :proplists.proplist()) :: :proplists.proplist()
   defp replace_prop(key, value, prop_l0) do
     prop_l = :proplists.delete(key, prop_l0)
     [{key, value} | prop_l]
@@ -871,34 +959,34 @@ defmodule BrodMimic.Utils do
     end
   end
 
-  @doc """
-  Raise an 'error' exception when first argument is not 'true'.
-  The second argument is used as error reason.
-  """
+  #
+  # Raise an 'error' exception when first argument is not 'true'.
+  # The second argument is used as error reason.
+  #
   @spec ok_when(boolean(), any()) :: :ok | no_return()
-  def ok_when(true, _) do
+  defp ok_when(true, _) do
     :ok
   end
 
-  def ok_when(_, reason) do
+  defp ok_when(_, reason) do
     :erlang.error(reason)
   end
 
-  def with_conn({:ok, pid}, fun) do
+  defp with_conn({:ok, pid}, fun) do
     fun.(pid)
   after
     :kpro.close_connection(pid)
   end
 
-  def with_conn({:error, reason}, _run) do
+  defp with_conn({:error, reason}, _run) do
     {:error, reason}
   end
 
-  def with_conn(endpoints, conn_cfg, fun) when is_list(conn_cfg) do
+  defp with_conn(endpoints, conn_cfg, fun) when is_list(conn_cfg) do
     with_conn(endpoints, Map.new(conn_cfg), fun)
   end
 
-  def with_conn(endpoints, conn_cfg, fun) do
+  defp with_conn(endpoints, conn_cfg, fun) do
     :kpro_brokers.with_connection(endpoints, conn_cfg, fun)
   end
 
@@ -999,18 +1087,18 @@ defmodule BrodMimic.Utils do
       )
   end
 
-  defp parse(_API, _vsn, msg) do
+  defp parse(_api, _vsn, msg) do
     msg
   end
 
-  @doc """
-  This function takes a list of kpro structs,
-  return ok if all structs have 'no_error' as error code.
-  Otherwise throw an exception with the first error.
-  """
-  def throw_error_code([]), do: :ok
+  #
+  # This function takes a list of kpro structs,
+  # return ok if all structs have 'no_error' as error code.
+  # Otherwise throw an exception with the first error.
+  #
+  defp throw_error_code([]), do: :ok
 
-  def throw_error_code([struct | structs]) do
+  defp throw_error_code([struct | structs]) do
     ec = :kpro.find(:error_code, struct)
 
     case is_error(ec) do
@@ -1131,6 +1219,6 @@ defmodule BrodMimic.Utils do
     false
   end
 
-  def nolink(c) when is_list(c), do: [{:nolink, true} | c]
-  def nolink(c) when is_map(c), do: %{nolink: true}
+  defp nolink(c) when is_list(c), do: [{:nolink, true} | c]
+  defp nolink(c) when is_map(c), do: %{nolink: true}
 end

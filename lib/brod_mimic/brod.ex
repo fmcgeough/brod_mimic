@@ -129,11 +129,17 @@ defmodule BrodMimic.Brod do
   @type received_assignments() :: [brod_received_assignment()]
   @type fetch_opts() :: :kpro.fetch_opts()
   @type fold_acc() :: term()
+  @type fold_fun() :: (message(), Acc -> {:ok, any()} | {:error, any()})
+  # `fold` always returns when reaches the high watermark offset. `fold`
+  # also returns when any of the limits is hit.
+  @type fold_limits() :: %{required(:message_count) => pos_integer(), required(:reach_offset) => offset()}
   @type fold_stop_reason() ::
           :reached_end_of_partition
           | :reached_message_count_limit
           | :reached_target_offset
           | {:error, any()}
+  # OffsetToContinue: begin offset for the next fold call
+  @type fold_result() :: {fold_acc(), offset(), fold_stop_reason()}
 
   @type get_consumer_error() ::
           :client_down
