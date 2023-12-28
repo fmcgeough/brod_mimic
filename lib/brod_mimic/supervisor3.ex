@@ -183,6 +183,10 @@ defmodule BrodMimic.Supervisor3 do
           | {:start_spec, term()}
           | {:supervisor_data, term()}
 
+  @doc """
+  When a calller calls Supervisor3.start_link a module is passed that implements the
+  `init/1` callback. See `BrodMimic.ConsumersSup` for an example.
+  """
   @callback init(args :: term()) ::
               {
                 :ok,
@@ -198,6 +202,10 @@ defmodule BrodMimic.Supervisor3 do
               | :ignore
               | :post_init
 
+  @doc """
+  A module can implement the `post_init/1` callback. This is only called if the
+  module returns `:post_init` when `init/1` is called.
+  """
   @callback post_init(args :: term()) ::
               {
                 :ok,
@@ -214,26 +222,41 @@ defmodule BrodMimic.Supervisor3 do
 
   @optional_callbacks [post_init: 1]
 
+  @doc """
+  Start the Supervisor3 process
+  """
   @spec start_link(module(), term()) :: startlink_ret()
   def start_link(mod, args) do
     GenServer.start_link(BrodMimic.Supervisor3, {:self, mod, args}, [])
   end
 
+  @doc """
+  Start the Supervisor3 process
+  """
   @spec start_link(sup_name(), module(), term()) :: startlink_ret()
   def start_link(sup_name, mod, args) do
     :gen_server.start_link(sup_name, BrodMimic.Supervisor3, {sup_name, mod, args}, [])
   end
 
+  @doc """
+  Start a child under a supervisor
+  """
   @spec start_child(sup_ref(), child_spec() | [term()]) :: startchild_ret()
   def start_child(supervisor, child_spec) do
     GenServer.call(supervisor, {:start_child, child_spec}, :infinity)
   end
 
+  @doc """
+  Restart a child
+  """
   @spec restart_child(sup_ref(), child_id()) :: {:ok, child()} | {:ok, child(), term()} | restart_child_err()
   def restart_child(supervisor, name) do
     GenServer.call(supervisor, {:restart_child, name}, :infinity)
   end
 
+  @doc """
+  Remove a child from a supervisor
+  """
   @spec delete_child(sup_ref(), child_id()) :: :ok | {:error, any()}
   def delete_child(supervisor, name) do
     GenServer.call(supervisor, {:delete_child, name}, :infinity)
@@ -248,6 +271,9 @@ defmodule BrodMimic.Supervisor3 do
     GenServer.call(supervisor, {:terminate_child, name}, :infinity)
   end
 
+  @doc """
+  Return all the child processes running under supervisor
+  """
   @spec which_children(sup_ref()) :: [{child_id() | :undefined, child() | :restarting, worker(), modules()}]
   def which_children(supervisor) do
     GenServer.call(supervisor, :which_children, :infinity)
@@ -309,10 +335,7 @@ defmodule BrodMimic.Supervisor3 do
     GenServer.call(supervisor, :state_info, :infinity)
   end
 
-  @doc """
-  Initialize the supervisor
-  """
-  @spec init({init_sup_name(), module(), [term()]}) :: {:ok, state()} | :ignore | {:stop, stop_rsn()}
+  @impl GenServer
   def init({sup_name, mod, args}) do
     Process.flag(:trap_exit, true)
 
@@ -444,6 +467,7 @@ defmodule BrodMimic.Supervisor3 do
     e -> e
   end
 
+  @impl GenServer
   def handle_call(:state_info, _from, state) do
     data = state(state)
     {:reply, data, state}
@@ -729,6 +753,7 @@ defmodule BrodMimic.Supervisor3 do
     end
   end
 
+  @impl GenServer
   def handle_cast({:try_again_restart, pid, reason}, state(children: [child]) = state)
       when state(state, :strategy) === :simple_one_for_one do
     rt = child(child, :restart_type)
@@ -758,6 +783,7 @@ defmodule BrodMimic.Supervisor3 do
     end
   end
 
+  @impl GenServer
   def handle_info({:EXIT, pid, reason}, state) do
     case restart_child(pid, reason, state) do
       {:ok, state1} ->
@@ -810,10 +836,7 @@ defmodule BrodMimic.Supervisor3 do
     {:noreply, state}
   end
 
-  @doc """
-  Terminate this server.
-  """
-  @spec terminate(term(), state()) :: :ok
+  @impl GenServer
   def terminate(_reason, state(children: [child]) = state) when state(state, :strategy) === :simple_one_for_one do
     terminate_dynamic_children(
       child,
@@ -836,7 +859,7 @@ defmodule BrodMimic.Supervisor3 do
   NOTE: This requires that the init function of the call-back module
        does not have any side effects.
   """
-  @spec code_change(term(), state(), term()) :: {:ok, state()} | {:error, term()}
+  @impl GenServer
   def code_change(_, state, _) do
     case state(state, :module).init(state(state, :args)) do
       {:ok, {sup_flags, start_spec}} ->
@@ -865,6 +888,7 @@ defmodule BrodMimic.Supervisor3 do
     e -> e
   end
 
+  @impl GenServer
   def format_status(:terminate, [_PDict, state]) do
     state
   end

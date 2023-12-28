@@ -41,6 +41,9 @@ defmodule BrodMimic.KafkaApis do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
+  @doc """
+  Stop the Kafka API process
+  """
   @spec stop() :: :ok
   def stop do
     GenServer.call(__MODULE__, :stop, :infinity)
@@ -116,9 +119,9 @@ defmodule BrodMimic.KafkaApis do
   #### Internals ================================================================
 
   @spec do_pick_version(conn(), api(), range()) :: vsn()
-  def do_pick_version(_conn, _api, {v, v}), do: v
+  defp do_pick_version(_conn, _api, {v, v}), do: v
 
-  def do_pick_version(conn, api, {min, max} = my_range) do
+  defp do_pick_version(conn, api, {min, max} = my_range) do
     case lookup_vsn_range(conn, api) do
       :none ->
         # no version received from kafka, use min
@@ -133,11 +136,11 @@ defmodule BrodMimic.KafkaApis do
     end
   end
 
-  @doc """
-  Lookup API from cache, return ':none' if not found
-  """
+  #
+  # Lookup API from cache, return ':none' if not found
+  #
   @spec lookup_vsn_range(conn(), api()) :: {vsn(), vsn()} | :none
-  def lookup_vsn_range(conn, api) do
+  defp lookup_vsn_range(conn, api) do
     case :ets.lookup(:brod_kafka_apis, conn) do
       [] ->
         case :kpro.get_api_versions(conn) do
