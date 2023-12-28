@@ -248,6 +248,7 @@ iex> BrodMimic.Brod.get_partitions_count(client_id, "my_test_topic")
 
 ## Tasks
 
+- Must fix dialyzer issues in GroupCoordinator
 - Check that all records have a corresponding type
 - Unit tests must be written
 - Need a docker-compose.yml file
