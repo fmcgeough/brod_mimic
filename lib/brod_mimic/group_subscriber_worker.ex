@@ -6,7 +6,7 @@ defmodule BrodMimic.GroupSubscriberWorker do
 
   use BrodMimic.Macros
 
-  import Record, only: [defrecordp: 3]
+  import Record, only: [defrecordp: 2]
 
   alias BrodMimic.Utils, as: BrodUtils
 
@@ -15,7 +15,7 @@ defmodule BrodMimic.GroupSubscriberWorker do
   @starting_group_subscriber "Starting group_subscriber_worker: ~p~nOffset: ~p~nPid: ~p~n"
   @discard_invalid_offset "Discarded invalid committed offset ~p for: ~s:~p~n"
 
-  defrecordp(:r_state, :state,
+  defrecordp(:state,
     start_options: :undefined,
     cb_module: :undefined,
     cb_state: :undefined,
@@ -41,7 +41,7 @@ defmodule BrodMimic.GroupSubscriberWorker do
     {:ok, cb_state} = cb_module.init(init_info, cb_config)
 
     state =
-      r_state(
+      state(
         start_options: start_opts,
         cb_module: cb_module,
         cb_state: cb_state,
@@ -54,20 +54,20 @@ defmodule BrodMimic.GroupSubscriberWorker do
 
   @impl BrodMimic.TopicSubscriber
   def handle_message(_partition, msg, state) do
-    r_state(cb_module: cb_module, cb_state: cb_state, commit_fun: commit) = state
+    state(cb_module: cb_module, cb_state: cb_state, commit_fun: commit) = state
 
     case cb_module.handle_message(msg, cb_state) do
       {:ok, :commit, new_cb_state} ->
-        new_state = r_state(state, cb_state: new_cb_state)
+        new_state = state(state, cb_state: new_cb_state)
         commit.(get_last_offset(msg))
         {:ok, :ack, new_state}
 
       {:ok, :ack, new_cb_state} ->
-        new_state = r_state(state, cb_state: new_cb_state)
+        new_state = state(state, cb_state: new_cb_state)
         {:ok, :ack, new_state}
 
       {:ok, new_cb_state} ->
-        new_state = r_state(state, cb_state: new_cb_state)
+        new_state = state(state, cb_state: new_cb_state)
         {:ok, new_state}
     end
   end
@@ -75,7 +75,7 @@ defmodule BrodMimic.GroupSubscriberWorker do
   @impl BrodMimic.TopicSubscriber
   def terminate(
         reason,
-        r_state(cb_module: cb_module, cb_state: state)
+        state(cb_module: cb_module, cb_state: state)
       ) do
     BrodUtils.optional_callback(cb_module, :terminate, [reason, state], :ok)
   end

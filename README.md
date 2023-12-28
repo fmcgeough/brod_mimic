@@ -248,8 +248,6 @@ iex> BrodMimic.Brod.get_partitions_count(client_id, "my_test_topic")
 
 ## Tasks
 
-- Lots more types need to be defined
-- Records were originally defined with `r_` as prefix. Want to remove that.
-  Types needed for all records.
+- Check that all records have a corresponding type
 - Unit tests must be written
 - Need a docker-compose.yml file
