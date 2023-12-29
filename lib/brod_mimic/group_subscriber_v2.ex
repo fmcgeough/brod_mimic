@@ -213,15 +213,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
     :ok = BrodUtils.assert_group_id(group_id)
     :ok = BrodUtils.assert_topics(topics)
 
-    {:ok, pid} =
-      BrodGroupCoordinator.start_link(
-        client,
-        group_id,
-        topics,
-        group_config,
-        __MODULE__,
-        self()
-      )
+    {:ok, pid} = BrodGroupCoordinator.start_link(client, group_id, topics, group_config, __MODULE__, self())
 
     state =
       state(
@@ -341,8 +333,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
     :ok = flush_offset_commits(group_id, coordinator)
   end
 
-  defp flush_offset_commits(group_id, coordinator)
-       when is_pid(coordinator) do
+  defp flush_offset_commits(group_id, coordinator) when is_pid(coordinator) do
     case BrodGroupCoordinator.commit_offsets(coordinator) do
       :ok ->
         :ok

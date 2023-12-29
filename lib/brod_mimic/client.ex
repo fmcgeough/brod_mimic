@@ -3,6 +3,8 @@ defmodule BrodMimic.Client do
   GenServer responsible for establishing and maintaining tcp sockets connecting to Kafka brokers.
   It also manages per-topic-partition producer and consumer processes under two-level supervision trees.
 
+  To use producers or consumers, you have to start at least one client that will manage them.
+
   You can start clients automatically at application startup or on demand.
 
   (mimics [brod_client](https://github.com/kafka4beam/brod/blob/master/src/brod_client.erl)).

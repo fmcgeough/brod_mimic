@@ -287,10 +287,7 @@ defmodule BrodMimic.Consumer do
   end
 
   @impl GenServer
-  def handle_info(
-        :init_connection,
-        state(subscriber: subscriber) = state0
-      ) do
+  def handle_info(:init_connection, state(subscriber: subscriber) = state0) do
     case BrodUtils.is_pid_alive(subscriber) and maybe_init_connection(state0) do
       false ->
         {:noreply, state0}
@@ -568,14 +565,7 @@ defmodule BrodMimic.Consumer do
     pending_acks(pending_acks, queue: new_queue, count: count + 1, bytes: bytes + size)
   end
 
-  defp maybe_shrink_max_bytes(
-         state(
-           size_stat_window: w,
-           max_bytes_orig: max_bytes_orig
-         ) = state,
-         _
-       )
-       when w < 1 do
+  defp maybe_shrink_max_bytes(state(size_stat_window: w, max_bytes_orig: max_bytes_orig) = state, _) when w < 1 do
     state(state, max_bytes: max_bytes_orig)
   end
 
@@ -585,12 +575,7 @@ defmodule BrodMimic.Consumer do
       max_bytes_orig: max_bytes_orig,
       max_bytes: max_bytes,
       avg_bytes: avg_bytes
-    ) =
-      state =
-      update_avg_size(
-        state0,
-        messages
-      )
+    ) = state = update_avg_size(state0, messages)
 
     estimated_set_size = :erlang.round(prefetch_count * avg_bytes)
     new_max_bytes = max(estimated_set_size, max_bytes_orig)
@@ -663,13 +648,7 @@ defmodule BrodMimic.Consumer do
     end
   end
 
-  defp handle_reset_offset(
-         state(
-           subscriber: subscriber,
-           offset_reset_policy: :reset_by_subscriber
-         ) = state,
-         error
-       ) do
+  defp handle_reset_offset(state(subscriber: subscriber, offset_reset_policy: :reset_by_subscriber) = state, error) do
     :ok = cast_to_subscriber(subscriber, error)
 
     Logger.info(:io_lib.format(@consumer_suspended, [:brod_consumer, self(), subscriber]), %{
@@ -679,10 +658,7 @@ defmodule BrodMimic.Consumer do
     {:noreply, state(state, is_suspended: true)}
   end
 
-  defp handle_reset_offset(
-         state(offset_reset_policy: policy) = state,
-         _error
-       ) do
+  defp handle_reset_offset(state(offset_reset_policy: policy) = state, _error) do
     Logger.info(:io_lib.format(@offset_out_of_range, [:brod_consumer, self(), policy]), %{
       domain: [:brod]
     })
@@ -703,10 +679,7 @@ defmodule BrodMimic.Consumer do
     {:noreply, new_state}
   end
 
-  defp handle_ack(
-         pending_acks(queue: queue, bytes: bytes, count: count) = pending_acks,
-         offset
-       ) do
+  defp handle_ack(pending_acks(queue: queue, bytes: bytes, count: count) = pending_acks, offset) do
     case :queue.out(queue) do
       {{:value, {o, size}}, queue1} when o <= offset ->
         handle_ack(
@@ -856,12 +829,7 @@ defmodule BrodMimic.Consumer do
   end
 
   defp resolve_begin_offset(
-         state(
-           begin_offset: begin_offset,
-           connection: connection,
-           topic: topic,
-           partition: partition
-         ) = state
+         state(begin_offset: begin_offset, connection: connection, topic: topic, partition: partition) = state
        )
        when begin_offset === :earliest or begin_offset === :latest or begin_offset === -2 or
               begin_offset === -1 do

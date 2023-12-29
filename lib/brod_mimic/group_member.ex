@@ -30,6 +30,14 @@ defmodule BrodMimic.GroupMember do
 
   alias BrodMimic.Brod
 
+  @type group_member() :: Brod.group_member()
+  @type group_member_id() :: Brod.group_member_id()
+  @type group_generation_id() :: Brod.group_generation_id()
+  @type received_assignments() :: Brod.received_assignments()
+  @type partition_assignment() :: Brod.partition_assignment()
+  @type topic_partition() :: Brod.topic_partition()
+  @type assigned_partitions() :: [{group_member_id(), [partition_assignment()]}]
+
   @doc """
   Call the callback module to initialize assignments.
 
@@ -40,8 +48,7 @@ defmodule BrodMimic.GroupMember do
   NOTE: The committed offsets should be the offsets for successfully processed
   (acknowledged) messages, not the begin-offset to start fetching from.
   """
-  @callback get_committed_offsets(pid(), [{topic(), partition()}]) ::
-              {:ok, [{{topic(), partition()}, offset()}]}
+  @callback get_committed_offsets(pid(), [{topic(), partition()}]) :: {:ok, [{topic_partition(), offset()}]}
 
   @doc """
   Called when the member is elected as the consumer group leader.
@@ -53,8 +60,7 @@ defmodule BrodMimic.GroupMember do
 
   see brod_group_coordinator:start_link/6. for more group config details.
   """
-  @callback assign_partitions(pid(), [Brod.group_member()], [{topic(), partition()}]) ::
-              [{Brod.group_member_id(), [Brod.partition_assignment()]}]
+  @callback assign_partitions(pid(), [group_member()], [topic_partition()]) :: assigned_partitions()
 
   @doc """
   Called when assignments are received from group leader.
@@ -62,12 +68,7 @@ defmodule BrodMimic.GroupMember do
   the member process should now call Brod.subscribe/5
   to start receiving message from kafka.
   """
-  @callback assignments_received(
-              pid(),
-              Brod.group_member_id(),
-              Brod.group_generation_id(),
-              Brod.received_assignments()
-            ) :: :ok
+  @callback assignments_received(pid(), group_member_id(), group_generation_id(), received_assignments()) :: :ok
 
   @doc """
   Called before group re-balancing, the member should call
