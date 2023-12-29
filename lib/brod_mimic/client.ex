@@ -410,6 +410,14 @@ defmodule BrodMimic.Client do
     GenServer.cast(client, {:deregister, key})
   end
 
+  @doc """
+  Return the state stored in the proces as a Keyword list
+  """
+  @spec state_info(client()) :: keyword()
+  def state_info(client) do
+    GenServer.call(client, :state_info, :infinity)
+  end
+
   @impl GenServer
   def init({bootstrap_endpoints, client_id, config}) do
     Process.flag(:trap_exit, true)
@@ -469,6 +477,11 @@ defmodule BrodMimic.Client do
   end
 
   @impl GenServer
+  def handle_call(:state_info, _from, state) do
+    data = state(state)
+    {:reply, data, state}
+  end
+
   def handle_call({:stop_producer, topic}, _from, state) do
     :ok = BrodProducersSup.stop_producer(state(state, :producers_sup), topic)
     {:reply, :ok, state}
