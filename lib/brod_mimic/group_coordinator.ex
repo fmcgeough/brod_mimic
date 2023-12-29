@@ -1015,7 +1015,7 @@ defmodule BrodMimic.GroupCoordinator do
 
     topic_partitions = :lists.append(topic_partitions0)
     committed_offsets = get_committed_offsets(state, topic_partitions)
-    is_consumer_managed = state(offset_commit_policy: :consumer_managed)
+    is_consumer_managed = state(state, :offset_commit_policy) == :consumer_managed
     resolve_begin_offsets(topic_partitions, committed_offsets, is_consumer_managed)
   end
 
