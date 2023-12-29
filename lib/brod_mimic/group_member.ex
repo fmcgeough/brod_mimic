@@ -41,8 +41,8 @@ defmodule BrodMimic.GroupMember do
   @doc """
   Call the callback module to initialize assignments.
 
-  NOTE: This function is called only when `offset_commit_policy` is
-  `consumer_managed` in group config. See
+  NOTE: This function is called only when `:offset_commit_policy` is
+  `:consumer_managed` in group config. See
   `BrodMimic.GroupCoordinator.start_link/6`. for more group config details.
 
   NOTE: The committed offsets should be the offsets for successfully processed
@@ -55,24 +55,23 @@ defmodule BrodMimic.GroupMember do
 
   The first element in the group member list is ensured to be the leader.
 
-  NOTE: this function is called only when 'partition_assignment_strategy' is
-  'callback_implemented' in group config.
+  NOTE: this function is called only when ':partition_assignment_strategy` is
+  ':callback_implemented` in group config.
 
-  see brod_group_coordinator:start_link/6. for more group config details.
+  See `BrodMimic.GroupCoordinator.start_link/6`. for more group config details.
   """
   @callback assign_partitions(pid(), [group_member()], [topic_partition()]) :: assigned_partitions()
 
   @doc """
   Called when assignments are received from group leader.
 
-  the member process should now call Brod.subscribe/5
-  to start receiving message from kafka.
+  The member process should now call `BrodMimic.Brod.subscribe/5` to start receiving message from Kafka.
   """
   @callback assignments_received(pid(), group_member_id(), group_generation_id(), received_assignments()) :: :ok
 
   @doc """
   Called before group re-balancing, the member should call
-  Brod.unsubscribe/3 to unsubscribe from all currently subscribed partitions.
+  `BrodMimic.Brod.unsubscribe/3` to unsubscribe from all currently subscribed partitions.
   """
   @callback assignments_revoked(pid()) :: :ok
 
