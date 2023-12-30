@@ -328,11 +328,19 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   @doc """
-  Return the state stored in the proces as a Keyword list
+  Return the state stored for Supervisor proces as a Keyword list
   """
-  @spec state_info(sup_ref) :: keyword()
-  def state_info(supervisor) do
-    GenServer.call(supervisor, :state_info, :infinity)
+  @spec supervisor_state_info(sup_ref) :: keyword()
+  def supervisor_state_info(supervisor) do
+    GenServer.call(supervisor, :supervisor_state_info, :infinity)
+  end
+
+  @doc """
+  Return the state stored for Supervisor proces as a Keyword list
+  """
+  @spec child_state_info(child_id()) :: keyword()
+  def child_state_info(child_id) do
+    GenServer.call(child_id, :child_state_info, :infinity)
   end
 
   @impl GenServer
@@ -468,8 +476,13 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   @impl GenServer
-  def handle_call(:state_info, _from, state) do
+  def handle_call(:supervisor_state_info, _from, state) do
     data = state(state)
+    {:reply, data, state}
+  end
+
+  def handle_call(:child_state_info, _from, state) do
+    data = child(state)
     {:reply, data, state}
   end
 
