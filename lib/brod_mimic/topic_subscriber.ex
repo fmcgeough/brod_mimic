@@ -42,6 +42,28 @@ defmodule BrodMimic.TopicSubscriber do
   @type cb_state() :: term()
   @type cb_ret() :: {:ok, cb_state()} | {:ok, :ack, cb_state()}
   @type cb_fun() :: (partition(), Brod.message() | Brod.message_set(), cb_state() -> cb_ret())
+  @type consumer() ::
+          record(:consumer,
+            partition: partition(),
+            consumer_pid: :undefined | pid() | {:down, String.t(), any()},
+            consumer_mref: :undefined | reference(),
+            acked_offset: :undefined | Brod.offset(),
+            last_offset: :undefined | Brod.offset()
+          )
+
+  @typedoc """
+  Type definition for the `Record` used for `BrodMimic.TopicSubscriber` GenServer state
+  """
+  @type state() ::
+          record(:state,
+            client: Brod.client(),
+            client_mref: reference(),
+            topic: topic(),
+            consumers: [consumer()],
+            cb_module: module(),
+            cb_state: cb_state(),
+            message_type: :message | :message_set
+          )
 
   @typedoc """
   Configuration for a topic subscriber

@@ -74,6 +74,9 @@ defmodule BrodMimic.GroupSubscriber do
 
   @type ack_ref() :: {topic(), partition(), offset()}
 
+  @typedoc """
+  Type definition for the `Record` used for `BrodMimic.GroupSubscriber` GenServer state
+  """
   @type state() ::
           record(
             :state,

@@ -22,6 +22,29 @@ defmodule BrodMimic.GroupSubscriberWorker do
     commit_fun: :undefined
   )
 
+  @type start_options() ::
+          %{
+            group_id: Brod.group_id(),
+            topic: topic(),
+            partition: partition(),
+            begin_offset: offset() | :undefined,
+            cb_module: module(),
+            cb_config: term(),
+            commit_fun: BrodMimic.GroupSubscriberv2.commit_fun()
+          }
+
+  @typedoc """
+  Type definition for the `Record` used by `BrodMimic.GroupSubscriberWorker` for it's
+  `BrodMimic.TopicSubscriber` implementation
+  """
+  @type state() ::
+          record(:state,
+            start_options: start_options(),
+            cb_module: module(),
+            cb_state: term(),
+            commit_fun: BrodMimic.GroupSubscriberv2.commit_fun()
+          )
+
   @impl BrodMimic.TopicSubscriber
   def init(topic, start_opts) do
     %{

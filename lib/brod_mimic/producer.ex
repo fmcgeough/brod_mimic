@@ -75,6 +75,9 @@ defmodule BrodMimic.Producer do
   @type conn() :: :kpro.connection()
   @type produce_request_error() :: :timeout | {:producer_down, any()}
 
+  @typedoc """
+  Type definition for the `Record` used for `BrodMimic.Producer` GenServer state
+  """
   @type state() ::
           record(:state,
             client_pid: pid(),

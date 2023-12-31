@@ -60,11 +60,28 @@ defmodule BrodMimic.GroupSubscriberv2 do
         }
 
   @type cb_config() :: term()
-  @type state() :: term()
   @type member_id() :: Brod.group_member_id()
   @type reason() :: term()
   @type worker() :: pid()
   @type workers() :: %{Brod.topic_partition() => worker()}
+  @type committed_offsets() :: %{Brod.topic_partition() => {offset(), boolean()}}
+
+  @typedoc """
+  Type definition for the `Record` used for `BrodMimic.GroupSubscriberv2` GenServer state
+  """
+  @type state() ::
+          record(:state,
+            config: subscriber_config(),
+            message_type: :message | :message_set,
+            group_id: Brod.group_id(),
+            coordinator: :undefined | pid(),
+            generation_id: :undefined | integer(),
+            workers: workers(),
+            committed_offsets: committed_offsets(),
+            cb_module: module(),
+            cb_config: term(),
+            client: Brod.client()
+          )
 
   # Callbacks
   @doc """
