@@ -207,7 +207,7 @@ the code the macro expands to was just put in place in the Elixir version.
 - bringing up observer after starting simple `iex` session shows same processes started as
   the brod library. When the library is loaded `BrodMimic.Brod.start/2` is called (this is what
   is defined in the mix.exs file). This, in turn, calls `BrodMimic.Sup.start_link/0`. That module
-  starts the `BrodMimic.KafkaApis` in it's init callback.
+  starts the `BrodMimic.KafkaApis` in it's init callback as it's supervised child process.
   ![Startup](./doc/images/brod_mimic_startup.png)
 - Starting client (as `:brod_mimic`) starts under `BrodMimic.Sup`. The client
   process starts a consumer supervisor, producer supervisor and a metadata
