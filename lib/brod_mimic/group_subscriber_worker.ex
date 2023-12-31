@@ -24,7 +24,7 @@ defmodule BrodMimic.GroupSubscriberWorker do
 
   @type start_options() ::
           %{
-            group_id: Brod.group_id(),
+            group_id: group_id(),
             topic: topic(),
             partition: partition(),
             begin_offset: offset() | :undefined,
