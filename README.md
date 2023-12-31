@@ -209,6 +209,9 @@ the code the macro expands to was just put in place in the Elixir version.
   is defined in the mix.exs file). This, in turn, calls `BrodMimic.Sup.start_link/0`. That module
   starts the `BrodMimic.KafkaApis` in it's init callback.
   ![Startup](./doc/images/brod_mimic_startup.png)
+- Starting client starts under `BrodMimic.Sup`. The client process starts a consumer and producer
+  supervisor and a metadata connection.
+  ~[After Client Start](./doc/images/brod_mimic_after_client_start.png)
 - simple publishing appears to work okay
 - No plans (as of now) to convert the files: `brod_cli.erl`, `brod_cli_pipe.erl`. These are utility
   command line tools. Personally, I've never used them so I didn't think it was worth including

@@ -52,15 +52,18 @@ defmodule BrodMimic.Sup do
   """
   @spec start_link() :: {:ok, pid()}
   def start_link do
-    Supervisor3.start_link({:local, :brod_sup}, BrodMimic.Sup, :clients_sup)
+    Supervisor3.start_link({:local, BrodMimic.Sup}, BrodMimic.Sup, :clients_sup)
   end
 
+  @doc """
+  Used to start a client as a process that is a child of . See `BrodMimic.Brod.start_client/3`
+  """
   @spec start_client([Brod.endpoint()], Brod.client_id(), Brod.client_config()) ::
           :ok | {:error, any()}
   def start_client(endpoints, client_id, config) do
     client_spec = client_spec(endpoints, client_id, config)
 
-    case Supervisor3.start_child(:brod_sup, client_spec) do
+    case Supervisor3.start_child(BrodMimic.Sup, client_spec) do
       {:ok, _pid} ->
         :ok
 
