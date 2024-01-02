@@ -105,9 +105,9 @@ this case). Then we use `Enum.zip/2` to combine the keys with the values and `Ma
 of the result.
 
 ```
-iex> [_h|t] = Tuple.to_list(client_state)
+iex> client_state_data = Tuple.to_list(client_state) |> Enum.drop(1)
 iex> client_state_keys = [:client_id, :bootstrap_endpoints, :meta_conn, :payload_conns, :producers_sup, :consumers_sup, :config, :workers_tab]
-iex> client_state_map = Enum.zip(client_state_keys, t) |> Map.new()
+iex> client_state_map = client_state_keys |> Enum.zip(client_state_data) |> Map.new()
 %{
   client_id: :brod_mimic,
   bootstrap_endpoints: [{"localhost", 9092}],
@@ -124,8 +124,14 @@ iex> client_state_map = Enum.zip(client_state_keys, t) |> Map.new()
 }
 ```
 
-Now we have a Map with keys and it's much easier to see what's going on. Unfortunately, we're hard-coding the keys in the
-Erlang record. However, this is worth doing if you want to examine `brod` internals.
+Now we have a Map with keys and it's much easier to see what's going on.
+Unfortunately, we're hard-coding the keys in the Erlang record. However, this is
+worth doing if you want to examine `brod` internals. We could just put it
+altogether in a pipeline now that you see what's going on:
+
+```
+iex> client_id |> Process.whereis() |> :sys.get_state() |> Tuple.to_list() |> Enum.drop(1) |> then(&Enum.zip(client_state_keys, &1))
+```
 
 The `consumers_sup` and `producers_sup` are Supervisor type processes started with `BrodMimic.Supervisor3`. So
 we can do something similar with those to print out useful information. Once we have a consumer pid we can do the
@@ -133,17 +139,17 @@ same with it. Note that with Supervisor3 there are two types of states you have 
 contains a supervisor state. This state has a children key. The value stored is a list of child records.
 
 ```
+# Define the keys we'll use for different states
 iex> supervisor_keys =  [:name, :strategy, :children, :dynamics, :intensity, :period, :restarts, :module, :args]
 iex> supervisor_child_keys = [:pid, :name, :mfargs, :restart_type, :shutdown, :child_type, :modules]
-iex> consumer_sup_state = :sys.get_state(client_state_map.consumers_sup)
 iex> consumer_keys = [:bootstrap, :connection, :topic, :partition, :begin_offset, :max_wait_time, :min_bytes,
-    :max_bytes_orig, :sleep_timeout, :prefetch_count, :last_req_ref, :subscriber, :subscriber_mref, :pending_acks, :is_suspended,
-    :offset_reset_policy, :avg_bytes, :max_bytes, :size_stat_window, :prefetch_bytes, :connection_mref, :isolation_level]
-iex> [_h|t] = :sys.get_state(client_state_map.consumers_sup) |> Tuple.to_list()
-iex> supervisor_state = Enum.zip(supervisor_keys, t) |> Map.new()
+    :max_bytes_orig, :sleep_timeout, :prefetch_count, :last_req_ref, :subscriber, :subscriber_mref, :pending_acks,
+    :is_suspended,  :offset_reset_policy, :avg_bytes, :max_bytes, :size_stat_window, :prefetch_bytes,
+    :connection_mref, :isolation_level]
+# Get the state for the consumers supervisor
+iex> consumer_sup_state = client_state_map.consumers_sup |> :sys.get_state() |> Tuple.to_list() |> Enum.drop(1) |> then(&Enum.zip(supervisor_keys, &1)) |> Map.new()
 iex> children_states = Enum.map(supervisor_state.children, fn child ->
-  [_h|t] = Tuple.to_list(child)
-  Enum.zip(supervisor_child_keys, t) |> Map.new()
+  data = child |> Tuple.to_list() |> Enum.drop(1) |> then(&Enum.zip(supervisor_child_keys, &1)) |> Map.new()
 end)
 ```
 
