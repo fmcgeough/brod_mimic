@@ -107,7 +107,7 @@ of the result.
 ```
 iex> [_h|t] = Tuple.to_list(client_state)
 iex> client_state_keys = [:client_id, :bootstrap_endpoints, :meta_conn, :payload_conns, :producers_sup, :consumers_sup, :config, :workers_tab]
-iex> Enum.zip(client_state_keys, t) |> Map.new()
+iex> client_state_map = Enum.zip(client_state_keys, t) |> Map.new()
 %{
   client_id: :brod_mimic,
   bootstrap_endpoints: [{"localhost", 9092}],
@@ -126,3 +126,26 @@ iex> Enum.zip(client_state_keys, t) |> Map.new()
 
 Now we have a Map with keys and it's much easier to see what's going on. Unfortunately, we're hard-coding the keys in the
 Erlang record. However, this is worth doing if you want to examine `brod` internals.
+
+The `consumers_sup` and `producers_sup` are Supervisor type processes started with `BrodMimic.Supervisor3`. So
+we can do something similar with those to print out useful information. Once we have a consumer pid we can do the
+same with it. Note that with Supervisor3 there are two types of states you have to deal with. The top-level process
+contains a supervisor state. This state has a children key. The value stored is a list of child records.
+
+```
+iex> supervisor_keys =  [:name, :strategy, :children, :dynamics, :intensity, :period, :restarts, :module, :args]
+iex> supervisor_child_keys = [:pid, :name, :mfargs, :restart_type, :shutdown, :child_type, :modules]
+iex> consumer_sup_state = :sys.get_state(client_state_map.consumers_sup)
+iex> consumer_keys = [:bootstrap, :connection, :topic, :partition, :begin_offset, :max_wait_time, :min_bytes,
+    :max_bytes_orig, :sleep_timeout, :prefetch_count, :last_req_ref, :subscriber, :subscriber_mref, :pending_acks, :is_suspended,
+    :offset_reset_policy, :avg_bytes, :max_bytes, :size_stat_window, :prefetch_bytes, :connection_mref, :isolation_level]
+iex> [_h|t] = :sys.get_state(client_state_map.consumers_sup) |> Tuple.to_list()
+iex> supervisor_state = Enum.zip(supervisor_keys, t) |> Map.new()
+iex> children_states = Enum.map(supervisor_state.children, fn child ->
+  [_h|t] = Tuple.to_list(child)
+  Enum.zip(supervisor_child_keys, t) |> Map.new()
+end)
+```
+
+It's a lot of work to follow the chain of these processes and get insights into what is going on. However,
+it is possible. And it's most likely worth creating a library that makes this easier.
