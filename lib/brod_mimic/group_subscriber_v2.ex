@@ -218,6 +218,14 @@ defmodule BrodMimic.GroupSubscriberv2 do
     GenServer.call(pid, call, :infinity)
   end
 
+  @doc """
+  Return the state stored in the proces as a Keyword list
+  """
+  @spec state_info(pid()) :: keyword()
+  def state_info(pid) do
+    GenServer.call(pid, :state_info, :infinity)
+  end
+
   @impl GenServer
   def init(config) do
     %{client: client, group_id: group_id, topics: topics, cb_module: cb_module} = config
@@ -247,6 +255,11 @@ defmodule BrodMimic.GroupSubscriberv2 do
   end
 
   @impl GenServer
+  def handle_call(:state_info, _from, state) do
+    data = state(state)
+    {:reply, data, state}
+  end
+
   def handle_call(
         {:get_committed_offsets, topic_partitions},
         _from,

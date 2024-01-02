@@ -248,6 +248,14 @@ defmodule BrodMimic.GroupCoordinator do
     end
   end
 
+  @doc """
+  Return the state stored in the proces as a Keyword list
+  """
+  @spec state_info(pid()) :: keyword()
+  def state_info(pid) do
+    GenServer.call(pid, :state_info, :infinity)
+  end
+
   @impl GenServer
   def init({client, group_id, topics, config, cb_module, member_pid}) do
     Process.flag(:trap_exit, true)
@@ -394,6 +402,11 @@ defmodule BrodMimic.GroupCoordinator do
   end
 
   @impl GenServer
+  def handle_call(:state_info, _from, state) do
+    data = state(state)
+    {:reply, data, state}
+  end
+
   def handle_call(
         {:commit_offsets, extra_offsets},
         from,
@@ -450,10 +463,7 @@ defmodule BrodMimic.GroupCoordinator do
   defp discover_coordinator(state(client: client, connection: connection0, group_id: group_id) = state) do
     {endpoint, conn_config0} =
       (fn ->
-         case BrodClient.get_group_coordinator(
-                client,
-                group_id
-              ) do
+         case BrodClient.get_group_coordinator(client, group_id) do
            {:ok, result} ->
              result
 
