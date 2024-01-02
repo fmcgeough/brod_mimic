@@ -148,7 +148,8 @@ iex> consumer_keys = [:bootstrap, :connection, :topic, :partition, :begin_offset
     :connection_mref, :isolation_level]
 # Get the state for the consumers supervisor
 iex> consumer_sup_state = client_state_map.consumers_sup |> :sys.get_state() |> Tuple.to_list() |> Enum.drop(1) |> then(&Enum.zip(supervisor_keys, &1)) |> Map.new()
-iex> children_states = Enum.map(supervisor_state.children, fn child ->
+# If the consumers supervisor has children then convert each child to a Map
+iex> children_states = Enum.map(consumer_sup_state.children, fn child ->
   data = child |> Tuple.to_list() |> Enum.drop(1) |> then(&Enum.zip(supervisor_child_keys, &1)) |> Map.new()
 end)
 ```
