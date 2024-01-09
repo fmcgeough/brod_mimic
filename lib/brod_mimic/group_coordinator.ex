@@ -876,41 +876,41 @@ defmodule BrodMimic.GroupCoordinator do
     end)
   end
 
-  defp assign_partitions(state) do
+  defp assign_partitions(state(member_id: member_id, leader_id: leader_id) = state) when member_id == leader_id do
+    all_topics = all_topics(state(state, :members))
+
+    all_partitions =
+      for topic <- all_topics, partition <- get_partitions(state(state, :client), topic) do
+        {topic, partition}
+      end
+
+    assignments =
+      case state(state, :partition_assignment_strategy) == :callback_implemented do
+        true ->
+          member_module = state(state, :member_module)
+          member_module.assign_partitions(state(state, :member_pid), state(state, :members), all_partitions)
+
+        false ->
+          do_assign_partitions(state(state, :partition_assignment_strategy), state(state, :members), all_partitions)
+      end
+
+    :lists.map(
+      fn {member_id, topics_} ->
+        partition_assignments =
+          :lists.map(fn {topic, partitions} -> [{:topic, topic}, {:partitions, partitions}] end, topics_)
+
+        [
+          {:member_id, member_id},
+          {:assignment, [{:version, 0}, {:topic_partitions, partition_assignments}, {:user_data, <<>>}]}
+        ]
+      end,
+      assignments
+    )
+  end
+
+  defp assign_partitions(_state) do
     # only leader can assign partitions to members
-    if state(state, :member_id) == state(state, :leader_id) do
-      []
-    else
-      all_topics = all_topics(state(state, :members))
-
-      all_partitions =
-        for topic <- all_topics, partition <- get_partitions(state(state, :client), topic) do
-          {topic, partition}
-        end
-
-      assignments =
-        case state(state, :partition_assignment_strategy) == :callback_implemented do
-          true ->
-            member_module = state(state, :member_module)
-            member_module.assign_partitions(state(state, :member_pid), state(state, :members), all_partitions)
-
-          false ->
-            do_assign_partitions(state(state, :partition_assignment_strategy), state(state, :members), all_partitions)
-        end
-
-      :lists.map(
-        fn {member_id, topics_} ->
-          partition_assignments =
-            :lists.map(fn {topic, partitions} -> [{:topic, topic}, {:partitions, partitions}] end, topics_)
-
-          [
-            {:member_id, member_id},
-            {:assignment, [{:version, 0}, {:topic_partitions, partition_assignments}, {:user_data, <<>>}]}
-          ]
-        end,
-        assignments
-      )
-    end
+    []
   end
 
   defp ensure_leader_at_hd(leader_id, members) do
