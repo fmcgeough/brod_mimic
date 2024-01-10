@@ -16,6 +16,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
 
   alias BrodMimic.Brod
   alias BrodMimic.GroupCoordinator, as: BrodGroupCoordinator
+  alias BrodMimic.GroupSubscriberWorker, as: BrodGroupSubscriberWorker
   alias BrodMimic.TopicSubscriber, as: BrodTopicSubscriber
   alias BrodMimic.Utils, as: BrodUtils
 
@@ -390,7 +391,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
   end
 
   defp terminate_all_workers(workers) do
-    Enum.each(workers, fn worker ->
+    Enum.each(workers, fn {_k, worker} ->
       Logger.info(:io_lib.format(@terminating_worker, [worker]), %{domain: [:brod]})
       terminate_worker(worker)
     end)
@@ -399,9 +400,9 @@ defmodule BrodMimic.GroupSubscriberv2 do
   end
 
   defp terminate_worker(worker_pid) do
-    case :erlang.is_process_alive(worker_pid) do
+    case Process.alive?(worker_pid) do
       true ->
-        :erlang.unlink(worker_pid)
+        Process.unlink(worker_pid)
         BrodTopicSubscriber.stop(worker_pid)
 
       false ->
@@ -461,6 +462,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
     }
 
     {:ok, pid} = BrodTopicSubscriber.start_link(args)
+
     {:ok, pid}
   end
 

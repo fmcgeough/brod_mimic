@@ -243,7 +243,7 @@ defmodule BrodMimic.TopicSubscriber do
   """
   @spec start_link(topic_subscriber_config()) :: {:ok, pid()} | {:error, any()}
   def start_link(config) do
-    GenServer.start_link(BrodMimic.TopicSubscriber, config, [])
+    GenServer.start_link(__MODULE__, config, [])
   end
 
   @doc """
@@ -291,7 +291,7 @@ defmodule BrodMimic.TopicSubscriber do
 
     :ok = BrodUtils.assert_client(client)
     :ok = BrodUtils.assert_topic(topic)
-    send(self(), {:"$start_consumer", consumer_config, committed_offsets, partitions})
+    send(self(), {:start_consumer, consumer_config, committed_offsets, partitions})
 
     state =
       state(
@@ -313,7 +313,7 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   def handle_info(
-        {:"$start_consumer", consumer_config, committed_offsets, partitions0},
+        {:start_consumer, consumer_config, committed_offsets, partitions0},
         state(client: client, topic: topic) = state
       ) do
     :ok = Brod.start_consumer(client, topic, consumer_config)
@@ -354,13 +354,13 @@ defmodule BrodMimic.TopicSubscriber do
       end)
 
     new_state = state(state, consumers: consumers)
-    _ = send_lo_cmd(:"$subscribe_partitions")
+    _ = send_lo_cmd(:subscribe_partitions)
     {:noreply, new_state}
   end
 
-  def handle_info(:"$subscribe_partitions", state) do
+  def handle_info(:subscribe_partitions, state) do
     {:ok, state() = new_state} = subscribe_partitions(state)
-    _ = send_lo_cmd(:"$subscribe_partitions", 2000)
+    _ = send_lo_cmd(:subscribe_partitions, 2000)
     {:noreply, new_state}
   end
 

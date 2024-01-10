@@ -713,8 +713,7 @@ defmodule BrodMimic.Client do
   def find_consumer(client, topic, partition) do
     case safe_gen_call(client, :get_consumers_sup_pid, :infinity) do
       {:ok, sup_pid} ->
-        # MODIFY brod_consumers_sup:find_consumer(sup_id, topic, partition)
-        {sup_pid, topic, partition}
+        BrodConsumersSup.find_consumer(sup_pid, topic, partition)
 
       {:error, reason} ->
         {:error, reason}

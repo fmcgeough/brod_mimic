@@ -323,10 +323,7 @@ defmodule BrodMimic.GroupCoordinator do
     {:noreply, new_state}
   end
 
-  def handle_info(
-        {:lo_cmd_stabilize, attempt_count, _reason},
-        state(max_rejoin_attempts: max) = state
-      )
+  def handle_info({:lo_cmd_stabilize, attempt_count, _reason}, state(max_rejoin_attempts: max) = state)
       when attempt_count >= max do
     {:stop, :max_rejoin_attempts, state}
   end
@@ -477,8 +474,12 @@ defmodule BrodMimic.GroupCoordinator do
         {:ok, state}
 
       false ->
-        is_pid(connection0) and :kpro.close_connection(connection0)
+        if is_pid(connection0) do
+          :kpro.close_connection(connection0)
+        end
+
         client_id = make_group_connection_client_id()
+
         conn_config = Map.put(conn_config0, :client_id, client_id)
 
         connection =
