@@ -38,6 +38,29 @@ This product includes software developed by
 Klarna Bank AB (publ) (https://www.klarna.com)
 ```
 
+## Current State
+
+**Working on Getting Consumer to work** - I have messed up something in the port where trying to start
+`GroupSubscriberv2` isn't functional at the moment. When I get time I'll dig in and find what's wrong.
+
+- no credo issues (`mix credo --strict` reports no problems)
+- no dialyzer issues (`mix dialyzer` reports no problems)
+- code compiles with no warnings/errors
+- simple `iex` session can start a client
+- bringing up observer after starting simple `iex` session shows same processes started as
+  the brod library. When the library is loaded `BrodMimic.Brod.start/2` is called (this is what
+  is defined in the mix.exs file). This, in turn, calls `BrodMimic.Sup.start_link/0`. That module
+  starts the `BrodMimic.KafkaApis` in it's init callback as it's supervised child process.
+  ![Startup](./doc/images/brod_mimic_startup.png)
+- Starting client (as `:brod_mimic`) starts under `BrodMimic.Sup`. The client
+  process starts a consumer supervisor, producer supervisor and a metadata
+  connection. ![After Client
+Start](./doc/images/brod_mimic_after_client_start.png)
+- simple publishing appears to work okay
+- No plans (as of now) to convert the files: `brod_cli.erl`, `brod_cli_pipe.erl`. These are utility
+  command line tools. Personally, I've never used them so I didn't think it was worth including
+  that work.
+
 ## Porting Notes
 
 ### General
@@ -197,26 +220,6 @@ ported over to Elixir.
 The `brod` code makes significant use of Erlang macros. The module `BrodMimic.Macros`
 was created to emulate the Erlang macros. In some cases the macro was discarded and
 the code the macro expands to was just put in place in the Elixir version.
-
-## Current State
-
-- no credo issues (`mix credo --strict` reports no problems)
-- no dialyzer issues (`mix dialyzer` reports no problems)
-- code compiles with no warnings/errors
-- simple `iex` session can start a client
-- bringing up observer after starting simple `iex` session shows same processes started as
-  the brod library. When the library is loaded `BrodMimic.Brod.start/2` is called (this is what
-  is defined in the mix.exs file). This, in turn, calls `BrodMimic.Sup.start_link/0`. That module
-  starts the `BrodMimic.KafkaApis` in it's init callback as it's supervised child process.
-  ![Startup](./doc/images/brod_mimic_startup.png)
-- Starting client (as `:brod_mimic`) starts under `BrodMimic.Sup`. The client
-  process starts a consumer supervisor, producer supervisor and a metadata
-  connection. ![After Client
-Start](./doc/images/brod_mimic_after_client_start.png)
-- simple publishing appears to work okay
-- No plans (as of now) to convert the files: `brod_cli.erl`, `brod_cli_pipe.erl`. These are utility
-  command line tools. Personally, I've never used them so I didn't think it was worth including
-  that work.
 
 ## Sample Session
 
