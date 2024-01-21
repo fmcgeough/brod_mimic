@@ -320,8 +320,10 @@ defmodule BrodMimic.Client do
   """
   @spec get_partitions_count(client(), topic()) :: {:ok, pos_integer()} | {:error, any()}
   def get_partitions_count(client, topic) do
-    # the name of the ets table that stores this data
-    # is the same as the atom client id
+    # The name of the ets table that stores this data is the same as the atom client id
+    #
+    # Set default allow_topic_auto_creation to true does not imply the topic is always
+    # auto-created. Kafka can have auto-creation disabled, in which case this option has no effect.
     get_partitions_count(client, topic, %{allow_topic_auto_creation: true})
   end
 
@@ -334,7 +336,9 @@ defmodule BrodMimic.Client do
   end
 
   def get_partitions_count(client, topic, opts) when is_pid(client) do
-    case safe_gen_call(client, :get_workers_table, :infinity) do
+    workers_table_result = safe_gen_call(client, :get_workers_table, :infinity)
+
+    case workers_table_result do
       {:ok, ets} ->
         do_get_partitions_count(client, ets, topic, opts)
 
@@ -426,13 +430,15 @@ defmodule BrodMimic.Client do
 
     send(self(), :init)
 
-    {:ok,
-     state(
-       client_id: client_id,
-       bootstrap_endpoints: bootstrap_endpoints,
-       config: config,
-       workers_tab: tab
-     )}
+    state =
+      state(
+        client_id: client_id,
+        bootstrap_endpoints: bootstrap_endpoints,
+        config: config,
+        workers_tab: tab
+      )
+
+    {:ok, state}
   end
 
   @impl GenServer
@@ -532,7 +538,8 @@ defmodule BrodMimic.Client do
   end
 
   def handle_call(:get_workers_table, _from, state) do
-    {:reply, {:ok, state(state, :workers_tab)}, state}
+    workers_table = state(state, :workers_tab)
+    {:reply, {:ok, workers_table}, state}
   end
 
   def handle_call(:get_producers_sup_pid, _from, state) do
@@ -722,7 +729,9 @@ defmodule BrodMimic.Client do
 
   @spec validate_topic_existence(topic(), state(), boolean()) :: {:ok | {:error, any()}, state()}
   defp validate_topic_existence(topic, state(workers_tab: ets) = state, is_retry) do
-    case lookup_partitions_count_cache(ets, topic) do
+    partitions_count_cache = lookup_partitions_count_cache(ets, topic)
+
+    case partitions_count_cache do
       {:ok, _count} ->
         {:ok, state}
 
@@ -868,8 +877,8 @@ defmodule BrodMimic.Client do
   # --------------------------------------------------------------------------------
   @spec safe_gen_call(pid() | atom(), call :: term(), timeout :: :infinity | integer()) ::
           :ok | {:ok, term()} | {:error, :client_down | term()}
-  defp safe_gen_call(server, call, timeout) do
-    GenServer.call(server, call, timeout)
+  defp safe_gen_call(server, message, timeout) do
+    GenServer.call(server, message, timeout)
   catch
     :exit, {:noproc, _} ->
       {:error, :client_down}
@@ -900,7 +909,9 @@ defmodule BrodMimic.Client do
           required(:allow_topic_auto_creation) => boolean()
         }) :: {:ok, pos_integer()} | {:error, any()}
   defp do_get_partitions_count(client, ets, topic, %{allow_topic_auto_creation: allow_auto_creation}) do
-    case lookup_partitions_count_cache(ets, topic) do
+    lookup_result = lookup_partitions_count_cache(ets, topic)
+
+    case lookup_result do
       {:ok, result} ->
         {:ok, result}
 
@@ -1033,7 +1044,9 @@ defmodule BrodMimic.Client do
 
   defp ensure_partition_workers(topic_name, state, f) do
     with_ok(validate_topic_existence(topic_name, state, _is_retry = false), fn :ok, new_state ->
-      case f.() do
+      partition_workers_func_result = f.()
+
+      case partition_workers_func_result do
         {:ok, _pid} ->
           {:ok, new_state}
 

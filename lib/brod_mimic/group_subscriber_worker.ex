@@ -15,12 +15,7 @@ defmodule BrodMimic.GroupSubscriberWorker do
   @starting_group_subscriber "Starting group_subscriber_worker: ~p~nOffset: ~p~nPid: ~p~n"
   @discard_invalid_offset "Discarded invalid committed offset ~p for: ~s:~p~n"
 
-  defrecordp(:state,
-    start_options: :undefined,
-    cb_module: :undefined,
-    cb_state: :undefined,
-    commit_fun: :undefined
-  )
+  defrecordp(:state, start_options: :undefined, cb_module: :undefined, cb_state: :undefined, commit_fun: :undefined)
 
   @type start_options() ::
           %{
@@ -63,13 +58,7 @@ defmodule BrodMimic.GroupSubscriberWorker do
 
     {:ok, cb_state} = cb_module.init(init_info, cb_config)
 
-    state =
-      state(
-        start_options: start_opts,
-        cb_module: cb_module,
-        cb_state: cb_state,
-        commit_fun: commit_fun
-      )
+    state = state(start_options: start_opts, cb_module: cb_module, cb_state: cb_state, commit_fun: commit_fun)
 
     committed_offsets = resolve_committed_offsets(topic, partition, begin_offset)
     {:ok, committed_offsets, state}

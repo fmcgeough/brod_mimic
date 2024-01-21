@@ -40,8 +40,7 @@ Klarna Bank AB (publ) (https://www.klarna.com)
 
 ## Current State
 
-**Working on Getting Consumer to work** - I have messed up something in the port where trying to start
-`GroupSubscriberv2` isn't functional at the moment. When I get time I'll dig in and find what's wrong.
+- Fixed issue in ConsumerSup that resulted in deadlock and consumer not starting.
 
 - no credo issues (`mix credo --strict` reports no problems)
 - no dialyzer issues (`mix dialyzer` reports no problems)

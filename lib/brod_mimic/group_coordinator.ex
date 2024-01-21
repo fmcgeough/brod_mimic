@@ -191,6 +191,7 @@ defmodule BrodMimic.GroupCoordinator do
 
   """
   def start_link(client, group_id, topics, config, cb_module, member_pid) do
+    Logger.info("Starting GroupCoordinator")
     args = {client, group_id, topics, config, cb_module, member_pid}
     GenServer.start_link(BrodMimic.GroupCoordinator, args, [])
   end
@@ -258,6 +259,7 @@ defmodule BrodMimic.GroupCoordinator do
 
   @impl GenServer
   def init({client, group_id, topics, config, cb_module, member_pid}) do
+    Logger.info("In init/1 for #{__MODULE__}")
     Process.flag(:trap_exit, true)
 
     get_cfg = fn name, default ->
@@ -469,7 +471,9 @@ defmodule BrodMimic.GroupCoordinator do
          end
        end).()
 
-    case is_already_connected(state, endpoint) do
+    already_connected = is_already_connected(state, endpoint)
+
+    case already_connected do
       true ->
         {:ok, state}
 

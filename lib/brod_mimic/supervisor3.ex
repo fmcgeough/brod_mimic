@@ -81,6 +81,8 @@ defmodule BrodMimic.Supervisor3 do
 
   import Record, only: [defrecordp: 2]
 
+  require Logger
+
   defrecordp(:child,
     pid: :undefined,
     name: :undefined,
@@ -347,7 +349,9 @@ defmodule BrodMimic.Supervisor3 do
   def init({sup_name, mod, args}) do
     Process.flag(:trap_exit, true)
 
-    case mod.init(args) do
+    init_result = mod.init(args)
+
+    case init_result do
       {:ok, {sup_flags, start_spec}} ->
         do_init(sup_name, sup_flags, start_spec, mod, args)
 
@@ -486,8 +490,7 @@ defmodule BrodMimic.Supervisor3 do
     {:reply, data, state}
   end
 
-  def handle_call({:start_child, e_args}, _from, state)
-      when state(state, :strategy) === :simple_one_for_one do
+  def handle_call({:start_child, e_args}, _from, state) when state(state, :strategy) == :simple_one_for_one do
     child = hd(state(state, :children))
     child(mfargs: {m, f, a}) = child
     args = a ++ e_args
@@ -507,6 +510,17 @@ defmodule BrodMimic.Supervisor3 do
 
       what ->
         {:reply, what, state}
+    end
+  end
+
+  def handle_call({:start_child, child_spec}, _from, state) do
+    case check_childspec(child_spec) do
+      {:ok, child} ->
+        {resp, n_state} = handle_start_child(child, state)
+        {:reply, resp, n_state}
+
+      what ->
+        {:reply, {:error, what}, state}
     end
   end
 
@@ -537,17 +551,6 @@ defmodule BrodMimic.Supervisor3 do
   def handle_call({_req, _data}, _from, state)
       when state(state, :strategy) === :simple_one_for_one do
     {:reply, {:error, :simple_one_for_one}, state}
-  end
-
-  def handle_call({:start_child, child_spec}, _from, state) do
-    case check_childspec(child_spec) do
-      {:ok, child} ->
-        {resp, n_state} = handle_start_child(child, state)
-        {:reply, resp, n_state}
-
-      what ->
-        {:reply, {:error, what}, state}
-    end
   end
 
   def handle_call({:restart_child, name}, _from, state) do
@@ -978,7 +981,9 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   defp handle_start_child(child, state) do
-    case get_child(child(child, :name), state) do
+    child_from_state = child(child, :name)
+
+    case get_child(child_from_state, state) do
       false ->
         case do_start_child(state(state, :name), child) do
           {:ok, :undefined}
@@ -1684,8 +1689,7 @@ defmodule BrodMimic.Supervisor3 do
     state(state, children: chs)
   end
 
-  defp do_replace_child(child, [ch | chs])
-       when child(ch, :name) === child(child, :name) do
+  defp do_replace_child(child, [ch | chs]) when child(ch, :name) == child(child, :name) do
     [child | chs]
   end
 
@@ -1700,7 +1704,7 @@ defmodule BrodMimic.Supervisor3 do
 
   defp do_init(sup_name, type, start_spec, mod, args) do
     case do_init_state(sup_name, type, mod, args) do
-      {:ok, state} when state(state, :strategy) === :simple_one_for_one ->
+      {:ok, state} when state(state, :strategy) == :simple_one_for_one ->
         init_dynamic(state, start_spec)
 
       {:ok, state} ->
