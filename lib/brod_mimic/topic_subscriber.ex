@@ -370,16 +370,20 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   def handle_info(:subscribe_partitions, state) do
+    Logger.info("#{__MODULE__}.handle_info/2. :subscribe_partitions message")
     {:ok, state() = new_state} = subscribe_partitions(state)
     _ = send_lo_cmd(:subscribe_partitions, 2000)
     {:noreply, new_state}
   end
 
-  def handle_info({:DOWN, mref, :process, _pid, _reason}, state(client_mref: mref) = state) do
+  def handle_info({:DOWN, mref, :process, pid, _reason}, state(client_mref: mref) = state) do
+    Logger.warning("#{__MODULE__}.handle_info/2. Client process #{inspect(pid)} down.")
     {:stop, :client_down, state}
   end
 
   def handle_info({:DOWN, _mref, :process, pid, reason}, state(consumers: consumers) = state) do
+    Logger.warning("#{__MODULE__}.handle_info/2. Consumer process #{inspect(pid)} down.")
+
     case get_consumer(pid, consumers) do
       consumer() = c ->
         consumer =
@@ -456,13 +460,7 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   defp subscribe_partitions(state(client: client, topic: topic, consumers: consumers0) = state) do
-    consumers =
-      :lists.map(
-        fn c ->
-          subscribe_partition(client, topic, c)
-        end,
-        consumers0
-      )
+    consumers = :lists.map(fn c -> subscribe_partition(client, topic, c) end, consumers0)
 
     {:ok, state(state, consumers: consumers)}
   end
@@ -578,12 +576,7 @@ defmodule BrodMimic.TopicSubscriber do
   defp handle_ack(ack_ref, state(consumers: consumers) = state) do
     {partition, offset} = ack_ref
 
-    consumer(consumer_pid: pid) =
-      consumer =
-      get_consumer(
-        partition,
-        consumers
-      )
+    consumer(consumer_pid: pid) = consumer = get_consumer(partition, consumers)
 
     :ok = consume_ack(pid, offset)
     new_consumer = consumer(consumer, acked_offset: offset)
@@ -591,13 +584,12 @@ defmodule BrodMimic.TopicSubscriber do
     state(state, consumers: new_consumers)
   end
 
-  defp get_consumer(partition, consumers)
-       when is_integer(partition) do
-    :lists.keyfind(partition, consumer(:partition), consumers)
+  defp get_consumer(partition, consumers) when is_integer(partition) do
+    Enum.find(consumers, fn consumer -> consumer(consumer, :partition) == partition end)
   end
 
   defp get_consumer(pid, consumers) when is_pid(pid) do
-    :lists.keyfind(pid, consumer(:consumer_pid), consumers)
+    Enum.find(consumers, fn consumer -> consumer(consumer, :consumer_pid) == pid end)
   end
 
   defp put_consumer(consumer(partition: p) = consumer, consumers) do

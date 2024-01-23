@@ -539,26 +539,21 @@ defmodule BrodMimic.Consumer do
            partition: partition
          ) = state0
        ) do
-    Logger.info("#{__MODULE__}.handle_batches/3. subscriber = #{inspect(subscriber)}.")
+    Logger.info("#{__MODULE__}.handle_batches/3. subscriber = #{inspect(subscriber)}")
 
     stable_offset = BrodUtils.get_stable_offset(header)
     {new_begin_offset, messages} = BrodUtils.flatten_batches(begin_offset, header, batches)
     state1 = state(state0, begin_offset: new_begin_offset)
 
     state =
-      case messages != [] do
+      case messages == [] do
         true ->
           # All messages are before requested offset, hence dropped
           state1
 
         false ->
           msg_set =
-            kafka_message_set(
-              topic: topic,
-              partition: partition,
-              high_wm_offset: stable_offset,
-              messages: messages
-            )
+            kafka_message_set(topic: topic, partition: partition, high_wm_offset: stable_offset, messages: messages)
 
           :ok = cast_to_subscriber(subscriber, msg_set)
           new_pending_acks = add_pending_acks(pending_acks, messages)

@@ -284,6 +284,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
   end
 
   def handle_call(:unsubscribe_all_partitions, _from, state(workers: workers) = state) do
+    Logger.info("#{__MODULE__}.handle_call/3. message :unsubscribe_all_partitions, will stop all TopicSubscribers")
     terminate_all_workers(workers)
     {:reply, :ok, state(state, workers: %{})}
   end
@@ -464,6 +465,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
       init_data: start_options
     }
 
+    Logger.info("#{__MODULE__}.start_worker/6 starting TopicSubscriber, topic: #{topic}, partition: #{partition}")
     {:ok, pid} = BrodTopicSubscriber.start_link(args)
 
     {:ok, pid}
