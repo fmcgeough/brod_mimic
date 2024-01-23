@@ -548,12 +548,15 @@ defmodule BrodMimic.Consumer do
     state =
       case messages == [] do
         true ->
+          Logger.info("#{__MODULE__}.handle_batches/3. no messages, ignoring.")
           # All messages are before requested offset, hence dropped
           state1
 
         false ->
           msg_set =
             kafka_message_set(topic: topic, partition: partition, high_wm_offset: stable_offset, messages: messages)
+
+          Logger.info("#{__MODULE__}.handle_batches/3. messages, sending to subscriber at #{inspect(subscriber)}")
 
           :ok = cast_to_subscriber(subscriber, msg_set)
           new_pending_acks = add_pending_acks(pending_acks, messages)
