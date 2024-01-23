@@ -22,7 +22,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
 
   require Logger
 
-  @worker_crashed "group_subscriber_v2 worker crashed.~n  group_id = ~s~n  topic = ~s~n  partition = ~p~n  pid = ~p~n  reason = ~p"
+  @worker_crashed "group_subscriber_v2 worker crashed. group_id = ~s, topic = ~s, partition = ~p, pid = ~p, reason = ~p"
   @shutting_down "Received EXIT:~p from ~p, shutting down"
   @commit_flush_failed "group_subscriber_v2 ~s failed to flush commits before termination ~p"
   @terminating_worker "Terminating worker pid=~p"
@@ -143,7 +143,9 @@ defmodule BrodMimic.GroupSubscriberv2 do
   """
   @spec start_link(subscriber_config()) :: {:ok, pid()} | {:error, any()}
   def start_link(config) do
-    GenServer.start_link(BrodMimic.GroupSubscriberv2, config, [])
+    result = GenServer.start_link(BrodMimic.GroupSubscriberv2, config, [])
+    Logger.info("#{__MODULE__}.start_link. Started GroupSubscriberv2: #{inspect(result)}")
+    result
   end
 
   @doc """
@@ -239,6 +241,7 @@ defmodule BrodMimic.GroupSubscriberv2 do
     :ok = BrodUtils.assert_group_id(group_id)
     :ok = BrodUtils.assert_topics(topics)
 
+    Logger.info("#{__MODULE__}.init/1. Startup, start our GroupCoordinator")
     {:ok, pid} = BrodGroupCoordinator.start_link(client, group_id, topics, group_config, __MODULE__, self())
 
     state =

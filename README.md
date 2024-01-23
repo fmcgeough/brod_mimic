@@ -41,6 +41,7 @@ Klarna Bank AB (publ) (https://www.klarna.com)
 ## Current State
 
 - Fixed issue in ConsumerSup that resulted in deadlock and consumer not starting.
+- Added a lot of logging that can provide insight into how a consumer is started up
 
 - no credo issues (`mix credo --strict` reports no problems)
 - no dialyzer issues (`mix dialyzer` reports no problems)

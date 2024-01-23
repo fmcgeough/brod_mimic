@@ -22,8 +22,8 @@ defmodule BrodMimic.Client do
 
   require Logger
 
-  @producer_supervisor_down "client ~p producers supervisor down~nreason: ~p"
-  @consumer_supervisor_down "client ~p consumers supervisor down~nreason: ~p"
+  @producer_supervisor_down "client ~p producers supervisor down, reason: ~p"
+  @consumer_supervisor_down "client ~p consumers supervisor down, reason: ~p"
   @unexpected_info "~p [~p] ~p got unexpected info: ~p"
 
   defrecordp(:state,
@@ -249,11 +249,13 @@ defmodule BrodMimic.Client do
   @spec start_consumer(client(), topic(), Brod.consumer_config()) :: :ok | {:error, any()}
   def start_consumer(client, topic_name, consumer_config) do
     case get_consumer(client, topic_name, _partition = 0) do
-      {:ok, _pid} ->
+      {:ok, pid} ->
+        Logger.info("#{__MODULE__}.start_consumer. The consumer is already started. #{inspect(pid)}")
         # already started
         :ok
 
       {:error, {:consumer_not_found, topic_name}} ->
+        Logger.info("#{__MODULE__}.start_consumer. Starting consumer with GenServer call")
         call = {:start_consumer, topic_name, consumer_config}
         safe_gen_call(client, call, :infinity)
 
@@ -504,6 +506,7 @@ defmodule BrodMimic.Client do
   end
 
   def handle_call({:get_connection, host, port}, _from, state) do
+    Logger.info("#{__MODULE__}.handle_call/3. message: :get_connection calling maybe_connect/2")
     {result, new_state} = maybe_connect(state, {host, port})
     {:reply, result, new_state}
   end
@@ -602,9 +605,7 @@ defmodule BrodMimic.Client do
         :ok
 
       false ->
-        Logger.warning(
-          :io_lib.format("~p [~p] ~p is terminating\nreason: ~p~n", [__MODULE__, self(), client_id, reason])
-        )
+        Logger.warning(:io_lib.format("~p [~p] ~p is terminating\nreason: ~p", [__MODULE__, self(), client_id, reason]))
     end
 
     # stop producers and consumers first because they are monitoring connections
@@ -844,8 +845,12 @@ defmodule BrodMimic.Client do
     timeout = timeout(state)
 
     case :kpro.discover_partition_leader(meta_conn, topic, partition, timeout) do
-      {:ok, endpoint} -> maybe_connect(state, endpoint)
-      {:error, reason} -> {{:error, reason}, state}
+      {:ok, endpoint} ->
+        Logger.info("#{__MODULE__}.do_get_leader_connection/3. calling maybe_connect/2")
+        maybe_connect(state, endpoint)
+
+      {:error, reason} ->
+        {{:error, reason}, state}
     end
   end
 
@@ -1119,11 +1124,14 @@ defmodule BrodMimic.Client do
     conn =
       case do_connect(endpoint, state) do
         {:ok, pid} ->
-          Logger.info("client #{client_id} connected to #{host}:#{port}")
+          Logger.info("#{__MODULE__}.connect/2. #{client_id} connected to #{host}:#{port}")
           conn(endpoint: endpoint, pid: pid)
 
         {:error, reason} ->
-          Logger.info("client #{client_id} failed to connect to #{host}:#{port}\nreason: #{inspect(reason)}")
+          Logger.info(
+            "#{__MODULE__}.connect/2. #{client_id} failed to connect to #{host}:#{port}\nreason: #{inspect(reason)}"
+          )
+
           conn(endpoint: endpoint, pid: mark_dead(reason))
       end
 

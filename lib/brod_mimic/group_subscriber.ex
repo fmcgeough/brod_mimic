@@ -168,16 +168,20 @@ defmodule BrodMimic.GroupSubscriber do
           term()
         ) :: {:ok, pid()} | {:error, any()}
   def start_link(client, group_id, topics, group_config, consumer_config, cb_module, cb_init_arg) do
-    start_link(
-      client,
-      group_id,
-      topics,
-      group_config,
-      consumer_config,
-      :message,
-      cb_module,
-      cb_init_arg
-    )
+    result =
+      start_link(
+        client,
+        group_id,
+        topics,
+        group_config,
+        consumer_config,
+        :message,
+        cb_module,
+        cb_init_arg
+      )
+
+    Logger.info("#{__MODULE__}.start_link. returns #{inspect(result)}")
+    result
   end
 
   @doc """
@@ -232,7 +236,9 @@ defmodule BrodMimic.GroupSubscriber do
       ) do
     args = {client, group_id, topics, group_config, consumer_config, message_type, cb_module, cb_init_arg}
 
-    GenServer.start_link(__MODULE__, args, [])
+    result = GenServer.start_link(__MODULE__, args, [])
+    Logger.info("#{__MODULE__}.start_link. returns #{inspect(result)}")
+    result
   end
 
   @doc """
@@ -340,6 +346,7 @@ defmodule BrodMimic.GroupSubscriber do
 
   @impl GenServer
   def handle_info({_consumer_pid, kafka_message_set() = msg_set}, state0) do
+    Logger.info("#{__MODULE__}.handle_info/3")
     state = handle_consumer_delivery(msg_set, state0)
     {:noreply, state}
   end

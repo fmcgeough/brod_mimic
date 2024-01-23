@@ -18,6 +18,8 @@ defmodule BrodMimic.Brod do
   alias BrodMimic.TopicSubscriber, as: BrodTopicSubscriber
   alias BrodMimic.Utils, as: BrodUtils
 
+  require Logger
+
   defrecordp(:brod_call_ref, caller: :undefined, callee: :undefined, ref: :undefined)
 
   ### Types created for Elixir port ============================================
@@ -947,6 +949,7 @@ defmodule BrodMimic.Brod do
   @spec start_link_group_subscriber_v2(BrodGroupSubscriberv2.subscriber_config()) ::
           {:ok, pid()} | {:error, any()}
   def start_link_group_subscriber_v2(config) do
+    Logger.info("#{__MODULE__}.start_link_group_subscriber_v2. calling BrodGroupSubscriberv2.start_link")
     BrodGroupSubscriberv2.start_link(config)
   end
 

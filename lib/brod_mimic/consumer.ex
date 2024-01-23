@@ -150,7 +150,9 @@ defmodule BrodMimic.Consumer do
           {:ok, pid()} | {:error, any()}
   def start_link(bootstrap, topic, partition, config, debug) do
     args = {bootstrap, topic, partition, config}
-    GenServer.start_link(__MODULE__, args, [{:debug, debug}])
+    result = GenServer.start_link(__MODULE__, args, [{:debug, debug}])
+    Logger.info("#{__MODULE__}.start_link. returns #{inspect(result)}")
+    result
   end
 
   @doc """
@@ -290,23 +292,28 @@ defmodule BrodMimic.Consumer do
   def handle_info(:init_connection, state(subscriber: subscriber) = state0) do
     case BrodUtils.is_pid_alive(subscriber) and maybe_init_connection(state0) do
       false ->
+        Logger.info("#{__MODULE__}.handle_info/2. :init_connection message, no subscriber, ignore")
         {:noreply, state0}
 
       {:ok, state1} ->
+        Logger.info("#{__MODULE__}.handle_info/2. :init_connection message, call maybe_send_fetch_request")
         state = maybe_send_fetch_request(state1)
         {:noreply, state}
 
       {{:error, _reason}, state} ->
+        Logger.info("#{__MODULE__}.handle_info/2. :init_connection message, call maybe_send_init_connection")
         :ok = maybe_send_init_connection(state)
         {:noreply, state}
     end
   end
 
   def handle_info({:msg, _pid, rsp}, state) do
+    Logger.info("#{__MODULE__}.handle_info{:msg, _pid, rsp}). Received a fetch response from Kafka.")
     handle_fetch_response(rsp, state)
   end
 
   def handle_info(:send_fetch_request, state0) do
+    Logger.info("#{__MODULE__}.handle_info/2. :send_fetch_request message. call maybe_send_fetch_request")
     state = maybe_send_fetch_request(state0)
     {:noreply, state}
   end
@@ -463,6 +470,7 @@ defmodule BrodMimic.Consumer do
 
     case BrodUtils.parse_rsp(rsp) do
       {:ok, %{header: header, batches: batches}} ->
+        Logger.info("#{__MODULE__}.handle_fetch_response(). parse_rsp succeeded. Calling handle_batches")
         handle_batches(header, batches, state)
 
       {:error, error_code} ->
@@ -478,12 +486,14 @@ defmodule BrodMimic.Consumer do
     # metadata (e.g. high watermark offset, or last stable offset) either.
     # Do not advance offset, try again (maybe after a delay) with
     # the last begin_offset in use.
+    Logger.info("#{__MODULE__}.handle_batches/3. :undefined, calling maybe_delay_fetch_request")
     state = maybe_delay_fetch_request(state0)
     {:noreply, state}
   end
 
   defp handle_batches(_header, {:incomplete_batch, size}, state(max_bytes: max_bytes) = state0) do
     # max_bytes is too small to fetch ONE complete batch
+    Logger.info("#{__MODULE__}.handle_batches/3. :incomplete_batch, #{inspect(size)}, calling maybe_send_fetch_request")
     true = size > max_bytes
     state1 = state(state0, max_bytes: size)
     state = maybe_send_fetch_request(state1)
@@ -492,21 +502,26 @@ defmodule BrodMimic.Consumer do
 
   defp handle_batches(header, [], state(begin_offset: begin_offset) = state0) do
     stable_offset = BrodUtils.get_stable_offset(header)
+    begin_less_than_stable_offset = begin_offset < stable_offset
+
+    info_string = "stable_offset=#{stable_offset}, begin_less_than_stable_offset=#{begin_less_than_stable_offset}"
 
     state =
-      case begin_offset < stable_offset do
+      case begin_less_than_stable_offset do
         true ->
           # There are chances that kafka may return empty message set
           # when messages are deleted from a compacted topic.
           # Since there is no way to know how big the 'hole' is
           # we can only bump begin_offset with +1 and try again.
           state1 = state(state0, begin_offset: begin_offset + 1)
+          Logger.info("#{__MODULE__}.handle_batches/3, #{info_string}. Call maybe_send_fetch_request")
           maybe_send_fetch_request(state1)
 
         false ->
           # we have either reached the end of a partition
           # or trying to read uncommitted messages
           # try to poll again (maybe after a delay)
+          Logger.info("#{__MODULE__}.handle_batches/3, #{info_string}. Call maybe_delay_fetch_request")
           maybe_delay_fetch_request(state0)
       end
 
@@ -524,6 +539,8 @@ defmodule BrodMimic.Consumer do
            partition: partition
          ) = state0
        ) do
+    Logger.info("#{__MODULE__}.handle_batches/3. subscriber = #{inspect(subscriber)}.")
+
     stable_offset = BrodUtils.get_stable_offset(header)
     {new_begin_offset, messages} = BrodUtils.flatten_batches(begin_offset, header, batches)
     state1 = state(state0, begin_offset: new_begin_offset)
@@ -701,6 +718,7 @@ defmodule BrodMimic.Consumer do
   end
 
   defp maybe_delay_fetch_request(state(sleep_timeout: t) = state) when t > 0 do
+    Logger.info("#{__MODULE__}.maybe_delay_fetch_request/1, waiting for #{t} millilseconds for fetch")
     _ = Process.send_after(self(), :send_fetch_request, t)
     state
   end
@@ -710,18 +728,22 @@ defmodule BrodMimic.Consumer do
   end
 
   defp maybe_send_fetch_request(state(subscriber: :undefined) = state) do
+    Logger.info("#{__MODULE__}.maybe_send_fetch_request/1. subscriber :undefined")
     state
   end
 
   defp maybe_send_fetch_request(state(connection: :undefined) = state) do
+    Logger.info("#{__MODULE__}.maybe_send_fetch_request/1. connection :undefined")
     state
   end
 
   defp maybe_send_fetch_request(state(is_suspended: true) = state) do
+    Logger.info("#{__MODULE__}.maybe_send_fetch_request/1. is_suspended")
     state
   end
 
   defp maybe_send_fetch_request(state(last_req_ref: r) = state) when is_reference(r) do
+    Logger.info("#{__MODULE__}.maybe_send_fetch_request/1. last_req_ref is a reference")
     state
   end
 
@@ -732,7 +754,10 @@ defmodule BrodMimic.Consumer do
            prefetch_bytes: prefetch_bytes
          ) = state
        ) do
-    case count > prefetch_count and bytes > prefetch_bytes do
+    no_fetch_needed = count > prefetch_count and bytes > prefetch_bytes
+    Logger.info("#{__MODULE__}.maybe_send_fetch_request/1. we already have sufficient data=#{no_fetch_needed}")
+
+    case no_fetch_needed do
       true ->
         state
 
@@ -760,6 +785,8 @@ defmodule BrodMimic.Consumer do
         state(state, :max_bytes),
         state(state, :isolation_level)
       )
+
+    Logger.info("#{__MODULE__}.send_fetch_request/1. Sending Kafka a fetch request")
 
     case :kpro.request_async(state(state, :connection), request) do
       :ok ->

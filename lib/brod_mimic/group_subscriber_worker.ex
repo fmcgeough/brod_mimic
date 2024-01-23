@@ -12,8 +12,8 @@ defmodule BrodMimic.GroupSubscriberWorker do
 
   require Logger
 
-  @starting_group_subscriber "Starting group_subscriber_worker: ~p~nOffset: ~p~nPid: ~p~n"
-  @discard_invalid_offset "Discarded invalid committed offset ~p for: ~s:~p~n"
+  @starting_group_subscriber "Starting group_subscriber_worker: ~p, Offset: ~p, pid: ~p"
+  @discard_invalid_offset "Discarded invalid committed offset ~p for: ~s:~p"
 
   defrecordp(:state, start_options: :undefined, cb_module: :undefined, cb_state: :undefined, commit_fun: :undefined)
 
