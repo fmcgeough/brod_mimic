@@ -180,7 +180,7 @@ defmodule BrodMimic.GroupSubscriber do
         cb_init_arg
       )
 
-    Logger.info("#{__MODULE__}.start_link. returns #{inspect(result)}")
+    Logger.debug(fn -> "return: #{inspect(result)}" end)
     result
   end
 
@@ -237,7 +237,7 @@ defmodule BrodMimic.GroupSubscriber do
     args = {client, group_id, topics, group_config, consumer_config, message_type, cb_module, cb_init_arg}
 
     result = GenServer.start_link(__MODULE__, args, [])
-    Logger.info("#{__MODULE__}.start_link. returns #{inspect(result)}")
+    Logger.debug(fn -> "return: #{inspect(result)}" end)
     result
   end
 
@@ -345,8 +345,8 @@ defmodule BrodMimic.GroupSubscriber do
   end
 
   @impl GenServer
-  def handle_info({_consumer_pid, kafka_message_set() = msg_set}, state0) do
-    Logger.info("#{__MODULE__}.handle_info/3")
+  def handle_info({consumer_pid, kafka_message_set() = msg_set}, state0) do
+    Logger.debug(fn -> "handle consumer delivery for #{inspect(consumer_pid)}" end)
     state = handle_consumer_delivery(msg_set, state0)
     {:noreply, state}
   end

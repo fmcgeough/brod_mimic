@@ -949,7 +949,7 @@ defmodule BrodMimic.Brod do
   @spec start_link_group_subscriber_v2(BrodGroupSubscriberv2.subscriber_config()) ::
           {:ok, pid()} | {:error, any()}
   def start_link_group_subscriber_v2(config) do
-    Logger.info("#{__MODULE__}.start_link_group_subscriber_v2. calling BrodGroupSubscriberv2.start_link")
+    Logger.debug("call BrodGroupSubscriberv2.start_link")
     BrodGroupSubscriberv2.start_link(config)
   end
 

@@ -848,7 +848,7 @@ defmodule BrodMimic.Supervisor3 do
   end
 
   def handle_info(msg, state) do
-    Logger.error("#{__MODULE__} received unexpected message: #{inspect(msg)}")
+    Logger.error("Received unexpected message: #{inspect(msg)}")
     {:noreply, state}
   end
 
@@ -2028,6 +2028,6 @@ defmodule BrodMimic.Supervisor3 do
 
   defp report_progress(child, sup_name) do
     progress = [{:supervisor, sup_name}, {:started, extract_child(child)}]
-    Logger.info("#{__MODULE__}.report_progress/2. #{inspect(progress)}")
+    Logger.info("#{inspect(progress)}")
   end
 end

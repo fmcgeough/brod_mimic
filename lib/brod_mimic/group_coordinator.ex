@@ -193,7 +193,7 @@ defmodule BrodMimic.GroupCoordinator do
   def start_link(client, group_id, topics, config, cb_module, member_pid) do
     args = {client, group_id, topics, config, cb_module, member_pid}
     result = GenServer.start_link(BrodMimic.GroupCoordinator, args, [])
-    Logger.info("#{__MODULE__}.start_link. Started GroupCoordinator #{inspect(result)}")
+    Logger.debug(fn -> "return: #{inspect(result)}" end)
     result
   end
 

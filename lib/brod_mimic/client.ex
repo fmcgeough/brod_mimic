@@ -250,13 +250,13 @@ defmodule BrodMimic.Client do
   def start_consumer(client, topic_name, consumer_config) do
     case get_consumer(client, topic_name, _partition = 0) do
       {:ok, pid} ->
-        Logger.info("#{__MODULE__}.start_consumer. The consumer is already started. #{inspect(pid)}")
+        Logger.debug(fn -> "The consumer is already started. #{inspect(pid)}" end)
         # already started
         :ok
 
       {:error, {:consumer_not_found, topic_name}} ->
-        Logger.info("#{__MODULE__}.start_consumer. Starting consumer with GenServer call")
         call = {:start_consumer, topic_name, consumer_config}
+        Logger.debug(fn -> "GenServer call for #{inspect(client)}, #{inspect(call)}" end)
         safe_gen_call(client, call, :infinity)
 
       {:error, reason} ->
@@ -505,8 +505,8 @@ defmodule BrodMimic.Client do
     {:reply, result, new_state}
   end
 
-  def handle_call({:get_connection, host, port}, _from, state) do
-    Logger.info("#{__MODULE__}.handle_call/3. message: :get_connection calling maybe_connect/2")
+  def handle_call({:get_connection, host, port} = msg, _from, state) do
+    Logger.debug(fn -> "Message #{inspect(msg)}, calling maybe_connect/2" end)
     {result, new_state} = maybe_connect(state, {host, port})
     {:reply, result, new_state}
   end
@@ -579,7 +579,7 @@ defmodule BrodMimic.Client do
 
   def handle_cast(cast, state) do
     client_id = state(state, :client_id)
-    msg = "#{__MODULE__}, #{inspect(self())}, #{client_id} got unexpected cast: #{inspect(cast)})"
+    msg = "#{inspect(self())}, #{client_id} got unexpected cast: #{inspect(cast)})"
     Logger.warn(msg)
     {:noreply, state}
   end
@@ -846,7 +846,7 @@ defmodule BrodMimic.Client do
 
     case :kpro.discover_partition_leader(meta_conn, topic, partition, timeout) do
       {:ok, endpoint} ->
-        Logger.info("#{__MODULE__}.do_get_leader_connection/3. calling maybe_connect/2")
+        Logger.info(fn -> "endpoint = #{inspect(endpoint)}, calling maybe_connect/2" end)
         maybe_connect(state, endpoint)
 
       {:error, reason} ->
@@ -1124,14 +1124,11 @@ defmodule BrodMimic.Client do
     conn =
       case do_connect(endpoint, state) do
         {:ok, pid} ->
-          Logger.info("#{__MODULE__}.connect/2. #{client_id} connected to #{host}:#{port}")
+          Logger.debug(fn -> "client: #{client_id}, connected to #{host}:#{port}" end)
           conn(endpoint: endpoint, pid: pid)
 
         {:error, reason} ->
-          Logger.info(
-            "#{__MODULE__}.connect/2. #{client_id} failed to connect to #{host}:#{port}\nreason: #{inspect(reason)}"
-          )
-
+          Logger.debug(fn -> "#{client_id} failed to connect to #{inspect(endpoint)}, #{inspect(reason)}" end)
           conn(endpoint: endpoint, pid: mark_dead(reason))
       end
 

@@ -245,12 +245,9 @@ defmodule BrodMimic.TopicSubscriber do
   """
   @spec start_link(topic_subscriber_config()) :: {:ok, pid()} | {:error, any()}
   def start_link(%{partitions: partitions, topic: topic} = config) do
+    Logger.debug(fn -> "start TopicSubscriber, topic: #{inspect(topic)}, partitions: #{inspect(partitions)}" end)
     result = GenServer.start_link(__MODULE__, config, [])
-
-    Logger.info(
-      "#{__MODULE__}.start_link. started TopicSubscriber for topic: #{topic}, partitions: #{inspect(partitions)}, #{inspect(result)}"
-    )
-
+    Logger.debug(fn -> "return: #{inspect(result)}" end)
     result
   end
 
@@ -299,7 +296,7 @@ defmodule BrodMimic.TopicSubscriber do
 
     :ok = BrodUtils.assert_client(client)
     :ok = BrodUtils.assert_topic(topic)
-    Logger.info("#{__MODULE__}.init/1. Startup, sending message to self to start consumer. #{inspect(self())}")
+    Logger.debug(fn -> "sending message to self (#{inspect(self())}) to start consumer." end)
     send(self(), {:start_consumer, consumer_config, committed_offsets, partitions})
 
     state =
@@ -316,8 +313,8 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   @impl GenServer
-  def handle_info({_consumer_pid, kafka_message_set() = msg_set}, state0) do
-    Logger.info("#{__MODULE__}.handle_info/2 incoming message set")
+  def handle_info({consumer_pid, kafka_message_set() = msg_set}, state0) do
+    Logger.debug(fn -> "Received incoming message set for #{inspect(consumer_pid)}" end)
     state = handle_consumer_delivery(msg_set, state0)
     {:noreply, state}
   end
@@ -326,7 +323,7 @@ defmodule BrodMimic.TopicSubscriber do
         {:start_consumer, consumer_config, committed_offsets, partitions0},
         state(client: client, topic: topic) = state
       ) do
-    Logger.info("#{__MODULE__}.handle_info/2, received message from init/1 to ask Client to start consumer!")
+    Logger.debug("received message from init/1 to ask Client to start consumer!")
     :ok = Brod.start_consumer(client, topic, consumer_config)
 
     {:ok, partitions_count} = Brod.get_partitions_count(client, topic)
@@ -370,19 +367,19 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   def handle_info(:subscribe_partitions, state) do
-    Logger.info("#{__MODULE__}.handle_info/2. :subscribe_partitions message")
+    Logger.debug("msg = :subscribe_partitions")
     {:ok, state() = new_state} = subscribe_partitions(state)
     _ = send_lo_cmd(:subscribe_partitions, 2000)
     {:noreply, new_state}
   end
 
   def handle_info({:DOWN, mref, :process, pid, _reason}, state(client_mref: mref) = state) do
-    Logger.warning("#{__MODULE__}.handle_info/2. Client process #{inspect(pid)} down.")
+    Logger.warning(fn -> "Client process #{inspect(pid)} down." end)
     {:stop, :client_down, state}
   end
 
   def handle_info({:DOWN, _mref, :process, pid, reason}, state(consumers: consumers) = state) do
-    Logger.warning("#{__MODULE__}.handle_info/2. Consumer process #{inspect(pid)} down.")
+    Logger.warning("Consumer process #{inspect(pid)} down.")
 
     case get_consumer(pid, consumers) do
       consumer() = c ->
@@ -402,7 +399,7 @@ defmodule BrodMimic.TopicSubscriber do
   end
 
   def handle_info(info, state) do
-    Logger.warning("#{__MODULE__}.handle_info/2. Unhandled message: #{inspect(info)}")
+    Logger.warning("Unhandled message: #{inspect(info)}")
     {:noreply, state}
   end
 

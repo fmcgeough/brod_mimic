@@ -65,7 +65,8 @@ defmodule BrodMimic.GroupSubscriberWorker do
   end
 
   @impl BrodMimic.TopicSubscriber
-  def handle_message(_partition, msg, state) do
+  def handle_message(partition, msg, state) do
+    Logger.debug(fn -> "Message for partition #{inspect(partition)}" end)
     state(cb_module: cb_module, cb_state: cb_state, commit_fun: commit) = state
 
     case cb_module.handle_message(msg, cb_state) do
